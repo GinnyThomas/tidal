@@ -173,6 +173,25 @@ Do not build beyond this scope until Phase 0 is complete and confirmed working.
 
 ---
 
+## Authentication Strategy
+
+**Phase 1:** Email/password only, using JWT Bearer tokens (already in the tech stack).
+
+**Phase 2:** Add Google OAuth alongside email/password — not instead of it.
+
+**Key design decision:** A `User` record exists independently of how they authenticated.
+This means the users table gets an optional `google_id` column in Phase 2, and a new
+`POST /api/v1/auth/google` endpoint handles the OAuth callback. The same `User` row
+can have both a hashed password and a `google_id` — they are just two ways into the
+same account.
+
+The library to use for Google OAuth in FastAPI is **authlib** (lighter and more
+actively maintained than python-social-auth).
+
+Do not add `google_id` to the User model or install authlib until Phase 2.
+
+---
+
 ## Important Reminders
 
 - Never store passwords in plain text — always bcrypt
