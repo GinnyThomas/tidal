@@ -1,13 +1,18 @@
 # Tidal — Project Plan & Milestones
 
-**Version:** 0.1  
+**Version:** 0.2  
 **Status:** Draft  
 **Author:** Ginny Thomas  
-**Last Updated:** March 2026
+**Last Updated:** March 2026  
+**Changed:** Added TDD as core development practice throughout
 
 ---
 
 ## Guiding Principles
+
+- **Test Driven Development (TDD) throughout** — tests are written before 
+  code, not after. Every feature follows Red → Green → Refactor. 
+  This is not optional — it is how we build.
 
 - **Vertical slices over horizontal layers** — we build one complete feature 
   end to end (backend + frontend) before moving to the next, rather than 
@@ -30,6 +35,80 @@
 
 ---
 
+---
+
+## TDD Cycle — Red, Green, Refactor
+
+Every single feature follows this cycle without exception:
+
+```
+RED      → Write a test for behaviour that doesn't exist yet.
+           Run it. It fails. This is correct and expected.
+
+GREEN    → Write the minimum code to make the test pass.
+           Not elegant. Not complete. Just enough.
+
+REFACTOR → Clean up the code knowing the test will catch regressions.
+           Then commit.
+```
+
+### Backend TDD Pattern (pytest)
+
+```python
+# 1. Write the test FIRST
+def test_create_account_returns_201(client, auth_headers):
+    response = client.post("/api/v1/accounts",
+        json={"name": "HSBC Current",
+              "account_type": "checking",
+              "currency": "GBP"},
+        headers=auth_headers
+    )
+    assert response.status_code == 201
+    assert response.json()["name"] == "HSBC Current"
+
+# 2. Run pytest → RED (endpoint doesn't exist yet)
+# 3. Write the endpoint
+# 4. Run pytest → GREEN
+# 5. Refactor if needed
+# 6. Commit
+```
+
+### Frontend TDD Pattern (Vitest + React Testing Library)
+
+```typescript
+// 1. Write the test FIRST
+it('shows account name after creation', async () => {
+  render(<AccountsPage />)
+  await userEvent.click(screen.getByText('Add Account'))
+  await userEvent.type(screen.getByLabelText('Account Name'), 'HSBC Current')
+  await userEvent.click(screen.getByText('Save'))
+  expect(await screen.findByText('HSBC Current')).toBeInTheDocument()
+})
+
+// 2. Run vitest → RED
+// 3. Build the component
+// 4. Run vitest → GREEN
+// 5. Refactor
+// 6. Commit
+```
+
+### The golden rule — test behaviour, not implementation
+
+```
+✅ "a user who is not logged in gets a 401 response"
+✅ "a pending transaction does not count toward budget actual spend"
+✅ "a reallocation without a reason cannot be submitted"
+
+❌ "the function calls the database with these exact parameters"
+❌ "the component's internal state changes when clicked"
+```
+
+The first set tests what the system *does*.
+The second set tests how it's *built* — and breaks whenever
+you refactor even if nothing changed for the user.
+
+---
+
 ## Phase 0 — Foundation
 **Goal:** Everything is set up, connected, and the project exists publicly  
 **Status:** 🟡 In Progress
@@ -43,16 +122,20 @@
 - [x] TDD written and committed
 - [x] Project plan written and committed
 - [ ] Backend virtual environment configured
-- [ ] Backend dependencies installed (FastAPI, SQLAlchemy, etc.)
+- [ ] Backend dependencies installed (FastAPI, SQLAlchemy, pytest etc.)
+- [ ] pytest configured and first passing test written
 - [ ] Database created in PostgreSQL
 - [ ] Backend walking skeleton running (single endpoint returns 200 OK)
 - [ ] Frontend scaffolded with Vite + React + TypeScript
+- [ ] Vitest and React Testing Library configured
+- [ ] First passing frontend test written
 - [ ] Frontend connects to backend (calls the walking skeleton endpoint)
 - [ ] Both run simultaneously in development
 
-**Exit criteria:** `npm run dev` starts the frontend, 
-`uvicorn app.main:app` starts the backend, 
+**Exit criteria:** `npm run dev` starts the frontend,
+`uvicorn app.main:app` starts the backend,
 frontend successfully calls backend and displays a response.
+`pytest` runs and passes. `npm run test` runs and passes.
 
 ---
 
@@ -397,11 +480,14 @@ Format: `type: short description in present tense`
 ## Definition of Done
 
 A feature is not done until:
-1. ✅ Backend endpoint works and is tested
-2. ✅ Frontend displays and interacts with it correctly
-3. ✅ Error cases are handled gracefully
-4. ✅ Code is committed with a meaningful commit message
-5. ✅ PRD/TDD updated if the feature changed any design decisions
+1. ✅ Tests written first (TDD — Red before Green)
+2. ✅ All tests pass (Green)
+3. ✅ Code refactored if needed (Refactor)
+4. ✅ Backend endpoint works and is tested
+5. ✅ Frontend displays and interacts correctly
+6. ✅ Error cases handled gracefully
+7. ✅ Code committed with meaningful conventional commit message
+8. ✅ PRD/TDD updated if any design decisions changed
 
 ---
 

@@ -1,9 +1,10 @@
 # Tidal — Technical Design Document
 
-**Version:** 0.1  
+**Version:** 0.2  
 **Status:** Draft  
 **Author:** Ginny Thomas  
-**Last Updated:** March 2026
+**Last Updated:** March 2026  
+**Changed:** Added TDD approach and testing tools to tech stack
 
 ---
 
@@ -39,7 +40,10 @@ exclusively through JSON over HTTP.
 | Pydantic | v2 | Data validation library. Ensures data coming into and out of the API is always the correct shape and type |
 | python-jose | Latest | JWT token handling for authentication |
 | passlib | Latest | Password hashing — bcrypt algorithm |
-| pytest | Latest | Testing framework |
+| pytest | Latest | Testing framework. Industry standard for Python |
+| pytest-asyncio | Latest | Async test support for FastAPI endpoints |
+| httpx | Latest | Test client for FastAPI — makes HTTP calls in tests |
+| factory-boy | Latest | Test data factories — creates realistic test objects cleanly |
 
 ### 2.2 Frontend
 
@@ -52,6 +56,8 @@ exclusively through JSON over HTTP.
 | React Router | Latest | Client-side routing between pages |
 | Axios | Latest | HTTP client for API calls |
 | Tailwind CSS | Latest | Utility-first CSS framework. Fast to build with, consistent results |
+| Vitest | Latest | Fast unit test runner built for Vite. Same syntax as Jest |
+| React Testing Library | Latest | Tests React components from the user's perspective — behaviour not implementation |
 
 ### 2.3 Infrastructure (Local Development)
 
@@ -64,9 +70,49 @@ exclusively through JSON over HTTP.
 
 ---
 
-## 3. Data Model
+## 3. Development Approach — TDD
 
-### 3.1 Design Decisions
+All features are built using Test Driven Development.
+The cycle is Red → Green → Refactor without exception.
+
+Tests live alongside the code they test:
+
+```
+backend/
+  app/
+    routers/
+      accounts.py          ← implementation
+  tests/
+    test_accounts.py       ← tests for accounts router
+
+frontend/
+  src/
+    pages/
+      AccountsPage.tsx     ← implementation
+      AccountsPage.test.tsx ← tests for AccountsPage
+```
+
+### Testing philosophy
+
+We test **behaviour the user experiences**, not internal implementation.
+
+A good test reads like a user story:
+- "A user who is not logged in cannot create a transaction"
+- "A pending transaction does not count toward budget actual spend"
+- "A reallocation without a reason cannot be submitted"
+
+A bad test reads like an implementation detail:
+- "The createTransaction function calls db.add() once"
+- "The useState hook initialises with null"
+
+The first set survives refactoring. The second set breaks every time
+you improve the code, even when nothing changed for the user.
+
+---
+
+## 4. Data Model
+
+## 4.1 Design Decisions
 
 **Logical (soft) deletes throughout** — No data is ever physically deleted. Every 
 entity has a `deleted_at` timestamp. Null means active. A timestamp means 
@@ -88,7 +134,7 @@ for display. Avoids daylight saving edge cases.
 Amounts stored as NUMERIC(12,2) — never as floating point. Floating point 
 arithmetic is unsafe for financial calculations.
 
-### 3.2 Entity Relationship Overview
+## 4.2 Entity Relationship Overview
 
 ```
 User
@@ -124,7 +170,7 @@ Tag
  └── TagAssignment (many, polymorphic — points to any entity)
 ```
 
-### 3.3 Full Schema
+## 4.3 Full Schema
 
 ```sql
 -- Users
@@ -286,9 +332,9 @@ CREATE TABLE tag_assignments (
 
 ---
 
-## 4. API Design
+## 5. API Design
 
-### 4.1 Conventions
+### 5.1 Conventions
 
 - Base URL: `/api/v1/`
 - Authentication: JWT Bearer token in Authorization header
@@ -306,7 +352,7 @@ CREATE TABLE tag_assignments (
   - 404 Not Found — resource doesn't exist
   - 422 Unprocessable Entity — request shape is wrong
 
-### 4.2 Endpoints (MVP)
+### 5.2 Endpoints (MVP)
 
 ```
 Auth
@@ -369,7 +415,7 @@ adjustments, all assembled server-side.
 
 ---
 
-## 5. Authentication Flow
+## 6. Authentication Flow
 
 1. User registers → password is hashed with bcrypt → stored in database
 2. User logs in → password checked against hash → JWT token issued
@@ -381,7 +427,7 @@ adjustments, all assembled server-side.
 
 ---
 
-## 6. Project Structure
+## 7. Project Structure
 
 ```
 tidal/
@@ -446,7 +492,7 @@ tidal/
 
 ---
 
-## 7. Key Engineering Decisions
+## 8. Key Engineering Decisions
 
 ### Why FastAPI over Flask or Django?
 
@@ -486,7 +532,7 @@ hiding records from active views.
 
 ---
 
-## 8. Development Phases
+## 9. Development Phases
 
 ### Phase 1 — MVP (current)
 Everything defined in PRD section 5.1
