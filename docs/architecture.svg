@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="#0f1117" rx="12"/>
+
+  <!-- Title -->
+  <text x="600" y="48" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="2">TIDAL — System Architecture</text>
+  <text x="600" y="72" text-anchor="middle" fill="#6b7280" font-size="14">Multi-currency personal finance tracker</text>
+
+  <!-- Legend -->
+  <rect x="860" y="820" width="16" height="16" rx="3" fill="#10b981"/>
+  <text x="882" y="833" fill="#9ca3af" font-size="13">Built</text>
+  <rect x="940" y="820" width="16" height="16" rx="3" fill="#374151"/>
+  <text x="962" y="833" fill="#9ca3af" font-size="13">Pending</text>
+  <rect x="1040" y="820" width="16" height="16" rx="3" fill="#1d4ed8"/>
+  <text x="1062" y="833" fill="#9ca3af" font-size="13">In Progress</text>
+
+  <!-- Phase label -->
+  <rect x="40" y="820" width="180" height="28" rx="14" fill="#1d4ed8" opacity="0.2"/>
+  <text x="130" y="839" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="600">Phase 0 — Foundation</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- LAYER 1: CLIENT -->
+  <!-- ═══════════════════════════════════════════ -->
+  <text x="60" y="118" fill="#6b7280" font-size="11" font-weight="600" letter-spacing="1.5">CLIENT LAYER</text>
+
+  <!-- Browser box -->
+  <rect x="40" y="128" width="340" height="160" rx="10" fill="#111827" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="210" y="152" text-anchor="middle" fill="#60a5fa" font-size="14" font-weight="600">React 18 + TypeScript</text>
+  <text x="210" y="170" text-anchor="middle" fill="#6b7280" font-size="11">Vite · React Router · React Query · Tailwind CSS</text>
+
+  <!-- Frontend components -->
+  <rect x="58" y="182" width="140" height="36" rx="6" fill="#1d4ed8" opacity="0.15" stroke="#1d4ed8" stroke-width="1"/>
+  <text x="128" y="196" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">Monthly Plan View</text>
+  <text x="128" y="210" text-anchor="middle" fill="#6b7280" font-size="10">Primary dashboard</text>
+
+  <rect x="210" y="182" width="140" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="280" y="196" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Auth Pages</text>
+  <text x="280" y="210" text-anchor="middle" fill="#6b7280" font-size="10">Login · Register</text>
+
+  <rect x="58" y="228" width="140" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="128" y="242" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Accounts · Categories</text>
+  <text x="128" y="256" text-anchor="middle" fill="#6b7280" font-size="10">Management pages</text>
+
+  <rect x="210" y="228" width="140" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="280" y="242" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Transactions · Schedules</text>
+  <text x="280" y="256" text-anchor="middle" fill="#6b7280" font-size="10">Entry and management</text>
+
+  <!-- Testing badge frontend -->
+  <rect x="58" y="272" width="140" height="8" rx="4" fill="#374151"/>
+  <rect x="58" y="272" width="28" height="8" rx="4" fill="#1d4ed8"/>
+  <text x="210" y="280" text-anchor="middle" fill="#6b7280" font-size="10">Vitest + React Testing Library</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- LAYER 2: API -->
+  <!-- ═══════════════════════════════════════════ -->
+  <text x="440" y="118" fill="#6b7280" font-size="11" font-weight="600" letter-spacing="1.5">API LAYER</text>
+
+  <!-- FastAPI box -->
+  <rect x="420" y="128" width="360" height="380" rx="10" fill="#111827" stroke="#1d4ed8" stroke-width="2"/>
+  <text x="600" y="152" text-anchor="middle" fill="#60a5fa" font-size="14" font-weight="600">FastAPI + Python 3.13</text>
+  <text x="600" y="170" text-anchor="middle" fill="#6b7280" font-size="11">Pydantic v2 · SQLAlchemy 2 · Alembic · uvicorn</text>
+
+  <!-- Health endpoint — BUILT -->
+  <rect x="438" y="182" width="155" height="36" rx="6" fill="#10b981" opacity="0.15" stroke="#10b981" stroke-width="1.5"/>
+  <text x="515" y="196" text-anchor="middle" fill="#10b981" font-size="11" font-weight="700">✓ Health Check</text>
+  <text x="515" y="210" text-anchor="middle" fill="#6b7280" font-size="10">GET /api/v1/health</text>
+
+  <!-- Auth router -->
+  <rect x="606" y="182" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="683" y="196" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Auth Router</text>
+  <text x="683" y="210" text-anchor="middle" fill="#6b7280" font-size="10">register · login · logout</text>
+
+  <!-- Accounts router -->
+  <rect x="438" y="228" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="515" y="242" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Accounts Router</text>
+  <text x="515" y="256" text-anchor="middle" fill="#6b7280" font-size="10">CRUD · multi-currency</text>
+
+  <!-- Categories router -->
+  <rect x="606" y="228" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="683" y="242" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Categories Router</text>
+  <text x="683" y="256" text-anchor="middle" fill="#6b7280" font-size="10">Hierarchical · seeded defaults</text>
+
+  <!-- Budgets router -->
+  <rect x="438" y="274" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="515" y="288" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Budgets Router</text>
+  <text x="515" y="302" text-anchor="middle" fill="#6b7280" font-size="10">Periods · rollover</text>
+
+  <!-- Transactions router -->
+  <rect x="606" y="274" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="683" y="288" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Transactions Router</text>
+  <text x="683" y="302" text-anchor="middle" fill="#6b7280" font-size="10">expense·income·transfer·refund</text>
+
+  <!-- Schedules router -->
+  <rect x="438" y="320" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="515" y="334" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Schedules Router</text>
+  <text x="515" y="348" text-anchor="middle" fill="#6b7280" font-size="10">Recurrence engine</text>
+
+  <!-- Reallocation router -->
+  <rect x="606" y="320" width="155" height="36" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="683" y="334" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">Reallocation Router</text>
+  <text x="683" y="348" text-anchor="middle" fill="#6b7280" font-size="10">Audit trail · never deleted</text>
+
+  <!-- Plan service — special -->
+  <rect x="438" y="366" width="323" height="46" rx="6" fill="#7c3aed" opacity="0.15" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="600" y="384" text-anchor="middle" fill="#a78bfa" font-size="12" font-weight="700">Monthly Plan Service</text>
+  <text x="600" y="400" text-anchor="middle" fill="#6b7280" font-size="10">GET /api/v1/plan/{year}/{month} · assembles budgets + schedules + transactions + reallocations</text>
+
+  <!-- Auth middleware -->
+  <rect x="438" y="422" width="323" height="32" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="600" y="434" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">JWT Auth Middleware</text>
+  <text x="600" y="446" text-anchor="middle" fill="#6b7280" font-size="10">All routes scoped to authenticated user_id · UUIDs · bcrypt passwords</text>
+
+  <!-- Testing badge backend -->
+  <rect x="438" y="464" width="323" height="8" rx="4" fill="#374151"/>
+  <rect x="438" y="464" width="64" height="8" rx="4" fill="#10b981"/>
+  <text x="600" y="490" text-anchor="middle" fill="#6b7280" font-size="10">pytest · pytest-asyncio · httpx · factory-boy</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- LAYER 3: DATABASE -->
+  <!-- ═══════════════════════════════════════════ -->
+  <text x="840" y="118" fill="#6b7280" font-size="11" font-weight="600" letter-spacing="1.5">DATA LAYER</text>
+
+  <!-- PostgreSQL box -->
+  <rect x="820" y="128" width="340" height="530" rx="10" fill="#111827" stroke="#374151" stroke-width="1.5"/>
+  <text x="990" y="152" text-anchor="middle" fill="#f9fafb" font-size="14" font-weight="600">PostgreSQL 16</text>
+  <text x="990" y="170" text-anchor="middle" fill="#6b7280" font-size="11">NUMERIC(12,2) amounts · UUID primary keys · UTC timestamps</text>
+
+  <!-- Users table — IN PROGRESS -->
+  <rect x="838" y="182" width="140" height="52" rx="6" fill="#1d4ed8" opacity="0.15" stroke="#1d4ed8" stroke-width="1.5"/>
+  <text x="908" y="198" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700">users</text>
+  <text x="908" y="212" text-anchor="middle" fill="#6b7280" font-size="9">email · password_hash</text>
+  <text x="908" y="224" text-anchor="middle" fill="#6b7280" font-size="9">default_currency · timezone</text>
+
+  <!-- Accounts table -->
+  <rect x="992" y="182" width="140" height="52" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="1062" y="198" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">accounts</text>
+  <text x="1062" y="212" text-anchor="middle" fill="#6b7280" font-size="9">type · currency · balance</text>
+  <text x="1062" y="224" text-anchor="middle" fill="#6b7280" font-size="9">is_manual · institution</text>
+
+  <!-- Categories table -->
+  <rect x="838" y="248" width="140" height="52" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="908" y="264" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">categories</text>
+  <text x="908" y="278" text-anchor="middle" fill="#6b7280" font-size="9">parent_category_id</text>
+  <text x="908" y="290" text-anchor="middle" fill="#6b7280" font-size="9">colour · icon · is_system</text>
+
+  <!-- Budgets table -->
+  <rect x="992" y="248" width="140" height="52" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="1062" y="264" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">budgets</text>
+  <text x="1062" y="278" text-anchor="middle" fill="#6b7280" font-size="9">period_start · period_end</text>
+  <text x="1062" y="290" text-anchor="middle" fill="#6b7280" font-size="9">amount · is_rollover</text>
+
+  <!-- Schedules table -->
+  <rect x="838" y="314" width="140" height="66" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="908" y="330" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">schedules</text>
+  <text x="908" y="344" text-anchor="middle" fill="#6b7280" font-size="9">frequency · interval</text>
+  <text x="908" y="356" text-anchor="middle" fill="#6b7280" font-size="9">start_date · end_date</text>
+  <text x="908" y="368" text-anchor="middle" fill="#6b7280" font-size="9">auto_generate · active</text>
+
+  <!-- Transactions table -->
+  <rect x="992" y="314" width="140" height="66" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="1062" y="330" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">transactions</text>
+  <text x="1062" y="344" text-anchor="middle" fill="#6b7280" font-size="9">type · status · amount</text>
+  <text x="1062" y="356" text-anchor="middle" fill="#6b7280" font-size="9">pending/cleared/reconciled</text>
+  <text x="1062" y="368" text-anchor="middle" fill="#6b7280" font-size="9">schedule_id · parent_id</text>
+
+  <!-- Reallocations table -->
+  <rect x="838" y="394" width="140" height="52" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="908" y="410" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">reallocations</text>
+  <text x="908" y="424" text-anchor="middle" fill="#6b7280" font-size="9">from_budget · to_budget</text>
+  <text x="908" y="436" text-anchor="middle" fill="#f87171" font-size="9">never deleted</text>
+
+  <!-- Tags table -->
+  <rect x="992" y="394" width="140" height="52" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="1062" y="410" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">tags</text>
+  <text x="1062" y="424" text-anchor="middle" fill="#6b7280" font-size="9">name · colour</text>
+  <text x="1062" y="436" text-anchor="middle" fill="#6b7280" font-size="9">Phase 2 feature</text>
+
+  <!-- tag_assignments table -->
+  <rect x="838" y="460" width="294" height="40" rx="6" fill="#374151" stroke="#4b5563" stroke-width="1"/>
+  <text x="985" y="476" text-anchor="middle" fill="#9ca3af" font-size="11" font-weight="600">tag_assignments</text>
+  <text x="985" y="490" text-anchor="middle" fill="#6b7280" font-size="9">polymorphic join · entity_type + entity_id · physically deleted</text>
+
+  <!-- Soft delete note -->
+  <rect x="838" y="514" width="294" height="32" rx="6" fill="#111827" stroke="#374151" stroke-width="1" stroke-dasharray="4"/>
+  <text x="985" y="527" text-anchor="middle" fill="#6b7280" font-size="10">All tables: deleted_at · deleted_by (soft delete)</text>
+  <text x="985" y="541" text-anchor="middle" fill="#6b7280" font-size="10">Alembic migrations · SQLAlchemy ORM</text>
+
+  <!-- Local vs Production note -->
+  <rect x="838" y="560" width="294" height="56" rx="6" fill="#111827" stroke="#374151" stroke-width="1"/>
+  <text x="985" y="578" text-anchor="middle" fill="#6b7280" font-size="11" font-weight="600">Environments</text>
+  <text x="985" y="594" text-anchor="middle" fill="#6b7280" font-size="10">Local: PostgreSQL 16 (Homebrew)</text>
+  <text x="985" y="608" text-anchor="middle" fill="#6b7280" font-size="10">Production: Supabase · Railway · Vercel</text>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- CONNECTING ARROWS -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <!-- Client to API arrow -->
+  <line x1="380" y1="208" x2="420" y2="208" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#arrowblue)"/>
+  <text x="400" y="200" text-anchor="middle" fill="#6b7280" font-size="9">HTTP</text>
+  <text x="400" y="220" text-anchor="middle" fill="#6b7280" font-size="9">JSON</text>
+
+  <!-- API to DB arrow -->
+  <line x1="780" y1="300" x2="820" y2="300" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrowgray)"/>
+  <text x="800" y="292" text-anchor="middle" fill="#6b7280" font-size="9">SQL</text>
+  <text x="800" y="312" text-anchor="middle" fill="#6b7280" font-size="9">ORM</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowblue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#1d4ed8"/>
+    </marker>
+    <marker id="arrowgray" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4b5563"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- PROGRESS BAR -->
+  <!-- ═══════════════════════════════════════════ -->
+  <text x="600" y="756" text-anchor="middle" fill="#6b7280" font-size="12" font-weight="600">BUILD PROGRESS</text>
+
+  <!-- Phase bars -->
+  <!-- Ph0 -->
+  <rect x="40" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <rect x="40" y="768" width="60" height="20" rx="4" fill="#1d4ed8"/>
+  <text x="100" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph0 Foundation</text>
+
+  <!-- Ph1 -->
+  <rect x="175" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <rect x="175" y="768" width="0" height="20" rx="4" fill="#10b981"/>
+  <text x="235" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph1 Auth</text>
+
+  <!-- Ph2 -->
+  <rect x="310" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="370" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph2 Accounts</text>
+
+  <!-- Ph3 -->
+  <rect x="445" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="505" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph3 Categories</text>
+
+  <!-- Ph4 -->
+  <rect x="580" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="640" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph4 Transactions</text>
+
+  <!-- Ph5 -->
+  <rect x="715" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="775" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph5 Schedules</text>
+
+  <!-- Ph6 -->
+  <rect x="850" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="910" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph6 Plan View</text>
+
+  <!-- Ph7 -->
+  <rect x="985" y="768" width="120" height="20" rx="4" fill="#374151"/>
+  <text x="1045" y="800" text-anchor="middle" fill="#9ca3af" font-size="10">Ph7 Reallocation</text>
+
+  <!-- Version -->
+  <text x="600" y="858" text-anchor="middle" fill="#374151" font-size="11">v0.1 · Phase 0 In Progress · github.com/GinnyThomas/tidal</text>
+
+</svg>
