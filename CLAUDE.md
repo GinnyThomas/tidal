@@ -192,6 +192,34 @@ Do not add `google_id` to the User model or install authlib until Phase 2.
 
 ---
 
+## Setting Up on a New Machine
+
+Things that tripped us up — know these before starting:
+
+**Python venv:**
+`python3 -m venv` requires the `python3-venv` system package which may not be
+installed. If it fails, bootstrap pip via `get-pip.py` (download with wget),
+install `virtualenv`, and use that instead. See README for the exact commands.
+
+**PostgreSQL authentication:**
+PostgreSQL defaults to peer authentication on Unix sockets — only the `postgres`
+system user can connect that way. For `tidal_user`, always use TCP by specifying
+`127.0.0.1` (not `localhost`) in the connection string. This triggers password
+auth, which works once the user is created. Databases must be created by running
+commands as the `postgres` system user via `sudo -u postgres psql`.
+
+**Starting the backend:**
+Always run uvicorn from inside `backend/` with the venv activated:
+```bash
+cd backend && .venv/bin/uvicorn app.main:app --reload
+```
+
+**Frontend port conflicts:**
+If Vite picks a port other than 5173, stale processes from previous sessions are
+still running. Kill them with `fuser -k 5173/tcp` (and 5174, 5175 etc.) then restart.
+
+---
+
 ## Important Reminders
 
 - Never store passwords in plain text — always bcrypt

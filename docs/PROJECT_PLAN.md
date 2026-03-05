@@ -110,8 +110,8 @@ you refactor even if nothing changed for the user.
 ---
 
 ## Phase 0 — Foundation
-**Goal:** Everything is set up, connected, and the project exists publicly  
-**Status:** 🟡 In Progress
+**Goal:** Everything is set up, connected, and the project exists publicly
+**Status:** ✅ Complete
 
 ### Milestones
 
@@ -121,16 +121,16 @@ you refactor even if nothing changed for the user.
 - [x] PRD written and committed
 - [x] TDD written and committed
 - [x] Project plan written and committed
-- [ ] Backend virtual environment configured
-- [ ] Backend dependencies installed (FastAPI, SQLAlchemy, pytest etc.)
-- [ ] pytest configured and first passing test written
-- [ ] Database created in PostgreSQL
-- [ ] Backend walking skeleton running (single endpoint returns 200 OK)
-- [ ] Frontend scaffolded with Vite + React + TypeScript
-- [ ] Vitest and React Testing Library configured
-- [ ] First passing frontend test written
-- [ ] Frontend connects to backend (calls the walking skeleton endpoint)
-- [ ] Both run simultaneously in development
+- [x] Backend virtual environment configured
+- [x] Backend dependencies installed (FastAPI, SQLAlchemy, pytest etc.)
+- [x] pytest configured and first passing test written
+- [x] Database created in PostgreSQL
+- [x] Backend walking skeleton running (single endpoint returns 200 OK)
+- [x] Frontend scaffolded with Vite + React + TypeScript
+- [x] Vitest and React Testing Library configured
+- [x] First passing frontend test written
+- [x] Frontend connects to backend (calls the walking skeleton endpoint)
+- [x] Both run simultaneously in development
 
 **Exit criteria:** `npm run dev` starts the frontend,
 `uvicorn app.main:app` starts the backend,
