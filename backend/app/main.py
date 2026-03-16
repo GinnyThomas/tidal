@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import auth
 
 
 # --- Create the FastAPI application ---
@@ -44,6 +45,13 @@ app.add_middleware(
     allow_methods=["*"],      # Allow GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],      # Allow Content-Type, Authorization, etc.
 )
+
+
+# --- Routers ---
+# Each router is a collection of related endpoints defined in app/routers/.
+# include_router() mounts all of a router's routes onto the main app.
+# The router's `prefix` (e.g. "/api/v1/auth") is applied to every route in it.
+app.include_router(auth.router)
 
 
 # --- Health check endpoint ---
