@@ -15,6 +15,7 @@
 # and delegates all logic to services/auth.py. Routes should be short.
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -71,7 +72,22 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> User:
         password_hash=hash_password(user_in.password),
     )
     db.add(user)
-    db.commit()
+
+    # Wrap the commit in try/except IntegrityError to handle the race condition
+    # where two concurrent requests pass the SELECT check above simultaneously,
+    # then both attempt to INSERT the same email. The UNIQUE constraint on the
+    # email column is the true last line of defence — the database will reject
+    # the second INSERT with an IntegrityError. We catch it, roll back the
+    # transaction (required before the session can be reused), and return the
+    # same 400 the explicit check above would have returned.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists.",
+        )
 
     # db.refresh() reloads the user from the database after the commit.
     # This populates auto-generated fields (id, created_at, updated_at)

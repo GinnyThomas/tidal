@@ -14,13 +14,20 @@
 import os
 from typing import Generator
 
-# Set required environment variables before any app imports.
-# os.environ.setdefault only sets the variable if it isn't already set,
-# so a real .env file takes precedence if present.
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql://test_user:test_password@127.0.0.1:5432/tidal_test",
-)
+# Define the test database URL before setting any environment variables.
+# Having it as a named constant here makes the assignment below self-documenting
+# and ensures the fixture and the env var always reference the same value.
+SQLITE_TEST_URL = "sqlite:///:memory:"
+
+# Force the DATABASE_URL to SQLite for all tests — unconditionally.
+#
+# Why os.environ["DATABASE_URL"] and not os.environ.setdefault(...)?
+#   setdefault only sets the variable if it isn't already present. If DATABASE_URL
+#   is set in the developer's shell, or in a CI environment, setdefault silently
+#   ignores it and the test suite could accidentally point at a real database.
+#   The unconditional assignment guarantees tests ALWAYS use SQLite, regardless
+#   of what the surrounding environment says.
+os.environ["DATABASE_URL"] = SQLITE_TEST_URL
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 
 # --- App imports (after env vars are set) ---
@@ -51,7 +58,9 @@ from app.main import app  # Importing app triggers all router and model imports,
 # Fix: StaticPool makes ALL requests reuse a SINGLE underlying connection.
 # Now our CREATE TABLE calls and the app's INSERT/SELECT calls all see
 # the same in-memory database.
-SQLITE_TEST_URL = "sqlite:///:memory:"
+#
+# SQLITE_TEST_URL is defined at the top of this file (before the os.environ
+# assignments) so it can be used in both places without duplication.
 
 
 @pytest.fixture(scope="function")

@@ -12,14 +12,14 @@
 # Libraries:
 #   - passlib: high-level wrapper for bcrypt password hashing
 #   - python-jose: JWT encoding and decoding
-#   - fastapi.security: OAuth2 helper for extracting Bearer tokens
+#   - fastapi.security: HTTPBearer for extracting Bearer tokens from headers
 
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -52,20 +52,23 @@ from app.models.user import User
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-# --- OAuth2 token extraction ---
+# --- Bearer token extraction ---
 #
-# OAuth2PasswordBearer is a FastAPI utility that knows how to extract
-# a Bearer token from the Authorization header of an incoming request.
+# HTTPBearer extracts a Bearer token from the Authorization header.
 #
-# tokenUrl tells FastAPI's auto-generated docs (Swagger UI) which endpoint
-# to use for the "Authorise" button. It doesn't affect actual token validation.
+# Why not OAuth2PasswordBearer?
+#   OAuth2PasswordBearer is designed for the OAuth2 Password Grant flow, which
+#   requires form-encoded credentials (username + password form fields). Our
+#   login endpoint accepts JSON, not form data. Using OAuth2PasswordBearer would
+#   be semantically wrong and would tell Swagger UI to show a misleading form.
 #
-# When used as Depends(oauth2_scheme), FastAPI automatically:
-#   1. Looks for: Authorization: Bearer <token> in the request headers
-#   2. Extracts the token string
-#   3. Passes it to our function
-#   4. If the header is missing or malformed → raises 401 automatically
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# HTTPBearer does one thing: looks for Authorization: Bearer <token> and returns
+# an HTTPAuthorizationCredentials object with a `.credentials` attribute holding
+# the raw token string. No OAuth2 semantics, no form data assumptions.
+#
+# If the Authorization header is missing or not "Bearer <something>",
+# FastAPI raises 403 automatically before our code runs.
+http_bearer = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
@@ -114,7 +117,7 @@ def create_access_token(data: dict) -> str:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(http_bearer),
     db: Session = Depends(get_db),
 ) -> User:
     """
@@ -124,14 +127,16 @@ def get_current_user(
         current_user: User = Depends(get_current_user)
 
     Flow:
-        1. oauth2_scheme extracts the Bearer token from the Authorization header
+        1. http_bearer extracts the Bearer token from the Authorization header,
+           returning an HTTPAuthorizationCredentials object. We read .credentials
+           to get the raw token string.
         2. We decode and verify the JWT signature (raises JWTError if invalid/expired)
         3. We extract the user ID from the `sub` (subject) claim
         4. We look up the user in the database
         5. Return the User object for the route to use
 
     Failure cases (all return the same 401 — we don't reveal which check failed):
-        - Missing or malformed Authorization header → oauth2_scheme raises 401
+        - Missing or malformed Authorization header → http_bearer raises 403
         - Invalid JWT signature (tampered token) → JWTError → 401
         - Expired JWT → JWTError → 401
         - User ID in token doesn't match any user → 401
@@ -146,7 +151,7 @@ def get_current_user(
 
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         # `sub` (subject) is the standard JWT claim for "who this token is for".
         # We stored the user's UUID as a string when creating the token.

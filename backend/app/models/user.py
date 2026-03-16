@@ -70,11 +70,15 @@ class User(Base):
     #
     # ISO 4217 currency code: always 3 uppercase letters (GBP, EUR, USD).
     # Stored as a plain string per CLAUDE.md — no currency-specific DB type needed.
-    default_currency: Mapped[str] = mapped_column(String(3), default="GBP")
+    # nullable=False: the database column must never contain NULL.
+    # The Python default ("GBP") means the ORM fills it when not specified,
+    # but without nullable=False the database would still accept a raw INSERT
+    # of NULL that bypasses the ORM. Both constraints together close that gap.
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GBP")
 
     # IANA timezone name e.g. "UTC", "Europe/London", "America/New_York".
     # We store the name (not the UTC offset) because offsets change with DST.
-    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="UTC")
 
     # --- Timestamps ---
     #
