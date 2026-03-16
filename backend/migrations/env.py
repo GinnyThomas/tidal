@@ -7,33 +7,22 @@
 #   2. How to connect to the database (online) or what URL to use (offline)
 #
 # We customise two things from the Alembic default:
-#   - We pull the database URL from our app's settings (not alembic.ini)
-#   - We import our models so Alembic can detect schema changes automatically
+#   - We read DATABASE_URL directly from the environment (not via app.config.settings)
+#   - We import Base and models lazily inside run_migrations_online() so Alembic
+#     only loads app code when it actually needs to run migrations
 
+import os
 from logging.config import fileConfig
+
+from dotenv import load_dotenv
+
+# Load .env so DATABASE_URL is available via os.getenv.
+# pydantic-settings did this automatically when we imported app.config.settings;
+# now that we read the URL directly we have to do it ourselves.
+load_dotenv()
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-
-# --- Import our app config to get the database URL ---
-#
-# Why not hardcode the URL in alembic.ini?
-# Because we already manage the URL in .env via pydantic-settings.
-# Duplicating it would mean two sources of truth that can drift apart.
-# Importing settings here keeps a single source of truth.
-from app.config import settings
-
-# --- Import Base and all models ---
-#
-# Base.metadata knows about every table defined in our models.
-# But SQLAlchemy only knows about a table once the model's class body
-# has been executed — which happens when the module is first imported.
-#
-# Importing app.models here triggers those imports (see models/__init__.py),
-# which registers every model with Base.metadata before Alembic inspects it.
-# Without this, --autogenerate would see an empty schema and generate nothing.
-from app.database import Base
-import app.models  # noqa: F401 — side-effect import: registers all models with Base.metadata
 
 # --- Alembic Config object ---
 #
@@ -50,20 +39,26 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# --- Point Alembic at our schema ---
+# --- Read the database URL from the environment ---
 #
-# target_metadata is what --autogenerate compares the database against.
-# By passing Base.metadata, Alembic knows the "desired" state of every
-# table we've defined in our models.
-target_metadata = Base.metadata
+# We read DATABASE_URL directly from os.getenv rather than importing
+# app.config.settings. Why? Because Settings is a pydantic model that
+# validates ALL required fields on instantiation — including SECRET_KEY.
+# In environments that only have DATABASE_URL (e.g. a CI step that only
+# runs migrations), importing settings would crash before Alembic even
+# connects. Reading from os.getenv avoids that entirely.
+#
+# The `or` fallback allows overriding via alembic.ini in a pinch,
+# but in normal use DATABASE_URL from .env (loaded by python-dotenv or
+# the shell) is the single source of truth.
+db_url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+config.set_main_option("sqlalchemy.url", db_url)
 
-# --- Override the database URL from our app settings ---
+# --- target_metadata placeholder ---
 #
-# We set sqlalchemy.url programmatically here so that alembic.ini
-# can safely have an empty string for that key.
-# config.set_main_option() writes into the in-memory config object;
-# it does not modify alembic.ini on disk.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Set to None here; overridden inside run_migrations_online() after the
+# lazy model imports. run_migrations_offline() also sets it locally.
+target_metadata = None
 
 
 def run_migrations_offline() -> None:
@@ -101,6 +96,20 @@ def run_migrations_online() -> None:
     no benefit, and could leave idle connections open after the migration
     script exits.
     """
+    # --- Lazy imports of Base and models ---
+    #
+    # We import here rather than at the top of the file so that app code
+    # (SQLAlchemy, psycopg2, all model files) is only loaded when Alembic
+    # actually needs to connect and run migrations. Commands like
+    # `alembic history` or `alembic current` never call this function and
+    # therefore never pay the import cost.
+    #
+    # app.models is a side-effect import: importing it causes every model
+    # class to register itself with Base.metadata (see models/__init__.py).
+    # Without this, --autogenerate would see an empty schema.
+    from app.database import Base
+    import app.models  # noqa: F401 — registers all models with Base.metadata
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -110,7 +119,7 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata,
+            target_metadata=Base.metadata,
         )
 
         with context.begin_transaction():
