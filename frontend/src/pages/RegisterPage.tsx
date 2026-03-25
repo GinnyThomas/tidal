@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { SyntheticEvent } from 'react'
 
 
 function RegisterPage() {
@@ -11,7 +12,7 @@ function RegisterPage() {
     const [error, setError] = useState<string | null>(null)
     const navigate = useNavigate()
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()  // stops the page refreshing on form submit
         setError(null)  // clear any previous error before each attempt
 
