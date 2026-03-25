@@ -14,5 +14,6 @@
 # As we add more models (Account, Transaction, etc.), they get added here.
 
 from app.models.user import User
+from app.models.account import Account
 
-__all__ = ["User"]
+__all__ = ["User", "Account"]
