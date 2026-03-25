@@ -14,7 +14,7 @@ tidal/
 ## Status
 
 Phase 0 (walking skeleton) and Phase 1 (authentication) are both completed.
-Phase 2 to be started.
+Phase 2 has not yet been started.
 
 ---
 
