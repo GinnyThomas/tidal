@@ -4,7 +4,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('access_token')
 
     if (!token) {
-        // YOUR CODE HERE — what should happen?
         return <Navigate to="/login" replace />
     }
 
