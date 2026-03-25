@@ -89,8 +89,9 @@ class AccountResponse(BaseModel):
 
     @field_serializer("current_balance")
     def serialize_balance(self, value: Decimal) -> str:
-        """Return balance as a string to match CLAUDE.md API convention."""
-        return str(value)
+        """Return balance as a string with exactly 2 decimal places."""
+        scaled = value.quantize(Decimal("0.01"))
+        return str(scaled)
 
 
 class AccountUpdate(BaseModel):
