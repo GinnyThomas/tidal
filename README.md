@@ -13,7 +13,8 @@ tidal/
 
 ## Status
 
-Phase 0 (walking skeleton) complete. Moving into Phase 1 (authentication).
+Phase 0 (walking skeleton) and Phase 1 (authentication) are both completed.
+Phase 2 has not yet been started.
 
 ---
 
@@ -72,6 +73,9 @@ cp .env.example .env
 # Edit .env — at minimum set DATABASE_URL and generate a SECRET_KEY:
 # python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
+Run database migrations:
+cd backend
+.venv/bin/alembic upgrade head
 
 ### 3. Create the PostgreSQL databases
 
