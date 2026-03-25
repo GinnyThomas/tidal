@@ -187,6 +187,11 @@ def update_account(
     # {"name": "New Name"} only — currency, balance etc. are not touched.
     update_data = account_in.model_dump(exclude_unset=True)
 
+    NON_NULLABLE = {"name", "account_type", "currency", "current_balance"}
+        for field in NON_NULLABLE:
+            if field in update_data and update_data[field] is None:
+                raise HTTPException(status_code=422, detail=f"{field} cannot be null")
+    
     for field, value in update_data.items():
         # AccountType is a str Enum — its .value is the plain string we store.
         if field == "account_type" and value is not None:
