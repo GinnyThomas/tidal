@@ -90,13 +90,12 @@ def test_create_account_without_auth_returns_401(test_client) -> None:
     """
     Posting without an Authorization header should be rejected.
 
-    Note on HTTP status: in this version of FastAPI/Starlette, HTTPBearer returns
-    401 Unauthorized when the Authorization header is absent. (Some versions return
-    403 Forbidden; the actual status is library-version-dependent. We assert what
-    the running version actually returns.)
+    Note on HTTP status: with the FastAPI/Starlette versions in use, HTTPBearer
+    returns 403 Forbidden when the Authorization header is absent. (Behavior is
+    library-version-dependent; we assert what the running version actually returns.)
     """
     response = test_client.post("/api/v1/accounts", json=_ACCOUNT)
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 # =============================================================================
