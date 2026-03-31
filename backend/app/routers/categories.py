@@ -105,7 +105,7 @@ def list_categories(
         Category.deleted_at.is_(None),
     )
     if not include_hidden:
-        query = query.filter(Category.is_hidden == False)  # noqa: E712
+        query = query.filter(Category.is_hidden.is_(False))
     return query.all()
 
 
@@ -124,13 +124,21 @@ def create_category(
 
     is_system is always False for user-created categories — the schema does
     not accept is_system as input and the model defaults it to False.
+
+    If parent_category_id is provided, we validate that the parent exists,
+    belongs to the current user, and has not been soft-deleted. This prevents
+    orphaned child categories and cross-user hierarchy attacks.
     """
+    if category_in.parent_category_id is not None:
+        _get_category_or_404(category_in.parent_category_id, current_user.id, db)
+
     category = Category(
         user_id=current_user.id,
         name=category_in.name,
         parent_category_id=category_in.parent_category_id,
         colour=category_in.colour,
         icon=category_in.icon,
+        is_hidden=category_in.is_hidden,
         # is_system not set here — model default is False
     )
     db.add(category)
@@ -164,6 +172,18 @@ def update_category(
         )
 
     update_data = category_in.model_dump(exclude_unset=True)
+
+    # Guard against explicitly sending null for non-nullable fields.
+    # exclude_unset=True means omitted fields are already absent from this dict,
+    # but a client can still send {"name": null} — we reject that here.
+    NON_NULLABLE = {"name"}
+    for field in NON_NULLABLE:
+        if field in update_data and update_data[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"'{field}' cannot be null.",
+            )
+
     for field, value in update_data.items():
         setattr(category, field, value)
 

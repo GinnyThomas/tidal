@@ -38,7 +38,9 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
     when constructing child Category objects. All objects are added to the
     session and committed in a single batch at the end.
 
-    Called by the register endpoint after the User row has been committed.
+    Called by the register endpoint. Does NOT commit — the caller is responsible
+    for the final commit so that user creation and seeding live in one transaction.
+    If seeding fails, the whole registration rolls back (no orphaned user rows).
     """
 
     # --- Helper: build a Category object (not yet added to the session) ---
@@ -116,4 +118,3 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
     ]
 
     db.add_all(all_categories)
-    db.commit()

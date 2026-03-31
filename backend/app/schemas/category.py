@@ -74,3 +74,4 @@ class CategoryUpdate(BaseModel):
     parent_category_id: Optional[uuid.UUID] = None
     colour: Optional[str] = Field(default=None, max_length=7)
     icon: Optional[str] = Field(default=None, max_length=50)
+    is_hidden: Optional[bool] = None

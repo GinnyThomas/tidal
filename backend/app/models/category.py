@@ -61,7 +61,13 @@ class Category(Base):
     # None = top-level category. A UUID = child category.
     # ForeignKey("categories.id") is defined AFTER the primary key above,
     # so SQLAlchemy knows about the target column when processing this.
-    # SQLite does not enforce FK constraints by default (no PRAGMA needed).
+    #
+    # SQLite FK enforcement note:
+    #   SQLite does NOT enforce foreign key constraints unless you explicitly
+    #   run `PRAGMA foreign_keys = ON` per connection. Our test suite uses
+    #   SQLite without that PRAGMA, so FK violations are silently ignored —
+    #   this is intentional and keeps tests simple. In production, PostgreSQL
+    #   enforces all FK constraints unconditionally.
     parent_category_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("categories.id"),
