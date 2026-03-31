@@ -23,6 +23,7 @@ from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserCreate, UserResponse
 from app.services.auth import create_access_token, hash_password, verify_password
+from app.services.categories import seed_default_categories
 
 
 # APIRouter collects related routes and applies shared config.
@@ -93,6 +94,12 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> User:
     # This populates auto-generated fields (id, created_at, updated_at)
     # that were set by database defaults. Without this, they'd still be None.
     db.refresh(user)
+
+    # Seed the standard set of system categories for this new user.
+    # Called after the user commit so user.id is available and stable.
+    # Every new user gets the same starting set of categories (Food & Drink,
+    # Transport, etc.) with is_system=True so they cannot be deleted.
+    seed_default_categories(user.id, db)
 
     return user  # FastAPI uses response_model=UserResponse to strip password_hash
 
