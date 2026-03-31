@@ -128,13 +128,15 @@ def list_accounts(
     """
     Returns all active (non-deleted) accounts belonging to the current user.
 
-    Filtered by both user_id (data scoping) and deleted_at IS NULL (soft delete).
-    Soft-deleted accounts are permanently excluded from this view.
+    Filtered by user_id (data scoping), is_active IS TRUE (archived accounts
+    are excluded), and deleted_at IS NULL (soft delete).
+    Soft-deleted and archived accounts are permanently excluded from this view.
     """
     return (
         db.query(Account)
         .filter(
             Account.user_id == current_user.id,
+            Account.is_active.is_(True),
             Account.deleted_at.is_(None),
         )
         .all()

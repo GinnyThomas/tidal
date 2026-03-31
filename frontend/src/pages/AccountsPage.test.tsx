@@ -10,7 +10,7 @@
 // axios is mocked globally so no real HTTP requests are made.
 // localStorage holds the fake JWT token each test needs.
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
@@ -50,7 +50,7 @@ describe('AccountsPage', () => {
     it('shows a loading indicator while the fetch is in progress', () => {
         // mockReturnValueOnce (not mockResolvedValueOnce) lets us hand back
         // a promise that never settles — the component stays in loading state.
-        vi.mocked(axios.get).mockReturnValueOnce(new Promise(() => {}))
+        vi.mocked(axios.get).mockReturnValueOnce(new Promise<never>(() => {}))
 
         render(<MemoryRouter><AccountsPage /></MemoryRouter>)
 

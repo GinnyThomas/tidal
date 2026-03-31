@@ -24,7 +24,7 @@ Phase 2 has not yet been started.
 
 You will need:
 - Python 3.13
-- Node.js (LTS) * Note: react-router-dom v7 requires Node 20+
+- Node.js (LTS) (react-router-dom v7 requires Node 20+)
 - PostgreSQL 16 or 17
 
 On Ubuntu/Debian, install PostgreSQL with:

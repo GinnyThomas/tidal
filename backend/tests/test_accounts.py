@@ -2,9 +2,9 @@
 #
 # Purpose: Tests for the Accounts endpoints.
 #
-# TDD approach: these tests are written BEFORE the implementation.
-# Run now → RED (endpoints don't exist yet, returns 404).
-# After writing the router → GREEN.
+#  Originally written using a TDD approach before the accounts implementation existed.
+#  The accounts router and endpoints are now implemented, so these tests should pass
+#  as long as the described behaviour is preserved.
 #
 # We test behaviour, not implementation:
 #   - Correct HTTP status codes
