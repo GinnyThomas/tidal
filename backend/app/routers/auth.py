@@ -23,6 +23,7 @@ from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserCreate, UserResponse
 from app.services.auth import create_access_token, hash_password, verify_password
+from app.services.categories import seed_default_categories
 
 
 # APIRouter collects related routes and applies shared config.
@@ -73,15 +74,11 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> User:
     )
     db.add(user)
 
-    # Wrap the commit in try/except IntegrityError to handle the race condition
-    # where two concurrent requests pass the SELECT check above simultaneously,
-    # then both attempt to INSERT the same email. The UNIQUE constraint on the
-    # email column is the true last line of defence — the database will reject
-    # the second INSERT with an IntegrityError. We catch it, roll back the
-    # transaction (required before the session can be reused), and return the
-    # same 400 the explicit check above would have returned.
+    # Flush to get the DB-assigned id (and catch duplicate email violations)
+    # without committing yet. flush() writes the INSERT but keeps the transaction
+    # open so we can add the categories in the same atomic unit of work.
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -89,10 +86,24 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> User:
             detail="A user with this email already exists.",
         )
 
-    # db.refresh() reloads the user from the database after the commit.
-    # This populates auto-generated fields (id, created_at, updated_at)
-    # that were set by database defaults. Without this, they'd still be None.
+    # db.refresh() reloads the user from the database after the flush.
+    # This populates auto-generated fields (id, created_at, updated_at).
     db.refresh(user)
+
+    # Stage the default system categories in the same open transaction.
+    # seed_default_categories does NOT commit — it only calls db.add_all().
+    # The single commit below persists both the user row and all category rows
+    # atomically: if anything fails, neither the user nor the categories are saved.
+    seed_default_categories(user.id, db)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed. Please try again.",
+        )
 
     return user  # FastAPI uses response_model=UserResponse to strip password_hash
 
