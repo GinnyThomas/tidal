@@ -79,7 +79,7 @@ describe('CategoriesPage', () => {
 
         render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
 
-        expect(await screen.findByText(/no categories yet/i)).toBeInTheDocument()
+        expect(await screen.findByText(/no visible categories./i)).toBeInTheDocument()
     })
 
     it('shows an error message when the fetch fails', async () => {
@@ -138,7 +138,7 @@ describe('CategoriesPage', () => {
         vi.mocked(axios.post).mockResolvedValueOnce({ data: { id: 'cat-new' } })
 
         render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
-        await screen.findByText(/no categories yet/i)
+        await screen.findByText(/no visible categories./i)
 
         await userEvent.click(screen.getByRole('button', { name: /add category/i }))
         await userEvent.type(screen.getByLabelText(/category name/i), 'Side Hustle')
@@ -158,7 +158,7 @@ describe('CategoriesPage', () => {
             .mockResolvedValueOnce({ data: [] })  // after toggle
 
         render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
-        await screen.findByText(/no categories yet/i)
+        await screen.findByText(/no visible categories./i)
 
         await userEvent.click(screen.getByRole('button', { name: 'Show Hidden' }))
 
@@ -179,7 +179,7 @@ describe('CategoriesPage', () => {
             .mockResolvedValueOnce({ data: [] })
 
         render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
-        await screen.findByText(/no categories yet/i)
+        await screen.findByText(/no visible categories./i)
 
         await userEvent.click(screen.getByRole('button', { name: 'Show Hidden' }))
 

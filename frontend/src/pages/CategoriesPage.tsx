@@ -97,9 +97,8 @@ function CategoriesPage() {
             // default view, or shows it greyed out if include_hidden is true.
             fetchCategories(includeHidden)
         } catch {
-            // Silently ignore for now — the list will be out of sync but the
-            // user can manually re-toggle. A toast notification would be the
-            // right UX improvement here in a later phase.
+            window.alert('Could not update category visibility. Please try again.')
+            fetchCategories(includeHidden)
         }
     }
 
@@ -157,7 +156,8 @@ function CategoriesPage() {
             )}
 
             {categories.length === 0 ? (
-                <p>No categories yet. Add one to get started.</p>
+                <p>No visible categories. You may have hidden categories; click "Show Hidden" to
+                    view them or add one to get started.</p>
             ) : (
                 <ul>
                     {parents.map((parent) => (
