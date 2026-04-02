@@ -92,6 +92,7 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
         # Transport children
         cat("Car",              transport.id),
         cat("Public Transport", transport.id),
+        cat("Parking",          transport.id),
         cat("Fuel",             transport.id),
 
         # Entertainment children
