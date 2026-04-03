@@ -60,8 +60,8 @@ def _create_account(
 def _get_category_id(test_client, token: str) -> str:
     """Return the id of the first seeded system category.
 
-    Registration seeds ~34 categories automatically, so there is always
-    at least one available without needing to create a custom one.
+    Registration seeds a set of default categories automatically, so there is
+    always at least one available without needing to create a custom one.
     """
     categories = test_client.get(
         "/api/v1/categories",
@@ -280,15 +280,16 @@ def test_create_transfer_creates_two_linked_transactions(test_client) -> None:
     types = {t["transaction_type"] for t in body}
     assert types == {"transfer"}
 
-    # Linking: one leg is the parent (no parent_transaction_id),
-    # the other references it.
-    ids = {t["id"] for t in body}
-    parents = {t["parent_transaction_id"] for t in body}
+    # Identify parent and child legs by their parent_transaction_id
+    parent_leg = next(t for t in body if t["parent_transaction_id"] is None)
+    child_leg = next(t for t in body if t["parent_transaction_id"] is not None)
 
-    assert None in parents, "One leg should have no parent (it IS the parent)"
-    non_none_parents = {p for p in parents if p is not None}
-    assert len(non_none_parents) == 1, "Exactly one leg should reference the other"
-    assert non_none_parents.issubset(ids), "The parent reference must point at the other leg"
+    # The child must point at the parent — not at itself, not at a random id
+    assert child_leg["parent_transaction_id"] == parent_leg["id"], (
+        "Child leg's parent_transaction_id must equal the parent leg's id"
+    )
+    # Sanity: the parent must not reference itself
+    assert parent_leg["id"] != child_leg["id"]
 
 
 # =============================================================================

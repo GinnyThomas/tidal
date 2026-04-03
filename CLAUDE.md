@@ -143,7 +143,7 @@ except Reallocation (never deleted) and TagAssignment (physically deleted).
 - `app/models/category.py` — Category model, self-referential FK, is_system, is_hidden
 - `app/schemas/` — Pydantic v2 schemas for all entities
 - `app/services/auth.py` — bcrypt hashing, JWT creation, get_current_user dependency
-- `app/services/categories.py` — seed_default_categories (34 categories, atomic with user creation)
+- `app/services/categories.py` — seed_default_categories (35 categories, atomic with user creation)
 - `app/routers/auth.py` — register (seeds categories atomically), login
 - `app/routers/accounts.py` — full CRUD, soft delete, user-scoped
 - `app/routers/categories.py` — full CRUD, toggle-visibility with child cascade, system protection
