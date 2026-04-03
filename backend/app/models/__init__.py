@@ -18,5 +18,6 @@ from app.models.account import Account
 from app.models.category import Category
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
+from app.models.reallocation import Reallocation
 
-__all__ = ["User", "Account", "Category", "Schedule", "Transaction"]
+__all__ = ["User", "Account", "Category", "Schedule", "Transaction", "Reallocation"]
