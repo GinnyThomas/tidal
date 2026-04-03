@@ -47,6 +47,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models.category import Category
+from app.models.reallocation import Reallocation
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
 from app.schemas.plan import MonthlyPlan, PlanRow
@@ -196,14 +197,17 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
       1. Load all active, non-deleted schedules for the user.
       2. For each schedule, count occurrences in the target month and accumulate
          planned amounts by category.
-      3. Load all non-deleted transactions for the user in the target month.
-      4. Separate into actual (cleared/reconciled) and pending buckets,
+      3. Load reallocations for this month/year and apply them to planned:
+         subtract amount from from_category, add to to_category.
+         Planned can go negative if the user reallocated more than scheduled.
+      4. Load all non-deleted transactions for the user in the target month.
+      5. Separate into actual (cleared/reconciled) and pending buckets,
          accumulating by category.
-      5. Collect all category IDs that have any non-zero amount.
-      6. Load category metadata (name, parent) for those IDs.
-      7. Build PlanRow objects sorted by category name.
-      8. Compute totals across all rows.
-      9. Return MonthlyPlan.
+      6. Collect all category IDs that have any non-zero amount.
+      7. Load category metadata (name, parent) for those IDs.
+      8. Build PlanRow objects sorted by category name.
+      9. Compute totals across all rows.
+      10. Return MonthlyPlan.
     """
     first_day = date(year, month, 1)
     last_day = date(year, month, calendar.monthrange(year, month)[1])
@@ -229,7 +233,39 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
                 planned_by_category.get(cat_id, Decimal("0")) + schedule.amount * count
             )
 
-    # --- Step 3: Transactions in the target month ---
+    # --- Step 3: Apply reallocations to planned amounts ---
+    #
+    # Reallocations adjust the planned budget mid-month: move £X from category A
+    # to category B. We subtract from the source and add to the destination.
+    #
+    # The adjusted planned amount CAN go negative — this means the user moved
+    # more budget away from a category than was originally scheduled. This is
+    # intentional and the plan view must show it so the user sees the real picture.
+    #
+    # We also need to track categories introduced purely by reallocation (i.e. a
+    # to_category that had no schedule). These get initialised to Decimal("0")
+    # before the adjustment so they appear correctly in the rows.
+    reallocations = (
+        db.query(Reallocation)
+        .filter(
+            Reallocation.user_id == user_id,
+            Reallocation.month == month,
+            Reallocation.year == year,
+        )
+        .all()
+    )
+
+    for r in reallocations:
+        # Ensure both categories exist in the planned dict (default 0 if absent)
+        if r.from_category_id not in planned_by_category:
+            planned_by_category[r.from_category_id] = Decimal("0")
+        if r.to_category_id not in planned_by_category:
+            planned_by_category[r.to_category_id] = Decimal("0")
+
+        planned_by_category[r.from_category_id] -= r.amount
+        planned_by_category[r.to_category_id] += r.amount
+
+    # --- Step 4: Transactions in the target month ---
     transactions = (
         db.query(Transaction)
         .filter(
@@ -241,7 +277,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
         .all()
     )
 
-    # --- Step 4: Actual and pending by category ---
+    # --- Step 5: Actual and pending by category ---
     actual_by_category: dict[uuid.UUID, Decimal] = {}
     pending_by_category: dict[uuid.UUID, Decimal] = {}
 
@@ -256,7 +292,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
                 pending_by_category.get(cat_id, Decimal("0")) + txn.amount
             )
 
-    # --- Step 5: Union of all category IDs with any activity ---
+    # --- Step 6: Union of all category IDs with any activity ---
     all_category_ids = (
         set(planned_by_category.keys())
         | set(actual_by_category.keys())
@@ -274,7 +310,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
             total_pending=Decimal("0"),
         )
 
-    # --- Step 6: Load category metadata ---
+    # --- Step 7: Load category metadata ---
     # Scoped to the current user and non-deleted only.
     # Without user_id scoping, a category ID collision across users (impossible
     # with UUIDs but defensive coding) could leak another user's category name.
@@ -289,7 +325,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
     )
     category_map: dict[uuid.UUID, Category] = {c.id: c for c in categories}
 
-    # --- Step 7: Build PlanRow objects, sorted by category name ---
+    # --- Step 8: Build PlanRow objects, sorted by category name ---
     rows: list[PlanRow] = []
     for cat_id in sorted(all_category_ids, key=lambda cid: category_map[cid].name if cid in category_map else ""):
         cat = category_map.get(cat_id)
@@ -314,7 +350,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
             )
         )
 
-    # --- Step 8: Aggregate totals ---
+    # --- Step 9: Aggregate totals ---
     total_planned = sum((r.planned for r in rows), Decimal("0"))
     total_actual = sum((r.actual for r in rows), Decimal("0"))
     total_remaining = sum((r.remaining for r in rows), Decimal("0"))
