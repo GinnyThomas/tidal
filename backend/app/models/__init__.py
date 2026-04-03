@@ -16,6 +16,7 @@
 from app.models.user import User
 from app.models.account import Account
 from app.models.category import Category
+from app.models.schedule import Schedule
 from app.models.transaction import Transaction
 
-__all__ = ["User", "Account", "Category", "Transaction"]
+__all__ = ["User", "Account", "Category", "Schedule", "Transaction"]
