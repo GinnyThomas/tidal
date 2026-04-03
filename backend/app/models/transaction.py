@@ -75,11 +75,12 @@ class Transaction(Base):
         index=True,
     )
 
-    # --- Schedule link (Phase 5) ---
-    # NO ForeignKey here — the schedules table doesn't exist yet.
-    # Phase 5 will add the FK via a migration when schedules are built.
+    # --- Schedule link ---
+    # References the schedule that generated this transaction, if any.
+    # Nullable — most transactions are entered manually without a schedule.
     schedule_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
+        ForeignKey("schedules.id"),
         nullable=True,
     )
 

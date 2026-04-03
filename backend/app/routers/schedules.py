@@ -1,0 +1,326 @@
+# app/routers/schedules.py
+#
+# Purpose: HTTP endpoints for managing schedules.
+#
+# Endpoints:
+#   POST   /api/v1/schedules                      → create schedule (201)
+#   GET    /api/v1/schedules                      → list schedules (200)
+#   GET    /api/v1/schedules/{id}                 → get single schedule (200 or 404)
+#   PUT    /api/v1/schedules/{id}                 → update schedule (200 or 404)
+#   DELETE /api/v1/schedules/{id}                 → soft-delete schedule (204 or 404)
+#   PATCH  /api/v1/schedules/{id}/toggle-active   → flip active flag (200 or 404)
+#
+# Query parameters for GET /api/v1/schedules:
+#   include_inactive — if true, include inactive (active=False) schedules.
+#                      Default: false (only active schedules shown).
+#
+# Route ordering note:
+#   PATCH /{id}/toggle-active is defined BEFORE GET /{id} to ensure FastAPI
+#   doesn't interpret the literal string "toggle-active" as a UUID path param.
+#
+# Security model:
+#   All endpoints require a valid JWT via Depends(get_current_user).
+#   Every query scopes to current_user.id. Account and category ownership
+#   are validated on create/update (prevents cross-user injection by guessing UUIDs).
+
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.account import Account
+from app.models.category import Category
+from app.models.schedule import Schedule
+from app.models.user import User
+from app.schemas.schedule import (
+    ScheduleCreate,
+    ScheduleResponse,
+    ScheduleUpdate,
+)
+from app.services.auth import get_current_user
+
+
+router = APIRouter(
+    prefix="/api/v1/schedules",
+    tags=["schedules"],
+)
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _get_schedule_or_404(
+    schedule_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Schedule:
+    """
+    Fetch a non-deleted schedule by ID scoped to the given user.
+    Raises 404 if not found, soft-deleted, or belongs to another user.
+
+    Same 404-instead-of-403 pattern as accounts and transactions: we do not
+    confirm whether a resource exists for a different user.
+    """
+    schedule = (
+        db.query(Schedule)
+        .filter(
+            Schedule.id == schedule_id,
+            Schedule.user_id == user_id,
+            Schedule.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if schedule is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Schedule not found.",
+        )
+    return schedule
+
+
+def _get_account_or_404(
+    account_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Account:
+    """Validate that an account exists and belongs to the current user."""
+    account = (
+        db.query(Account)
+        .filter(
+            Account.id == account_id,
+            Account.user_id == user_id,
+            Account.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found.",
+        )
+    return account
+
+
+def _get_category_or_404(
+    category_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Category:
+    """Validate that a category exists and belongs to the current user."""
+    category = (
+        db.query(Category)
+        .filter(
+            Category.id == category_id,
+            Category.user_id == user_id,
+            Category.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if category is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found.",
+        )
+    return category
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+
+@router.post(
+    "",
+    response_model=ScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_schedule(
+    schedule_in: ScheduleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Schedule:
+    """
+    Creates a new recurring schedule for the current user.
+
+    Validates that account_id and category_id both belong to the current user
+    before inserting — prevents cross-user injection by guessing UUIDs.
+    """
+    _get_account_or_404(schedule_in.account_id, current_user.id, db)
+    _get_category_or_404(schedule_in.category_id, current_user.id, db)
+
+    schedule = Schedule(
+        user_id=current_user.id,
+        account_id=schedule_in.account_id,
+        category_id=schedule_in.category_id,
+        name=schedule_in.name,
+        payee=schedule_in.payee,
+        amount=schedule_in.amount,
+        currency=schedule_in.currency,
+        frequency=schedule_in.frequency.value,
+        interval=schedule_in.interval,
+        day_of_month=schedule_in.day_of_month,
+        start_date=schedule_in.start_date,
+        end_date=schedule_in.end_date,
+        auto_generate=schedule_in.auto_generate,
+        active=schedule_in.active,
+        note=schedule_in.note,
+    )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return schedule
+
+
+@router.get(
+    "",
+    response_model=list[ScheduleResponse],
+)
+def list_schedules(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    include_inactive: bool = Query(default=False),
+) -> list[Schedule]:
+    """
+    Returns all non-deleted schedules for the current user.
+
+    By default, inactive schedules (active=False) are excluded.
+    Pass ?include_inactive=true to include them.
+
+    Why exclude inactive by default?
+    The list is primarily used to show "what is currently scheduled to happen".
+    A paused schedule shouldn't appear alongside live ones by default.
+    """
+    query = db.query(Schedule).filter(
+        Schedule.user_id == current_user.id,
+        Schedule.deleted_at.is_(None),
+    )
+
+    if not include_inactive:
+        # Only return schedules where active is True.
+        # Uses .is_(True) — consistent with SQLAlchemy best practice for booleans.
+        query = query.filter(Schedule.active.is_(True))
+
+    return query.all()
+
+
+@router.get(
+    "/{schedule_id}",
+    response_model=ScheduleResponse,
+)
+def get_schedule(
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Schedule:
+    """
+    Returns a single schedule by ID.
+
+    Returns 404 if not found, soft-deleted, or belongs to another user.
+    """
+    return _get_schedule_or_404(schedule_id, current_user.id, db)
+
+
+@router.put(
+    "/{schedule_id}",
+    response_model=ScheduleResponse,
+)
+def update_schedule(
+    schedule_id: uuid.UUID,
+    schedule_in: ScheduleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Schedule:
+    """
+    Updates a schedule with the provided fields (partial update).
+
+    Uses exclude_unset=True so only fields the client explicitly sent are
+    changed — omitted fields keep their existing values.
+    """
+    schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
+
+    update_data = schedule_in.model_dump(exclude_unset=True)
+
+    # Guard against explicitly nulling non-nullable fields.
+    # exclude_unset=True omits missing fields, but the client can still
+    # send {"amount": null} — reject that before writing to the database.
+    NON_NULLABLE = {"name", "amount", "currency", "frequency", "interval",
+                    "start_date", "account_id", "category_id", "auto_generate", "active"}
+    for field in NON_NULLABLE:
+        if field in update_data and update_data[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"'{field}' cannot be null.",
+            )
+
+    # Validate ownership of any referenced foreign keys being changed
+    if "account_id" in update_data and update_data["account_id"] is not None:
+        _get_account_or_404(update_data["account_id"], current_user.id, db)
+
+    if "category_id" in update_data and update_data["category_id"] is not None:
+        _get_category_or_404(update_data["category_id"], current_user.id, db)
+
+    # Enum fields need .value to store the plain string in the database
+    for field, value in update_data.items():
+        if field == "frequency" and value is not None:
+            value = value.value
+        setattr(schedule, field, value)
+
+    db.commit()
+    db.refresh(schedule)
+    return schedule
+
+
+@router.patch(
+    "/{schedule_id}/toggle-active",
+    response_model=ScheduleResponse,
+)
+def toggle_active(
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Schedule:
+    """
+    Flips the active flag on a schedule.
+
+    If the schedule is currently active, it becomes inactive (paused).
+    If it is inactive, it becomes active again.
+
+    Why a dedicated endpoint instead of PUT?
+    Toggle is a common, well-understood UI action ("pause / resume").
+    A dedicated PATCH endpoint makes the intent explicit and avoids clients
+    needing to read the current value before sending an update.
+
+    Note: defined BEFORE GET /{schedule_id} in the file so FastAPI sees the
+    more specific path first and doesn't try to parse "toggle-active" as a UUID.
+    """
+    schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
+    schedule.active = not schedule.active
+    db.commit()
+    db.refresh(schedule)
+    return schedule
+
+
+@router.delete(
+    "/{schedule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_schedule(
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """
+    Soft-deletes a schedule by setting deleted_at to the current UTC time.
+
+    The row is preserved in the database for audit purposes. All queries
+    filter WHERE deleted_at IS NULL, making this schedule invisible.
+
+    Returns 204 No Content on success.
+    """
+    schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
+    schedule.deleted_at = datetime.now(timezone.utc)
+    db.commit()
