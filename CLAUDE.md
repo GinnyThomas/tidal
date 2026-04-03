@@ -7,17 +7,15 @@ It provides context about the project, the developer, and how we work together.
 
 ## The Developer
 
-**Name:** Ginny Thomas  
-**Background:** Full Stack Engineer with 4 years production experience (Scala/Play 
-Framework at HMRC via Capgemini). Former MSc Family Nurse Practitioner. 
-Completed Makers Academy bootcamp.  
-**Current situation:** Transitioning to Barcelona. Actively job hunting in a 
-tough market. Building this project to strengthen GitHub profile and demonstrate 
-Python + React skills.  
-**Experience level:** Mid-level engineer with strong real-world experience but 
-limited formal CS education. No prior experience architecting and building an 
-app from scratch.  
-**Learning goals:** Understand every decision made in this codebase. Be able to 
+**Name:** Ginny Thomas
+**Background:** Full Stack Engineer with 4 years production experience (Scala/Play
+Framework at HMRC via Capgemini). Former MSc Family Nurse Practitioner.
+Completed Makers Academy bootcamp.
+**Current situation:** Relocating to Barcelona in June 2026. Actively job hunting.
+Building this project to strengthen GitHub profile and demonstrate Python + React skills.
+**Experience level:** Mid-level engineer with strong real-world experience but
+limited formal CS education. Building first full-stack app from scratch.
+**Learning goals:** Understand every decision made in this codebase. Be able to
 explain all of it confidently in a technical interview.
 
 ---
@@ -29,7 +27,7 @@ explain all of it confidently in a technical interview.
 - Explain what you are doing and why before writing code
 - Add clear comments to every file — Ginny needs to understand every line
 - Never just generate code silently — always explain the approach
-- If there are multiple ways to do something, briefly explain the tradeoffs 
+- If there are multiple ways to do something, briefly explain the tradeoffs
   and which approach we are taking and why
 - Point out when something is an industry convention vs a project-specific decision
 - Flag anything that will need to be revisited or improved later
@@ -52,8 +50,8 @@ explain all of it confidently in a technical interview.
 
 ## The Project
 
-**Name:** Tidal (working title — product name TBD)  
-**Purpose:** A multi-currency personal finance tracker that feels like a 
+**Name:** Tidal (working title — product name TBD)
+**Purpose:** A multi-currency personal finance tracker that feels like a
 living spreadsheet. Solves real problems with existing apps like Spendee.
 
 **Core problems being solved:**
@@ -62,11 +60,11 @@ living spreadsheet. Solves real problems with existing apps like Spendee.
 3. Budget and transaction views are separated — hard to see the full picture
 4. No structured way to track budget reallocation decisions
 
-**The primary view** is a Monthly Plan View — a single screen showing every 
-budget category with planned vs actual vs remaining. Transactions are 
+**The primary view** is a Monthly Plan View — a single screen showing every
+budget category with planned vs actual vs remaining. Transactions are
 accessible inline. Nothing important requires navigating away.
 
-**Key principle:** Plan first, track second. Schedules define what is expected. 
+**Key principle:** Plan first, track second. Schedules define what is expected.
 Transactions confirm reality. The gap between them is where insight lives.
 
 ---
@@ -83,12 +81,31 @@ Transactions confirm reality. The gap between them is where insight lives.
 - pytest + pytest-asyncio + httpx + factory-boy (testing)
 
 **Frontend:**
-- React 18 + TypeScript
+- React 19 + TypeScript
 - Vite
-- React Query
-- React Router
-- Tailwind CSS
+- React Query (not yet wired up — planned for Phase 6)
+- React Router v7
+- Tailwind CSS (not yet wired up — planned for Phase 8 polish)
 - Vitest + React Testing Library (testing)
+
+---
+
+## Current Phase
+
+**Phase 4 — Transactions (in progress)**
+
+Phases complete:
+- ✅ Phase 0: Walking skeleton (health endpoint, React frontend connected)
+- ✅ Phase 1: Authentication (register, login, JWT, ProtectedRoute, Alembic)
+- ✅ Phase 2: Accounts (CRUD, soft delete, frontend with add form)
+- ✅ Phase 3: Categories (hierarchical, system seeding, hide/unhide, frontend)
+
+Phases remaining:
+- 🔄 Phase 4: Transactions (expense/income/transfer/refund, pending/cleared/reconciled)
+- ⏳ Phase 5: Schedules (recurrence engine, auto-generate pending transactions)
+- ⏳ Phase 6: Monthly Plan View (primary dashboard, plan vs actual)
+- ⏳ Phase 7: Reallocation (budget adjustments, permanent audit trail)
+- ⏳ Phase 8: Polish & Deploy (Railway + Vercel + Supabase, demo account)
 
 ---
 
@@ -99,7 +116,7 @@ except Reallocation (never deleted) and TagAssignment (physically deleted).
 
 - **User** — owns everything, has default_currency and timezone
 - **Account** — where money lives (checking/savings/credit_card/cash/mortgage/loan)
-- **Category** — hierarchical (parent_category_id for subcategories)
+- **Category** — hierarchical (parent_category_id for subcategories), is_system/is_hidden flags
 - **Budget** — planned spend per category per period, optional rollover
 - **Schedule** — recurring transaction rules, generates pending transactions
 - **Transaction** — what actually happened (expense/income/transfer/refund)
@@ -111,8 +128,96 @@ except Reallocation (never deleted) and TagAssignment (physically deleted).
 - NUMERIC(12,2) not FLOAT for amounts (financial precision)
 - All timestamps in UTC
 - Currencies as ISO 4217 strings (GBP, EUR, USD)
-- Pending transactions excluded from budget actual spend calculations
+- Pending transactions excluded from budget actual spend by default
+- Budget toggle to include pending transactions (planned for Phase 6)
 - Refunds reduce category spend via parent_transaction_id link
+- Transfers create TWO linked transactions via parent_transaction_id
+
+---
+
+## What's Built So Far
+
+**Backend (29 tests passing):**
+- `app/models/user.py` — User model, bcrypt password hash, soft delete
+- `app/models/account.py` — Account model, NUMERIC balance, FK to users
+- `app/models/category.py` — Category model, self-referential FK, is_system, is_hidden
+- `app/schemas/` — Pydantic v2 schemas for all entities
+- `app/services/auth.py` — bcrypt hashing, JWT creation, get_current_user dependency
+- `app/services/categories.py` — seed_default_categories (35 categories, atomic with user creation)
+- `app/routers/auth.py` — register (seeds categories atomically), login
+- `app/routers/accounts.py` — full CRUD, soft delete, user-scoped
+- `app/routers/categories.py` — full CRUD, toggle-visibility with child cascade, system protection
+- `migrations/` — Alembic migrations for users, accounts, categories, is_hidden
+
+**Frontend (44 tests passing):**
+- `LoginPage.tsx` — JWT auth, localStorage token storage
+- `RegisterPage.tsx` — register + auto-login, password confirmation
+- `ProtectedRoute.tsx` — redirects to /login if no token
+- `AccountsPage.tsx` — list/empty/error states, add account form
+- `AddAccountForm.tsx` — account creation with JWT auth
+- `CategoriesPage.tsx` — hierarchical display, hide/unhide toggle, add form
+- `AddCategoryForm.tsx` — category creation with parent dropdown
+- `App.tsx` — routes: /login, /register, /dashboard (AccountsPage), /categories
+
+---
+
+## API Conventions
+
+- Base URL: `/api/v1/`
+- Auth: JWT Bearer token via HTTPBearer — `Authorization: Bearer <token>`
+- All responses: JSON
+- Amounts as strings (not floats) — NUMERIC serialised to string
+- Dates: ISO 8601 (YYYY-MM-DD)
+- Status codes: 200/201/204/400/401/403/404/422
+- Logical deletes — never physically delete records (except TagAssignment)
+- user_id always comes from the JWT token — never from the request body
+
+---
+
+## Authentication Strategy
+
+**Current:** Email/password only, JWT Bearer tokens.
+
+**Future (post-MVP):** Add Google OAuth alongside email/password using **authlib**.
+A User record exists independently of how they authenticated — the users table
+will get an optional `google_id` column and a `POST /api/v1/auth/google` endpoint.
+Do not add `google_id` or install authlib until explicitly requested.
+
+---
+
+## Transaction Rules (Phase 4)
+
+- **expense** — money out, reduces category actual spend (if cleared/reconciled)
+- **income** — money in, does not affect budget spend
+- **transfer** — creates TWO linked transactions (debit on source, credit on destination)
+  linked via parent_transaction_id
+- **refund** — reduces net spend in original category, links to parent via
+  parent_transaction_id
+- **pending** — transaction occurred but not yet cleared by bank; excluded from
+  budget actual spend by default
+- **cleared** — bank has processed it; counts toward actual spend
+- **reconciled** — user has confirmed against bank statement; counts toward actual spend
+- schedule_id is nullable in Phase 4 — Phase 5 wires up the schedule relationship
+
+---
+
+## Category Rules
+
+- System categories (is_system=True) cannot be deleted — return 403
+- System categories CAN be hidden (is_hidden=True)
+- Hiding a parent cascades to direct children (one level only)
+- Default list excludes hidden categories — pass ?include_hidden=true to see them
+- 34 system categories are seeded atomically on user registration
+- Custom categories can be deleted (soft delete via deleted_at)
+
+---
+
+## Known Issues / Tech Debt
+
+- The O(n²) childrenOf() in CategoriesPage — fix in Phase 8 with useMemo + Map
+- No toast notification system — toggle failures use window.alert for now
+- React Query not yet wired up — using plain useEffect + useState for data fetching
+- StrictMode removed from main.tsx during Phase 0 — re-add in Phase 8
 
 ---
 
@@ -122,101 +227,29 @@ except Reallocation (never deleted) and TagAssignment (physically deleted).
 tidal/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py          FastAPI entry point
-│   │   ├── config.py        environment configuration
-│   │   ├── database.py      database connection
-│   │   ├── dependencies.py  shared FastAPI dependencies
-│   │   ├── models/          SQLAlchemy models
-│   │   ├── schemas/         Pydantic request/response shapes
-│   │   ├── routers/         API endpoints
-│   │   └── services/        business logic
-│   └── tests/
+│   │   ├── main.py           FastAPI entry point, router registration
+│   │   ├── config.py         pydantic-settings, env vars
+│   │   ├── database.py       SQLAlchemy engine, SessionLocal, get_db
+│   │   ├── dependencies.py   shared FastAPI dependencies
+│   │   ├── models/           SQLAlchemy ORM models
+│   │   ├── schemas/          Pydantic request/response shapes
+│   │   ├── routers/          API endpoint handlers
+│   │   └── services/         business logic (auth, categories seeding)
+│   ├── migrations/           Alembic migration files
+│   └── tests/                pytest test suite
 ├── frontend/
 │   └── src/
-│       ├── api/             API call functions
-│       ├── components/      reusable UI components
-│       ├── pages/           full page components
-│       ├── hooks/           custom React hooks
-│       └── types/           TypeScript type definitions
+│       ├── pages/            full page components
+│       ├── components/       reusable UI components
+│       ├── api/              API call functions (planned)
+│       ├── hooks/            custom React hooks (planned)
+│       └── types/            TypeScript type definitions (planned)
 └── docs/
     ├── PRD.md
     ├── TDD.md
-    └── PROJECT_PLAN.md
+    ├── PROJECT_PLAN.md
+    └── architecture.png
 ```
-
----
-
-## API Conventions
-
-- Base URL: `/api/v1/`
-- Auth: JWT Bearer token
-- All responses: JSON
-- Amounts as strings (not floats)
-- Dates: ISO 8601 (YYYY-MM-DD)
-- Status codes used correctly (200/201/204/400/401/403/404/422)
-- Logical deletes — never physically delete records (except TagAssignment)
-
----
-
-## Current Phase
-
-**Phase 0 — Foundation (Walking Skeleton)**
-
-Goal: prove all pieces connect end to end.
-
-- Backend: GET /api/v1/health returns `{"status": "ok", "app": "Tidal"}`
-- Frontend: React page that calls the health endpoint and displays the response
-- Database: connected and reachable
-- Tests: pytest passes, vitest passes
-
-Do not build beyond this scope until Phase 0 is complete and confirmed working.
-
----
-
-## Authentication Strategy
-
-**Phase 1:** Email/password only, using JWT Bearer tokens (already in the tech stack).
-
-**Phase 2:** Add Google OAuth alongside email/password — not instead of it.
-
-**Key design decision:** A `User` record exists independently of how they authenticated.
-This means the users table gets an optional `google_id` column in Phase 2, and a new
-`POST /api/v1/auth/google` endpoint handles the OAuth callback. The same `User` row
-can have both a hashed password and a `google_id` — they are just two ways into the
-same account.
-
-The library to use for Google OAuth in FastAPI is **authlib** (lighter and more
-actively maintained than python-social-auth).
-
-Do not add `google_id` to the User model or install authlib until Phase 2.
-
----
-
-## Setting Up on a New Machine
-
-Things that tripped us up — know these before starting:
-
-**Python venv:**
-`python3 -m venv` requires the `python3-venv` system package which may not be
-installed. If it fails, bootstrap pip via `get-pip.py` (download with wget),
-install `virtualenv`, and use that instead. See README for the exact commands.
-
-**PostgreSQL authentication:**
-PostgreSQL defaults to peer authentication on Unix sockets — only the `postgres`
-system user can connect that way. For `tidal_user`, always use TCP by specifying
-`127.0.0.1` (not `localhost`) in the connection string. This triggers password
-auth, which works once the user is created. Databases must be created by running
-commands as the `postgres` system user via `sudo -u postgres psql`.
-
-**Starting the backend:**
-Always run uvicorn from inside `backend/` with the venv activated:
-```bash
-cd backend && .venv/bin/uvicorn app.main:app --reload
-```
-
-**Frontend port conflicts:**
-If Vite picks a port other than 5173, stale processes from previous sessions are
-still running. Kill them with `fuser -k 5173/tcp` (and 5174, 5175 etc.) then restart.
 
 ---
 
@@ -225,11 +258,45 @@ still running. Kill them with `fuser -k 5173/tcp` (and 5174, 5175 etc.) then res
 - Never store passwords in plain text — always bcrypt
 - Never commit .env files — .env.example only
 - Always scope database queries to the authenticated user_id
-- Pending transactions never count toward budget actual spend
+- Pending transactions excluded from budget actual spend by default
 - Reallocation records are never deleted — not even soft deleted
 - Financial amounts always use NUMERIC not FLOAT
+- sa.Uuid() in migrations must always be sa.Uuid(as_uuid=True)
+- Alembic migrations: always fix sa.Uuid() → sa.Uuid(as_uuid=True) before applying
+- Adding NOT NULL columns to existing tables requires server_default in the migration
 
 ---
 
-*This file should be updated as the project evolves.*
-*Current version reflects Phase 0 starting point.*
+## Running the Project
+
+```bash
+# Backend
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --reload
+# Runs on http://localhost:8000
+# API docs: http://localhost:8000/docs
+
+# Frontend
+cd frontend
+npm run dev
+# Runs on http://localhost:5173
+
+# Backend tests
+cd backend && source .venv/bin/activate
+python -m pytest tests/ -v
+
+# Frontend tests
+cd frontend
+npm run test:run
+
+# Database migrations
+cd backend && source .venv/bin/activate
+alembic upgrade head                                    # apply all migrations
+alembic revision --autogenerate -m "description"       # generate new migration
+alembic check                                          # verify DB matches models
+```
+
+---
+
+*Last updated: Phase 4 starting point — April 2026*
