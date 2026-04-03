@@ -15,8 +15,9 @@
 #                      Default: false (only active schedules shown).
 #
 # Route ordering note:
-#   PATCH /{id}/toggle-active is defined BEFORE GET /{id} to ensure FastAPI
-#   doesn't interpret the literal string "toggle-active" as a UUID path param.
+#   No special ordering is required between GET /{id} and
+#   PATCH /{id}/toggle-active because the latter is a more specific
+#   multi-segment path and won't be confused with the single-segment {id} route.
 #
 # Security model:
 #   All endpoints require a valid JWT via Depends(get_current_user).
