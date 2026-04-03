@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import accounts, auth, categories, schedules, transactions
+from app.routers import accounts, auth, categories, plan, schedules, transactions
 
 
 # --- Create the FastAPI application ---
@@ -56,6 +56,7 @@ app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(schedules.router)
 app.include_router(transactions.router)
+app.include_router(plan.router)
 
 
 # --- Health check endpoint ---
