@@ -165,7 +165,7 @@ describe('CategoriesPage', () => {
         await waitFor(() => {
             expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2)
             expect(vi.mocked(axios.get)).toHaveBeenLastCalledWith(
-                'http://localhost:8000/api/v1/categories',
+                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
                 expect.objectContaining({
                     params: { include_hidden: true },
                 })
@@ -205,7 +205,7 @@ describe('CategoriesPage', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Hide' }))
 
         expect(vi.mocked(axios.patch)).toHaveBeenCalledWith(
-            'http://localhost:8000/api/v1/categories/cat-1/toggle-visibility',
+            `${import.meta.env.VITE_API_URL}/api/v1/categories/cat-1/toggle-visibility`,
             {},
             expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } })
         )

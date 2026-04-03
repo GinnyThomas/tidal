@@ -32,15 +32,18 @@ app = FastAPI(
 # Browsers block JavaScript from making requests to a different "origin"
 # (different hostname or port) unless the server explicitly permits it.
 #
-# Our React frontend runs on http://localhost:5173 (Vite's default port).
-# Our API runs on http://localhost:8000.
-# Different ports = different origins = CORS required.
+# allowed_origins is read from the ALLOWED_ORIGINS environment variable —
+# a comma-separated list, e.g. "https://app.vercel.app,https://staging.vercel.app".
+# The default in Settings covers local Vite development (http://localhost:5173).
 #
-# In production this list would be restricted to the real domain.
-# For local development we allow the Vite dev server.
+# Why split on commas?
+#   CORSMiddleware expects a list. Storing origins as a single env var string
+#   (comma-separated) is the standard approach — one var, any number of origins.
+_allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=_allowed_origins,
     allow_credentials=True,   # Allow cookies and auth headers
     allow_methods=["*"],      # Allow GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],      # Allow Content-Type, Authorization, etc.

@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # Human-readable application name, used in API responses and docs.
     APP_NAME: str = "Tidal"
 
+    # Comma-separated list of allowed CORS origins.
+    # In production, set this to your Vercel frontend URL, e.g.:
+    #   ALLOWED_ORIGINS=https://your-app.vercel.app
+    # Multiple origins: ALLOWED_ORIGINS=https://app.vercel.app,https://staging.vercel.app
+    # The default covers local Vite development on the standard port.
+    ALLOWED_ORIGINS: str = "http://localhost:5173"
+
     # Tell pydantic-settings to look for a .env file in the working directory.
     # extra="ignore" means unknown variables in .env won't cause an error —
     # useful when .env contains vars for other tools (Docker, etc.)

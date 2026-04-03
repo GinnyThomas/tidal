@@ -52,7 +52,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded }: Props) {
 
         try {
             await axios.post(
-                'http://localhost:8000/api/v1/categories',
+                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
                 {
                     name,
                     // null = top-level. A non-empty string = child of that parent.

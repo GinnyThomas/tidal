@@ -20,13 +20,13 @@ function RegisterPage() {
         if (passwordsMatch)
             try {
                await axios.post(
-                    'http://localhost:8000/api/v1/auth/register',
+                    `${import.meta.env.VITE_API_URL}/api/v1/auth/register`,
                     {email, password}
                 )
 
                 try {
                     const response = await axios.post(
-                        'http://localhost:8000/api/v1/auth/login',
+                        `${import.meta.env.VITE_API_URL}/api/v1/auth/login`,
                         {email, password}
                     )
                     localStorage.setItem("access_token", response.data.access_token)

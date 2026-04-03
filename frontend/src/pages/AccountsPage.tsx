@@ -49,7 +49,7 @@ function AccountsPage() {
         setLoading(true)
         setError(null)
         try {
-            const response = await axios.get('http://localhost:8000/api/v1/accounts', {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/v1/accounts`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
             setAccounts(response.data)

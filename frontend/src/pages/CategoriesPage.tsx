@@ -63,7 +63,7 @@ function CategoriesPage() {
         setLoading(true)
         setError(null)
         try {
-            const response = await axios.get('http://localhost:8000/api/v1/categories', {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/v1/categories`, {
                 headers: { Authorization: `Bearer ${token}` },
                 params: { include_hidden: withHidden },
             })
@@ -88,7 +88,7 @@ function CategoriesPage() {
         const token = localStorage.getItem('access_token')
         try {
             await axios.patch(
-                `http://localhost:8000/api/v1/categories/${categoryId}/toggle-visibility`,
+                `${import.meta.env.VITE_API_URL}/api/v1/categories/${categoryId}/toggle-visibility`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )

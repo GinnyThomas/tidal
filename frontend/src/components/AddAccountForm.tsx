@@ -46,7 +46,7 @@ function AddAccountForm({ onAccountAdded }: Props) {
 
         try {
             await axios.post(
-                'http://localhost:8000/api/v1/accounts',
+                `${import.meta.env.VITE_API_URL}/api/v1/accounts`,
                 {
                     name,
                     account_type: accountType,

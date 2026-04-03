@@ -104,7 +104,7 @@ function MonthlyPlanView() {
         setLoading(true)
         setError(null)
         try {
-            const response = await axios.get(`http://localhost:8000/api/v1/plan/${y}/${m}`, {
+            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/v1/plan/${y}/${m}`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
             setPlan(response.data)

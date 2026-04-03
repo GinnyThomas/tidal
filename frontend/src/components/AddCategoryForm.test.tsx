@@ -99,7 +99,7 @@ describe('AddCategoryForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                'http://localhost:8000/api/v1/categories',
+                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
                 expect.objectContaining({
                     name: 'Side Hustle',
                     parent_category_id: null,
@@ -126,7 +126,7 @@ describe('AddCategoryForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                'http://localhost:8000/api/v1/categories',
+                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
                 expect.objectContaining({ parent_category_id: 'cat-1' }),
                 expect.anything()
             )

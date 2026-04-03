@@ -80,7 +80,7 @@ describe('AddAccountForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                'http://localhost:8000/api/v1/accounts',
+                `${import.meta.env.VITE_API_URL}/api/v1/accounts`,
                 expect.objectContaining({
                     name: 'My Current Account',
                     account_type: 'checking', // default select value
