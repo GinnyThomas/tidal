@@ -26,6 +26,8 @@
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
+import React from 'react'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -76,7 +78,7 @@ function formatMonth(year: number, month: number): string {
 //   red    = negative remaining (overspent — attention needed)
 //   grey   = zero (exactly on budget)
 
-function remainingStyle(remaining: string): React.CSSProperties {
+function remainingStyle(remaining: string): CSSProperties {
     const value = parseFloat(remaining)
     if (value > 0) return { color: 'green' }
     if (value < 0) return { color: 'red' }
@@ -199,9 +201,9 @@ function MonthlyPlanView() {
                     </thead>
                     <tbody>
                         {parentRows.map(parent => (
-                            <>
+                            <React.Fragment key={parent.category_id}>
                                 {/* Parent row */}
-                                <tr key={parent.category_id}>
+                                <tr>
                                     <td>{parent.category_name}</td>
                                     <td>{parent.planned}</td>
                                     <td>{parent.actual}</td>
@@ -225,7 +227,7 @@ function MonthlyPlanView() {
                                         <td>{child.pending}</td>
                                     </tr>
                                 ))}
-                            </>
+                            </React.Fragment>
                         ))}
                     </tbody>
 

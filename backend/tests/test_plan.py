@@ -263,3 +263,99 @@ def test_plan_shows_categories_with_transactions_even_without_schedules(test_cli
     assert row is not None
     assert row["actual"] == "42.00"
     assert row["planned"] == "0.00"
+
+
+# =============================================================================
+# Recurrence engine tests
+# =============================================================================
+
+
+def test_plan_weekly_schedule_counted_correctly(test_client) -> None:
+    """
+    A weekly schedule should be counted once per occurrence in the month.
+
+    January 2026 has 5 Mondays (5th, 12th, 19th, 26th) — wait, let's check:
+    Jan 1 = Thursday. So Thursdays in January 2026: 1, 8, 15, 22, 29 — five of them.
+    A weekly schedule starting 2026-01-01 (Thursday) with interval=1 fires on
+    1st, 8th, 15th, 22nd, 29th → 5 occurrences.
+    planned = 5 × 50.00 = 250.00
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    _create_schedule(
+        test_client, token, account_id, category_id,
+        amount="50.00",
+        frequency="weekly",
+        interval=1,
+        start_date="2026-01-01",  # Thursday — recurs every Thursday
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
+    # Jan 1 is a Thursday. Thursdays in Jan 2026: 1, 8, 15, 22, 29 = 5 occurrences
+    assert row["planned"] == "250.00"
+
+
+def test_plan_annually_schedule_only_in_correct_month(test_client) -> None:
+    """
+    An annual schedule fires only in the calendar month matching start_date.month.
+    A schedule starting in March should NOT appear in a January plan.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    # Annual schedule in March — must not fire in January
+    _create_schedule(
+        test_client, token, account_id, category_id,
+        amount="1200.00",
+        frequency="annually",
+        start_date="2026-03-15",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    category_row = next(
+        (r for r in response.json()["rows"] if r["category_id"] == category_id),
+        None,
+    )
+    # No activity in January — row should be absent
+    assert category_row is None
+
+    # But it SHOULD appear in March
+    march_response = test_client.get("/api/v1/plan/2026/3", headers=_auth_headers(token))
+    march_row = next(r for r in march_response.json()["rows"] if r["category_id"] == category_id)
+    assert march_row["planned"] == "1200.00"
+
+
+def test_plan_schedule_excluded_after_end_date(test_client) -> None:
+    """
+    A schedule whose end_date falls before the first day of the target month
+    should not contribute any planned amount.
+
+    The schedule here runs January–February 2026 (end_date=2026-02-28).
+    Querying March 2026 should return no planned amount for this category.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    _create_schedule(
+        test_client, token, account_id, category_id,
+        amount="300.00",
+        frequency="monthly",
+        start_date="2026-01-01",
+        end_date="2026-02-28",  # Ends before March — must not fire in March
+    )
+
+    # January: should fire (within range)
+    jan_response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    jan_row = next(r for r in jan_response.json()["rows"] if r["category_id"] == category_id)
+    assert jan_row["planned"] == "300.00"
+
+    # March: end_date < 2026-03-01, so must not fire
+    march_response = test_client.get("/api/v1/plan/2026/3", headers=_auth_headers(token))
+    march_row = next(
+        (r for r in march_response.json()["rows"] if r["category_id"] == category_id),
+        None,
+    )
+    assert march_row is None

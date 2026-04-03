@@ -175,6 +175,22 @@ describe('MonthlyPlanView', () => {
         expect(remainingCell).toHaveStyle({ color: 'rgb(255, 0, 0)' })
     })
 
+    it('colours remaining grey when zero (exactly on budget)', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ remaining: '0.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        const rows = screen.getAllByRole('row')
+        const dataCells = rows[1].querySelectorAll('td')
+        const remainingCell = dataCells[3]
+        // jsdom converts 'grey' to rgb(128, 128, 128)
+        expect(remainingCell).toHaveStyle({ color: 'rgb(128, 128, 128)' })
+    })
+
     // =========================================================================
     // Month navigation
     // =========================================================================

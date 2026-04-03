@@ -275,9 +275,16 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
         )
 
     # --- Step 6: Load category metadata ---
+    # Scoped to the current user and non-deleted only.
+    # Without user_id scoping, a category ID collision across users (impossible
+    # with UUIDs but defensive coding) could leak another user's category name.
     categories = (
         db.query(Category)
-        .filter(Category.id.in_(list(all_category_ids)))
+        .filter(
+            Category.id.in_(list(all_category_ids)),
+            Category.user_id == user_id,
+            Category.deleted_at.is_(None),
+        )
         .all()
     )
     category_map: dict[uuid.UUID, Category] = {c.id: c for c in categories}
