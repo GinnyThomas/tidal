@@ -262,8 +262,8 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
         if r.to_category_id not in planned_by_category:
             planned_by_category[r.to_category_id] = Decimal("0")
 
-        planned_by_category[r.from_category_id] -= Decimal(str(r.amount))
-        planned_by_category[r.to_category_id] += Decimal(str(r.amount))
+        planned_by_category[r.from_category_id] -= r.amount
+        planned_by_category[r.to_category_id] += r.amount
 
     # --- Step 4: Transactions in the target month ---
     transactions = (

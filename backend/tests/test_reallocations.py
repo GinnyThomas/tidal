@@ -183,6 +183,64 @@ def test_list_reallocations_returns_only_current_users(test_client) -> None:
 
 
 # =============================================================================
+# Get by ID
+# =============================================================================
+
+
+def test_get_reallocation_by_id(test_client) -> None:
+    """
+    GET /api/v1/reallocations/{id} should return the reallocation for the
+    current user with correct data.
+    """
+    token, cat_a, cat_b = _setup(test_client)
+
+    create_response = test_client.post(
+        "/api/v1/reallocations",
+        json={**_REALLOC, "from_category_id": cat_a, "to_category_id": cat_b},
+        headers=_auth_headers(token),
+    )
+    assert create_response.status_code == 201
+    reallocation_id = create_response.json()["id"]
+
+    response = test_client.get(
+        f"/api/v1/reallocations/{reallocation_id}",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == reallocation_id
+    assert body["amount"] == "100.00"
+    assert body["reason"] == "Birthday dinner — moving budget from groceries"
+    assert body["from_category_id"] == cat_a
+    assert body["to_category_id"] == cat_b
+
+
+def test_get_reallocation_belonging_to_another_user_returns_404(test_client) -> None:
+    """
+    A user must not be able to fetch another user's reallocation.
+    Returns 404 — we do not confirm whether the resource exists for another user.
+    """
+    token_a, cat_a1, cat_a2 = _setup(test_client, "user_a@example.com")
+    token_b, _, _ = _setup(test_client, "user_b@example.com")
+
+    create_response = test_client.post(
+        "/api/v1/reallocations",
+        json={**_REALLOC, "from_category_id": cat_a1, "to_category_id": cat_a2},
+        headers=_auth_headers(token_a),
+    )
+    assert create_response.status_code == 201
+    reallocation_id = create_response.json()["id"]
+
+    # User B tries to access User A's reallocation
+    response = test_client.get(
+        f"/api/v1/reallocations/{reallocation_id}",
+        headers=_auth_headers(token_b),
+    )
+    assert response.status_code == 404
+
+
+# =============================================================================
 # Immutability
 # =============================================================================
 
@@ -243,10 +301,11 @@ def test_reallocation_adjusts_plan_view(test_client) -> None:
         json={"name": "Test Account", "account_type": "checking"},
         headers=_auth_headers(token),
     )
+    assert account_response.status_code == 201
     account_id = account_response.json()["id"]
 
     # Schedule A: £300 planned for cat_a
-    test_client.post(
+    sched_a_response = test_client.post(
         "/api/v1/schedules",
         json={
             "name": "Schedule A", "amount": "300.00", "frequency": "monthly",
@@ -254,9 +313,10 @@ def test_reallocation_adjusts_plan_view(test_client) -> None:
         },
         headers=_auth_headers(token),
     )
+    assert sched_a_response.status_code == 201
 
     # Schedule B: £100 planned for cat_b
-    test_client.post(
+    sched_b_response = test_client.post(
         "/api/v1/schedules",
         json={
             "name": "Schedule B", "amount": "100.00", "frequency": "monthly",
@@ -264,6 +324,7 @@ def test_reallocation_adjusts_plan_view(test_client) -> None:
         },
         headers=_auth_headers(token),
     )
+    assert sched_b_response.status_code == 201
 
     # Baseline: verify plan before reallocation
     plan_before = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token)).json()

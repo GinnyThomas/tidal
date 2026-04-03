@@ -31,6 +31,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
@@ -75,7 +76,7 @@ class Reallocation(Base):
 
     # --- Amount ---
     # NUMERIC(12,2): same precision as all other financial amounts in this project.
-    amount: Mapped[float] = mapped_column(
+    amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=12, scale=2),
         nullable=False,
     )
