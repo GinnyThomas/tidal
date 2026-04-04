@@ -16,6 +16,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
 import AddCategoryForm from './AddCategoryForm'
+import { getApiBaseUrl } from '../lib/api'
 
 vi.mock('axios')
 
@@ -99,7 +100,7 @@ describe('AddCategoryForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
+                `${getApiBaseUrl()}/api/v1/categories`,
                 expect.objectContaining({
                     name: 'Side Hustle',
                     parent_category_id: null,
@@ -126,7 +127,7 @@ describe('AddCategoryForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
+                `${getApiBaseUrl()}/api/v1/categories`,
                 expect.objectContaining({ parent_category_id: 'cat-1' }),
                 expect.anything()
             )

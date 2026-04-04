@@ -39,7 +39,7 @@ app = FastAPI(
 # Why split on commas?
 #   CORSMiddleware expects a list. Storing origins as a single env var string
 #   (comma-separated) is the standard approach — one var, any number of origins.
-_allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+_allowed_origins = [o.strip().rstrip('/') for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

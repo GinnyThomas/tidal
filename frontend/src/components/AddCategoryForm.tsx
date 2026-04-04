@@ -21,6 +21,7 @@
 import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
+import { getApiBaseUrl } from '../lib/api'
 
 
 // Minimal shape needed to populate the parent dropdown.
@@ -52,7 +53,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded }: Props) {
 
         try {
             await axios.post(
-                `${import.meta.env.VITE_API_URL}/api/v1/categories`,
+                `${getApiBaseUrl()}/api/v1/categories`,
                 {
                     name,
                     // null = top-level. A non-empty string = child of that parent.

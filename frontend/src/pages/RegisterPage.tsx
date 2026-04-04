@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
+import { getApiBaseUrl } from '../lib/api'
 
 
 function RegisterPage() {
@@ -20,13 +21,13 @@ function RegisterPage() {
         if (passwordsMatch)
             try {
                await axios.post(
-                    `${import.meta.env.VITE_API_URL}/api/v1/auth/register`,
+                    `${getApiBaseUrl()}/api/v1/auth/register`,
                     {email, password}
                 )
 
                 try {
                     const response = await axios.post(
-                        `${import.meta.env.VITE_API_URL}/api/v1/auth/login`,
+                        `${getApiBaseUrl()}/api/v1/auth/login`,
                         {email, password}
                     )
                     localStorage.setItem("access_token", response.data.access_token)

@@ -23,6 +23,7 @@
 import axios from 'axios'
 import { useEffect, useState } from 'react'
 import AddAccountForm from '../components/AddAccountForm'
+import { getApiBaseUrl } from '../lib/api'
 
 
 // TypeScript type matching the AccountResponse schema from the backend.
@@ -49,7 +50,7 @@ function AccountsPage() {
         setLoading(true)
         setError(null)
         try {
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/v1/accounts`, {
+            const response = await axios.get(`${getApiBaseUrl()}/api/v1/accounts`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
             setAccounts(response.data)
