@@ -28,6 +28,7 @@ import axios from 'axios'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import React from 'react'
+import { getApiBaseUrl } from '../lib/api'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -104,7 +105,7 @@ function MonthlyPlanView() {
         setLoading(true)
         setError(null)
         try {
-            const response = await axios.get(`http://localhost:8000/api/v1/plan/${y}/${m}`, {
+            const response = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${y}/${m}`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
             setPlan(response.data)

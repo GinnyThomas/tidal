@@ -23,6 +23,7 @@
 import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
+import { getApiBaseUrl } from '../lib/api'
 
 
 type Props = {
@@ -46,7 +47,7 @@ function AddAccountForm({ onAccountAdded }: Props) {
 
         try {
             await axios.post(
-                'http://localhost:8000/api/v1/accounts',
+                `${getApiBaseUrl()}/api/v1/accounts`,
                 {
                     name,
                     account_type: accountType,

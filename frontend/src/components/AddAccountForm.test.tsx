@@ -15,6 +15,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
 import AddAccountForm from './AddAccountForm'
+import { getApiBaseUrl } from '../lib/api'
 
 vi.mock('axios')
 
@@ -80,7 +81,7 @@ describe('AddAccountForm', () => {
 
         await waitFor(() => {
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
-                'http://localhost:8000/api/v1/accounts',
+                `${getApiBaseUrl()}/api/v1/accounts`,
                 expect.objectContaining({
                     name: 'My Current Account',
                     account_type: 'checking', // default select value
