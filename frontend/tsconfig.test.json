@@ -1,0 +1,17 @@
+{
+  // Extends the production tsconfig but re-opens test files and adds
+  // vitest globals so editors and `tsc` understand test code correctly.
+  //
+  // This file is NOT referenced in tsconfig.json — it is not part of the
+  // production build. It exists purely for IDE type-checking in test files.
+  // Vitest itself injects globals at runtime via `globals: true` in vitest.config.ts.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    // Re-add vitest/globals here. vite/client is inherited from tsconfig.app.json.
+    "types": ["vite/client", "vitest/globals"]
+  },
+  // Include all src files — overrides the exclude in tsconfig.app.json
+  // so that test files and setupTests.ts are visible in this config.
+  "include": ["src"]
+}

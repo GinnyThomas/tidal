@@ -5,11 +5,11 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    // vite/client: browser globals like import.meta.env
-    // vitest/globals: describe, it, expect, vi, etc. available without imports
-    // Phase 0 simplification: in a mature project, vitest/globals would live
-    // in a separate tsconfig.test.json so it doesn't affect production types.
-    "types": ["vite/client", "vitest/globals"],
+    // vite/client provides browser globals like import.meta.env.
+    // vitest/globals (describe, expect, vi, etc.) is intentionally NOT here —
+    // test types belong only in tsconfig.test.json so the production build
+    // does not see test globals as valid code.
+    "types": ["vite/client"],
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -28,5 +28,13 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Exclude test files and test setup from the production build.
+  // Without this, Vercel's `tsc -b` step type-checks test files using the
+  // production tsconfig, which lacks vitest globals — causing build failures.
+  "exclude": [
+    "src/**/*.test.tsx",
+    "src/**/*.test.ts",
+    "src/setupTests.ts"
+  ]
 }
