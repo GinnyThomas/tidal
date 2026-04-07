@@ -48,6 +48,10 @@ function LoginPage() {
             {error && <p>{error}</p>}
 
             <button type="submit">Log In</button>
+
+            <p>
+                Don't have an account? <a href="/register">Register here</a>
+            </p>
         </form>
     )
 }
