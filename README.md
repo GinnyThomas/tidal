@@ -2,6 +2,14 @@
 
 A multi-currency personal budget and finance tracker built with Python, FastAPI, PostgreSQL and React.
 
+
+## Live Demo
+
+- **App:** https://tidal-vert.vercel.app
+- **API:** https://tidal-production.up.railway.app
+- **API Docs:** https://tidal-production.up.railway.app/docs
+
+
 ## Structure
 
 ```
@@ -21,7 +29,7 @@ tidal/
 - ✅ Phase 5: Schedules (recurrence engine, auto-generate pending transactions)
 - ✅ Phase 6: Monthly Plan View (primary dashboard, plan vs actual)
 - ✅ Phase 7: Reallocation (budget adjustments, permanent audit trail)
-- ⏳ Phase 8: Polish & Deploy (Railway + Vercel + Supabase, demo account)
+- ✅ Phase 8: Deploy (Railway + Vercel + Supabase, demo account)
 
 ---
 
