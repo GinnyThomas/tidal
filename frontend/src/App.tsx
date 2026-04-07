@@ -1,4 +1,4 @@
-import {Route, Routes} from 'react-router-dom'
+import {Route, Routes, Navigate} from 'react-router-dom'
 import RegisterPage from "./pages/RegisterPage.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import AccountsPage from "./pages/AccountsPage.tsx";
@@ -31,6 +31,7 @@ function App() {
           <Route path="/categories" element={<ProtectedRoute>
             <CategoriesPage />
           </ProtectedRoute>}/>
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes></>
 
   )
