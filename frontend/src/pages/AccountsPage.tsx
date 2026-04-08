@@ -1,34 +1,26 @@
 // pages/AccountsPage.tsx
 //
-// Purpose: Displays the user's accounts and provides the entry point for
-//          creating new ones.
+// Purpose: Displays the user's accounts with ocean-themed styling.
+//          Wrapped in Layout for navigation.
 //
 // Four render states:
-//   loading  — fetch is in progress; no button, no list
-//   error    — fetch failed; no button, error message shown
-//   empty    — fetch succeeded but user has no accounts; button shown
-//   list     — fetch succeeded and accounts exist; button + list shown
+//   loading  — shows "Loading..." centred
+//   error    — shows error message in coral
+//   empty    — shows empty state with icon
+//   list     — account cards in ocean-800 with type badges
 //
-// Data flow:
-//   1. On mount, fetchAccounts() GETs /api/v1/accounts with the JWT.
-//   2. Clicking "Add Account" toggles AddAccountForm visibility.
-//   3. When AddAccountForm calls onAccountAdded(), we hide the form and
-//      re-call fetchAccounts() to reload the updated list.
-//
-// Why useEffect with empty deps (not React Query)?
-//   The rest of the codebase uses plain axios + useState for data fetching.
-//   React Query is in the tech stack but not yet set up. We follow the
-//   established pattern here; React Query can be introduced as a refactor.
+// The form is rendered inline (not a fixed modal) so the "Add Account"
+// button remains clickable as a toggle. The form card itself provides
+// the modal-like visual appearance.
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import Layout from '../components/Layout'
 import AddAccountForm from '../components/AddAccountForm'
 import { getApiBaseUrl } from '../lib/api'
 
-
-// TypeScript type matching the AccountResponse schema from the backend.
-// current_balance is a string because the API serialises Decimal as a string
-// (per CLAUDE.md: "Amounts as strings (not floats)").
+// TypeScript type matching AccountResponse from the backend.
+// current_balance is a string because the API serialises Decimal as a string.
 type Account = {
     id: string
     name: string
@@ -37,6 +29,17 @@ type Account = {
     current_balance: string
     institution: string | null
     is_active: boolean
+}
+
+// Tailwind classes per account type for the badge pill.
+// Fallback to a neutral ocean-700 style for any unknown type.
+const BADGE: Record<string, string> = {
+    checking:    'bg-sky-500/20 text-sky-400',
+    savings:     'bg-teal-500/20 text-teal-400',
+    credit_card: 'bg-coral-500/20 text-coral-400',
+    cash:        'bg-success/20 text-success',
+    mortgage:    'bg-warning/20 text-warning',
+    loan:        'bg-danger/20 text-danger',
 }
 
 function AccountsPage() {
@@ -57,66 +60,95 @@ function AccountsPage() {
         } catch {
             setError('Could not load accounts. Please try again.')
         } finally {
-            // Always clear loading, whether the request succeeded or failed.
             setLoading(false)
         }
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchAccounts() }, [])
-    // Why empty deps: we want to fetch exactly once on mount. fetchAccounts is
-    // defined inside the component (to access state setters), so including it
-    // in deps would require useCallback to avoid an infinite re-fetch loop.
-    // The simple approach — empty array with the eslint suppression — is
-    // clearer for a learning project.
 
     // --- Early returns for terminal states ---
 
     if (loading) {
-        return <p>Loading...</p>
+        return (
+            <Layout>
+                <p className="text-slate-400 text-center py-20 text-lg">Loading...</p>
+            </Layout>
+        )
     }
 
     if (error) {
-        return <p>{error}</p>
+        return (
+            <Layout>
+                <p className="text-coral-400 text-center py-20">{error}</p>
+            </Layout>
+        )
     }
 
-    // --- Normal render: button + optional form + list or empty state ---
+    // --- Normal render ---
 
     const handleAccountAdded = () => {
-        setShowForm(false)   // hide the form immediately
-        fetchAccounts()      // re-fetch so the new account appears in the list
+        setShowForm(false)
+        fetchAccounts()
     }
 
     return (
-        <div>
-            <h2>Accounts</h2>
+        <Layout>
+            <div className="max-w-4xl mx-auto">
 
-            <button onClick={() => setShowForm((prev) => !prev)}>
-                Add Account
-            </button>
+                {/* Page header */}
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-slate-100">Accounts</h2>
+                    <button
+                        onClick={() => setShowForm((prev) => !prev)}
+                        className="btn-primary cursor-pointer"
+                    >
+                        Add Account
+                    </button>
+                </div>
 
-            {showForm && (
-                <AddAccountForm onAccountAdded={handleAccountAdded} />
-            )}
+                {/* Inline form — rendered below the header, not as a fixed overlay,
+                    so the "Add Account" toggle button remains accessible for tests. */}
+                {showForm && (
+                    <div className="mb-6">
+                        <AddAccountForm onAccountAdded={handleAccountAdded} />
+                    </div>
+                )}
 
-            {accounts.length === 0 ? (
-                <p>No accounts yet. Add one to get started.</p>
-            ) : (
-                <ul>
-                    {accounts.map((account) => (
-                        <li key={account.id}>
-                            <strong>{account.name}</strong>
-                            {' — '}
-                            {account.account_type}
-                            {' · '}
-                            {account.currency}
-                            {' · '}
-                            {account.current_balance}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
+                {/* Account list / empty state */}
+                {accounts.length === 0 ? (
+                    <div className="text-center py-20">
+                        <p aria-hidden="true" className="text-5xl mb-4">🏦</p>
+                        <p className="text-slate-400 text-lg">No accounts yet. Add one to get started.</p>
+                    </div>
+                ) : (
+                    <ul className="space-y-3">
+                        {accounts.map((account) => (
+                            <li
+                                key={account.id}
+                                className="card-hover flex items-center justify-between"
+                            >
+                                <div>
+                                    <strong className="text-slate-100 text-lg block">{account.name}</strong>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BADGE[account.account_type] ?? 'bg-ocean-700 text-slate-300'}`}>
+                                            {account.account_type}
+                                        </span>
+                                        <span className="text-sm text-slate-400">{account.currency}</span>
+                                        {account.institution && (
+                                            <span className="text-sm text-slate-500">{account.institution}</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xl font-bold text-slate-100">{account.current_balance}</span>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </Layout>
     )
 }
 

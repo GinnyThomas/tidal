@@ -348,6 +348,102 @@ def test_toggle_visibility_unhides_category_and_children(test_client) -> None:
     assert child_data["is_hidden"] is False
 
 
+def test_seeded_categories_have_correct_parent_child_relationships(test_client) -> None:
+    """
+    After registration, every child category's parent_category_id must point to
+    the correct parent category in the same user's list.
+
+    --- Why this test exists (the UUID seeding bug) ---
+
+    SQLAlchemy model columns can declare a `default=` callable, e.g.:
+        id = Column(Uuid, default=uuid.uuid4)
+
+    The bug: if you write `default=uuid.uuid4` (no call brackets), SQLAlchemy
+    stores a *reference* to the function and calls it once per row at INSERT
+    time. But if you pre-build Category objects in Python and try to reference
+    `parent.id` before the session has flushed, you need the id to already be
+    set in memory — and SQLAlchemy's default machinery only runs on flush, not
+    on construction.
+
+    The original broken code did:
+        Category(name="Groceries", parent_category_id=food.id)
+    expecting `food.id` to be populated. If the model default hadn't been
+    triggered yet, `food.id` was None — so every child got `parent_category_id=None`
+    and the hierarchy was silently destroyed.
+
+    The fix in services/categories.py passes the id explicitly:
+        cat(...) returns Category(id=uuid.uuid4(), ...)
+    This calls uuid.uuid4() *at construction time* in Python, so parent.id is
+    always a real UUID before any child object is created. No DB round-trip needed.
+
+    This test catches any future regression where that explicit id= is removed or
+    where the seeding order is changed in a way that breaks parent references.
+    """
+    token = _register_and_login(test_client)
+
+    # include_hidden=true to get the full seeded set regardless of visibility
+    response = test_client.get(
+        "/api/v1/categories?include_hidden=true",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200
+
+    categories = response.json()
+
+    # Name → category dict for readable assertions below
+    by_name = {c["name"]: c for c in categories}
+
+    # --- Assert specific child → parent relationships ---
+    #
+    # We check a spread across different parent groups rather than every pair.
+    # This is enough to catch the UUID bug (if ids were wrong, ALL children
+    # would be broken, not just a subset) while keeping the test concise.
+    expected_pairs = [
+        ("Groceries",        "Food & Drink"),
+        ("Eating Out",       "Food & Drink"),
+        ("Takeaway",         "Food & Drink"),
+        ("Rent/Mortgage",    "Household"),
+        ("Utilities",        "Household"),
+        ("Public Transport", "Transport"),
+        ("Fuel",             "Transport"),
+        ("Streaming",        "Entertainment"),
+        ("Medical",          "Health"),
+        ("Clothing",         "Personal"),
+        ("Bank Fees",        "Banking & Finance"),
+        ("Salary",           "Income"),
+        ("Freelance",        "Income"),
+    ]
+
+    for child_name, parent_name in expected_pairs:
+        child = by_name[child_name]
+        parent = by_name[parent_name]
+
+        assert child["parent_category_id"] is not None, (
+            f"'{child_name}' has parent_category_id=None — "
+            f"expected it to point to '{parent_name}'"
+        )
+        assert child["parent_category_id"] == parent["id"], (
+            f"'{child_name}'.parent_category_id is {child['parent_category_id']!r} "
+            f"but '{parent_name}'.id is {parent['id']!r} — IDs don't match"
+        )
+
+    # --- Assert all 13 top-level categories have no parent ---
+    #
+    # If the UUID bug were present in reverse (children stored with a made-up
+    # parent id that doesn't exist), the parent rows themselves would still have
+    # parent_category_id=None — so this guards the other direction.
+    top_level_names = {
+        "Food & Drink", "Household", "Transport", "Entertainment", "Health",
+        "Personal", "Phone & Internet", "Banking & Finance", "Education",
+        "Savings", "Gifts & Celebrations", "Travel", "Income",
+    }
+    for name in top_level_names:
+        assert by_name[name]["parent_category_id"] is None, (
+            f"Top-level category '{name}' should have parent_category_id=None, "
+            f"got {by_name[name]['parent_category_id']!r}"
+        )
+
+
 def test_deleted_category_does_not_appear_in_list(test_client) -> None:
     """
     After soft-deleting a custom category, it should no longer appear in the

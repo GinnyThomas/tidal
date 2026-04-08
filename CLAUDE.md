@@ -54,6 +54,11 @@ explain all of it confidently in a technical interview.
 **Purpose:** A multi-currency personal finance tracker that feels like a
 living spreadsheet. Solves real problems with existing apps like Spendee.
 
+**Live URLs:**
+- Frontend: https://tidal-vert.vercel.app
+- Backend API: https://tidal-production.up.railway.app
+- API Docs: https://tidal-production.up.railway.app/docs
+
 **Core problems being solved:**
 1. Pending transactions corrupt budget views in existing apps
 2. Recurring merchants are repeatedly mis-categorised
@@ -74,7 +79,7 @@ Transactions confirm reality. The gap between them is where insight lives.
 **Backend:**
 - Python 3.13.7
 - FastAPI
-- PostgreSQL 16
+- PostgreSQL 16 (hosted on Supabase in production)
 - SQLAlchemy 2.x (ORM)
 - Alembic (migrations)
 - Pydantic v2 (validation)
@@ -83,81 +88,70 @@ Transactions confirm reality. The gap between them is where insight lives.
 **Frontend:**
 - React 19 + TypeScript
 - Vite
-- React Query (not yet wired up — planned for Phase 6)
 - React Router v7
-- Tailwind CSS (not yet wired up — planned for Phase 8 polish)
+- Tailwind CSS v4 (ocean/water colour theme)
 - Vitest + React Testing Library (testing)
+
+**Infrastructure:**
+- Backend: Railway (Procfile, $PORT, ALLOWED_ORIGINS env var)
+- Frontend: Vercel (vercel.json SPA rewrite, VITE_API_URL env var)
+- Database: Supabase (PostgreSQL, pooled connection port 6543)
 
 ---
 
 ## Current Phase
 
-**Phase 4 — Transactions (in progress)**
+**Phase 8 — Styling & Polish (in progress)**
 
-Phases complete:
-- ✅ Phase 0: Walking skeleton (health endpoint, React frontend connected)
-- ✅ Phase 1: Authentication (register, login, JWT, ProtectedRoute, Alembic)
-- ✅ Phase 2: Accounts (CRUD, soft delete, frontend with add form)
+All backend phases complete:
+- ✅ Phase 0: Walking skeleton
+- ✅ Phase 1: Authentication (register, login, JWT, bcrypt, Alembic)
+- ✅ Phase 2: Accounts (CRUD, soft delete, frontend)
 - ✅ Phase 3: Categories (hierarchical, system seeding, hide/unhide, frontend)
+- ✅ Phase 4: Transactions (expense/income/transfer/refund, backend + tests)
+- ✅ Phase 5: Schedules (recurrence engine, backend + tests)
+- ✅ Phase 6: Monthly Plan View (plan service, recurrence, frontend)
+- ✅ Phase 7: Reallocation (immutable audit trail, plan integration)
+- 🔄 Phase 8: Styling, transactions frontend, schedules frontend, polish
 
-Phases remaining:
-- 🔄 Phase 4: Transactions (expense/income/transfer/refund, pending/cleared/reconciled)
-- ⏳ Phase 5: Schedules (recurrence engine, auto-generate pending transactions)
-- ⏳ Phase 6: Monthly Plan View (primary dashboard, plan vs actual)
-- ⏳ Phase 7: Reallocation (budget adjustments, permanent audit trail)
-- ⏳ Phase 8: Polish & Deploy (Railway + Vercel + Supabase, demo account)
-
----
-
-## Data Model Summary
-
-Eight core entities — all use logical (soft) deletes via deleted_at timestamp,
-except Reallocation (never deleted) and TagAssignment (physically deleted).
-
-- **User** — owns everything, has default_currency and timezone
-- **Account** — where money lives (checking/savings/credit_card/cash/mortgage/loan)
-- **Category** — hierarchical (parent_category_id for subcategories), is_system/is_hidden flags
-- **Budget** — planned spend per category per period, optional rollover
-- **Schedule** — recurring transaction rules, generates pending transactions
-- **Transaction** — what actually happened (expense/income/transfer/refund)
-- **Reallocation** — permanent audit trail of budget adjustments with mandatory reason
-- **Tag** — cross-cutting labels via TagAssignment join table
-
-**Key data decisions:**
-- UUIDs not integer IDs (security — unguessable)
-- NUMERIC(12,2) not FLOAT for amounts (financial precision)
-- All timestamps in UTC
-- Currencies as ISO 4217 strings (GBP, EUR, USD)
-- Pending transactions excluded from budget actual spend by default
-- Budget toggle to include pending transactions (planned for Phase 6)
-- Refunds reduce category spend via parent_transaction_id link
-- Transfers create TWO linked transactions via parent_transaction_id
+In progress / remaining:
+- 🔄 Tailwind CSS styling (ocean/water theme)
+- ⏳ Transactions frontend page
+- ⏳ Schedules frontend page
+- ⏳ Change password feature
+- ⏳ Navigation bar
+- ⏳ Demo account with sample data
 
 ---
 
-## What's Built So Far
+## What's Built
 
-**Backend (29 tests passing):**
-- `app/models/user.py` — User model, bcrypt password hash, soft delete
-- `app/models/account.py` — Account model, NUMERIC balance, FK to users
-- `app/models/category.py` — Category model, self-referential FK, is_system, is_hidden
+**Backend — 63 tests passing:**
+- `app/models/` — User, Account, Category, Transaction, Schedule, Reallocation
 - `app/schemas/` — Pydantic v2 schemas for all entities
-- `app/services/auth.py` — bcrypt hashing, JWT creation, get_current_user dependency
-- `app/services/categories.py` — seed_default_categories (35 categories, atomic with user creation)
+- `app/services/auth.py` — bcrypt hashing, JWT creation, get_current_user
+- `app/services/categories.py` — seed_default_categories (35 categories, atomic)
+- `app/services/plan.py` — recurrence engine, plan assembly
 - `app/routers/auth.py` — register (seeds categories atomically), login
 - `app/routers/accounts.py` — full CRUD, soft delete, user-scoped
-- `app/routers/categories.py` — full CRUD, toggle-visibility with child cascade, system protection
-- `migrations/` — Alembic migrations for users, accounts, categories, is_hidden
+- `app/routers/categories.py` — full CRUD, toggle-visibility, system protection
+- `app/routers/transactions.py` — expense/income/transfer/refund, status filter
+- `app/routers/schedules.py` — full CRUD, toggle-active, recurrence
+- `app/routers/reallocations.py` — POST/GET only, immutable, reason required
+- `app/routers/plan.py` — GET /api/v1/plan/{year}/{month}
+- `migrations/` — 7 Alembic migrations applied to Supabase
 
-**Frontend (44 tests passing):**
+**Frontend — 56 tests passing:**
 - `LoginPage.tsx` — JWT auth, localStorage token storage
 - `RegisterPage.tsx` — register + auto-login, password confirmation
 - `ProtectedRoute.tsx` — redirects to /login if no token
 - `AccountsPage.tsx` — list/empty/error states, add account form
 - `AddAccountForm.tsx` — account creation with JWT auth
-- `CategoriesPage.tsx` — hierarchical display, hide/unhide toggle, add form
+- `CategoriesPage.tsx` — hierarchical display, hide/unhide toggle
 - `AddCategoryForm.tsx` — category creation with parent dropdown
-- `App.tsx` — routes: /login, /register, /dashboard (AccountsPage), /categories
+- `MonthlyPlanView.tsx` — primary dashboard, month navigation, plan table
+- `App.tsx` — routes: /login, /register, /dashboard, /plan, /accounts, /categories
+- `lib/api.ts` — getApiBaseUrl() helper, centralised base URL
 
 ---
 
@@ -174,30 +168,39 @@ except Reallocation (never deleted) and TagAssignment (physically deleted).
 
 ---
 
-## Authentication Strategy
+## Design System (Phase 8)
 
-**Current:** Email/password only, JWT Bearer tokens.
+**Colour palette — ocean/water theme:**
+- Background: ocean-900 (#0f1923)
+- Surface/cards: ocean-800 (#1a2a3a)
+- Borders: ocean-700 (#2a3f52)
+- Primary: sky-500 (#0ea5e9)
+- Teal accent: teal-500 (#14b8a6)
+- CTA/alert: coral-500 (#f43f5e)
+- Text primary: slate-100
+- Text muted: slate-400
+- Success/positive remaining: #10b981
+- Danger/overspent: #ef4444
+- Pending/warning: #f59e0b
 
-**Future (post-MVP):** Add Google OAuth alongside email/password using **authlib**.
-A User record exists independently of how they authenticated — the users table
-will get an optional `google_id` column and a `POST /api/v1/auth/google` endpoint.
-Do not add `google_id` or install authlib until explicitly requested.
+**Components:**
+- Layout.tsx — nav bar, user display, logout, consistent padding
+- All pages wrapped in Layout
+- Modal forms with ocean-900/80 backdrop
+- Consistent input styling: ocean-900 bg, ocean-700 border, sky-500 focus ring
+- Coral-500 primary buttons
 
 ---
 
-## Transaction Rules (Phase 4)
+## Transaction Rules
 
-- **expense** — money out, reduces category actual spend (if cleared/reconciled)
+- **expense** — money out, reduces category actual spend (cleared/reconciled only)
 - **income** — money in, does not affect budget spend
-- **transfer** — creates TWO linked transactions (debit on source, credit on destination)
-  linked via parent_transaction_id
-- **refund** — reduces net spend in original category, links to parent via
-  parent_transaction_id
-- **pending** — transaction occurred but not yet cleared by bank; excluded from
-  budget actual spend by default
-- **cleared** — bank has processed it; counts toward actual spend
-- **reconciled** — user has confirmed against bank statement; counts toward actual spend
-- schedule_id is nullable in Phase 4 — Phase 5 wires up the schedule relationship
+- **transfer** — creates TWO linked transactions via parent_transaction_id
+- **refund** — links to parent via parent_transaction_id, requires parent
+- **pending** — excluded from budget actual spend by default
+- **cleared** — counts toward actual spend
+- **reconciled** — user confirmed against bank statement, counts toward actual spend
 
 ---
 
@@ -206,50 +209,27 @@ Do not add `google_id` or install authlib until explicitly requested.
 - System categories (is_system=True) cannot be deleted — return 403
 - System categories CAN be hidden (is_hidden=True)
 - Hiding a parent cascades to direct children (one level only)
-- Default list excludes hidden categories — pass ?include_hidden=true to see them
-- 34 system categories are seeded atomically on user registration
-- Custom categories can be deleted (soft delete via deleted_at)
+- Default list excludes hidden — pass ?include_hidden=true to see them
+- 35 system categories seeded atomically on user registration
+- Custom categories can be soft-deleted
+
+---
+
+## Authentication Strategy
+
+**Current:** Email/password only, JWT Bearer tokens.
+
+**Future (Phase 9):** Google OAuth via authlib.
+Do not add google_id or install authlib until explicitly requested.
 
 ---
 
 ## Known Issues / Tech Debt
 
-- The O(n²) childrenOf() in CategoriesPage — fix in Phase 8 with useMemo + Map
-- No toast notification system — toggle failures use window.alert for now
-- React Query not yet wired up — using plain useEffect + useState for data fetching
-- StrictMode removed from main.tsx during Phase 0 — re-add in Phase 8
-
----
-
-## Project Structure
-
-```
-tidal/
-├── backend/
-│   ├── app/
-│   │   ├── main.py           FastAPI entry point, router registration
-│   │   ├── config.py         pydantic-settings, env vars
-│   │   ├── database.py       SQLAlchemy engine, SessionLocal, get_db
-│   │   ├── dependencies.py   shared FastAPI dependencies
-│   │   ├── models/           SQLAlchemy ORM models
-│   │   ├── schemas/          Pydantic request/response shapes
-│   │   ├── routers/          API endpoint handlers
-│   │   └── services/         business logic (auth, categories seeding)
-│   ├── migrations/           Alembic migration files
-│   └── tests/                pytest test suite
-├── frontend/
-│   └── src/
-│       ├── pages/            full page components
-│       ├── components/       reusable UI components
-│       ├── api/              API call functions (planned)
-│       ├── hooks/            custom React hooks (planned)
-│       └── types/            TypeScript type definitions (planned)
-└── docs/
-    ├── PRD.md
-    ├── TDD.md
-    ├── PROJECT_PLAN.md
-    └── architecture.png
-```
+- O(n²) childrenOf() in CategoriesPage and MonthlyPlanView — fix with useMemo + Map
+- No toast notification system — using window.alert for toggle failures
+- React Query not wired up — using plain useEffect + useState
+- StrictMode removed from main.tsx — re-add when stable
 
 ---
 
@@ -262,8 +242,9 @@ tidal/
 - Reallocation records are never deleted — not even soft deleted
 - Financial amounts always use NUMERIC not FLOAT
 - sa.Uuid() in migrations must always be sa.Uuid(as_uuid=True)
-- Alembic migrations: always fix sa.Uuid() → sa.Uuid(as_uuid=True) before applying
-- Adding NOT NULL columns to existing tables requires server_default in the migration
+- Adding NOT NULL columns to existing tables requires server_default in migration
+- ALLOWED_ORIGINS in Railway must match the Vercel URL exactly (no trailing slash)
+- Run migrations against Supabase direct URL (port 5432), not pooled (port 6543)
 
 ---
 
@@ -274,29 +255,85 @@ tidal/
 cd backend
 source .venv/bin/activate
 uvicorn app.main:app --reload
-# Runs on http://localhost:8000
-# API docs: http://localhost:8000/docs
+# http://localhost:8000 · docs: http://localhost:8000/docs
 
 # Frontend
 cd frontend
 npm run dev
-# Runs on http://localhost:5173
+# http://localhost:5173
 
-# Backend tests
-cd backend && source .venv/bin/activate
-python -m pytest tests/ -v
+# Tests
+cd backend && python -m pytest tests/ -v
+cd frontend && npm run test:run
 
-# Frontend tests
-cd frontend
-npm run test:run
+# Migrations
+cd backend
+alembic upgrade head
+alembic revision --autogenerate -m "description"
+alembic check
 
-# Database migrations
-cd backend && source .venv/bin/activate
-alembic upgrade head                                    # apply all migrations
-alembic revision --autogenerate -m "description"       # generate new migration
-alembic check                                          # verify DB matches models
+# Production migrations (Supabase direct URL)
+DATABASE_URL="postgresql://postgres:PASSWORD@db.msframaqmymeunoqmtjr.supabase.co:5432/postgres" alembic upgrade head
 ```
 
 ---
 
-*Last updated: Phase 4 starting point — April 2026*
+## Project Structure
+
+```
+tidal/
+├── backend/
+│   ├── app/
+│   │   ├── main.py           FastAPI entry point, router registration
+│   │   ├── config.py         pydantic-settings, ALLOWED_ORIGINS
+│   │   ├── database.py       SQLAlchemy engine, SessionLocal, get_db
+│   │   ├── models/           SQLAlchemy ORM models
+│   │   ├── schemas/          Pydantic request/response shapes
+│   │   ├── routers/          API endpoint handlers
+│   │   └── services/         auth, categories seeding, plan assembly
+│   ├── migrations/           Alembic migration files
+│   ├── Procfile              Railway start command
+│   ├── runtime.txt           Python version for Railway
+│   └── tests/                pytest test suite
+├── frontend/
+│   ├── src/
+│   │   ├── pages/            full page components
+│   │   ├── components/       reusable UI components
+│   │   └── lib/              api.ts — getApiBaseUrl() helper
+│   ├── vercel.json           SPA rewrite for Vercel
+│   └── .env.example          VITE_API_URL template
+└── docs/
+    ├── PRD.md
+    ├── TDD.md
+    ├── PROJECT_PLAN.md
+    └── architecture.png
+```
+
+---
+
+## Phase 9 — Planned Features (Post-MVP)
+
+### Interest Promotion Tracker
+Track 0% interest promotions (Paypal BNPL, credit card balance transfers).
+
+**Data model — `promotions` table:**
+- name, account_id (FK), original_balance (NUMERIC 12,2)
+- promotion_end_date (DATE), minimum_monthly_payment (NUMERIC 12,2)
+- is_active (BOOLEAN)
+
+**Features:** days remaining, required monthly payment, warning < 60 days,
+progress bar showing % cleared.
+
+### Open Banking / Bank Sync
+TrueLayer or Plaid integration for automatic transaction import.
+Requires OAuth per bank + webhook processing. Significant build.
+
+### Google OAuth
+authlib integration. Users table gets optional google_id column.
+
+### Tags
+Cross-cutting transaction labels via TagAssignment join table.
+
+---
+
+*Last updated: Phase 8 styling — April 2026*

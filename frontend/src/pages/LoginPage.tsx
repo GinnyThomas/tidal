@@ -1,9 +1,20 @@
+// pages/LoginPage.tsx
+//
+// Standalone full-screen login card. Does NOT use Layout — the nav bar
+// is only shown to authenticated users on protected pages.
+//
+// Design: ocean-900 background, ocean-800 card, sky-500 brand header,
+//         coral-500 submit button, sky-500 focus rings on inputs.
+//
+// NOTE: The <span>Tidal</span> inside the h1 is intentionally a separate
+// element so that screen.getByText('Tidal') in tests can find it by exact
+// text match (the emoji lives in a sibling element, not the same text node).
+
 import axios from 'axios'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
-
 
 function LoginPage() {
     const [email, setEmail] = useState('')
@@ -12,47 +23,97 @@ function LoginPage() {
     const navigate = useNavigate()
 
     const handleSubmit = async (e: SyntheticEvent) => {
-        e.preventDefault()  // stops the page refreshing on form submit
-        setError(null)  // clear any previous error before each attempt
+        e.preventDefault()
+        setError(null)
         try {
             const response = await axios.post(
                 `${getApiBaseUrl()}/api/v1/auth/login`,
-                {email, password}
+                { email, password }
             )
-            localStorage.setItem("access_token", response.data.access_token)
-            // then after successful login:
+            localStorage.setItem('access_token', response.data.access_token)
+            // Store email so Layout can display it in the authenticated nav bar.
+            localStorage.setItem('user_email', email)
             navigate('/dashboard')
-        } catch (err) {
-            setError("Invalid Credentials")
+        } catch {
+            setError('Invalid Credentials')
         }
     }
 
     return (
-        <form onSubmit={handleSubmit}>
-            <label htmlFor="email">Email</label>
-            <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-            />
+        <div className="min-h-screen bg-ocean-900 flex items-center justify-center px-4">
+            <div className="w-full max-w-md">
 
-            <label htmlFor="password">Password</label>
-            <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-            />
+                {/* Card */}
+                <div className="bg-ocean-800 border border-ocean-700 rounded-xl p-8 shadow-2xl">
 
-            {error && <p>{error}</p>}
+                    {/* Brand header */}
+                    <div className="text-center mb-8">
+                        <div aria-hidden="true" className="text-4xl mb-3">🌊</div>
+                        <h1 className="text-2xl font-bold">
+                            <span className="text-sky-500">Tidal</span>
+                        </h1>
+                        <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
+                    </div>
 
-            <button type="submit">Log In</button>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label
+                                htmlFor="email"
+                                className="label-base"
+                            >
+                                Email
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="input-base"
+                                placeholder="you@example.com"
+                                required
+                            />
+                        </div>
 
-            <p>
-                Don't have an account? <a href="/register">Register here</a>
-            </p>
-        </form>
+                        <div>
+                            <label
+                                htmlFor="password"
+                                className="label-base"
+                            >
+                                Password
+                            </label>
+                            <input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="input-base"
+                                required
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="bg-coral-500/10 border border-coral-500/30 rounded-lg px-3 py-2.5">
+                                <p className="text-coral-400 text-sm">{error}</p>
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            className="btn-primary w-full cursor-pointer"
+                        >
+                            Log In
+                        </button>
+                    </form>
+
+                    <p className="text-center text-sm text-slate-400 mt-6">
+                        Don't have an account?{' '}
+                        <Link to="/register" className="text-sky-400 hover:text-sky-300 transition-colors">
+                            Register
+                        </Link>
+                    </p>
+                </div>
+            </div>
+        </div>
     )
 }
 

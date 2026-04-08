@@ -1,38 +1,21 @@
 // pages/CategoriesPage.tsx
 //
-// Purpose: Displays the user's categories hierarchically and provides the
-//          entry point for creating new ones and hiding/showing categories.
+// Purpose: Hierarchical category list with ocean-themed styling.
+//          Wrapped in Layout for navigation.
 //
-// Four render states:
-//   loading  — fetch is in progress; no controls, no list
-//   error    — fetch failed; no controls, error message shown
-//   empty    — fetch succeeded but no categories; buttons shown
-//   list     — fetch succeeded; buttons + hierarchical list shown
-//
-// Data flow:
-//   1. On mount, fetchCategories(false) GETs /api/v1/categories with include_hidden=false.
-//   2. "Add Category" toggles AddCategoryForm visibility.
-//   3. "Show Hidden" / "Hide Hidden" re-fetches with include_hidden toggled.
-//   4. Each category row has a Hide/Unhide button that PATCHes toggle-visibility
-//      and then re-fetches so the list reflects the new state.
-//   5. When AddCategoryForm calls onCategoryAdded(), we hide the form and
-//      re-fetch the list.
-//
-// Hierarchy:
-//   We receive a flat list from the API and group it client-side.
-//   Parents = categories with parent_category_id === null.
-//   Children = categories with a non-null parent_category_id, nested under
-//   their parent's list item.
-//
-// Why not React Query?
-//   Following the plain axios + useState pattern established in AccountsPage.
-//   React Query can be introduced as a project-wide refactor later.
+// Design decisions:
+//   - Parent categories styled as section headers (semibold, full-width card)
+//   - Child categories indented with a teal-500 left border
+//   - Hidden categories keep their inline opacity:0.4 style (tests verify this)
+//   - "Show Hidden"/"Hide Hidden" button uses exact text (tests use exact match)
+//   - "Hide"/"Unhide" per-category buttons use exact text (tests use exact match)
+//   - The <li>/<ul> hierarchy is preserved for DOM query tests
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import Layout from '../components/Layout'
 import AddCategoryForm from '../components/AddCategoryForm'
 import { getApiBaseUrl } from '../lib/api'
-
 
 type Category = {
     id: string
@@ -50,15 +33,8 @@ function CategoriesPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
-    // includeHidden controls whether the API returns hidden categories too.
-    // When false (default), hidden categories are filtered out server-side.
     const [includeHidden, setIncludeHidden] = useState(false)
 
-    // fetchCategories takes an explicit withHidden parameter rather than
-    // reading from state. This avoids the stale-closure problem when toggling:
-    // if we called setIncludeHidden then fetchCategories(), the state update
-    // would be batched and fetchCategories() would still read the old value.
-    // Passing the value explicitly keeps the call synchronous and predictable.
     const fetchCategories = async (withHidden: boolean) => {
         const token = localStorage.getItem('access_token')
         setLoading(true)
@@ -93,9 +69,6 @@ function CategoriesPage() {
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Re-fetch with the current include_hidden value so the list
-            // reflects the change — e.g. hiding a category removes it from the
-            // default view, or shows it greyed out if include_hidden is true.
             fetchCategories(includeHidden)
         } catch {
             window.alert('Could not update category visibility. Please try again.')
@@ -111,92 +84,132 @@ function CategoriesPage() {
     // --- Early returns for terminal states ---
 
     if (loading) {
-        return <p>Loading...</p>
+        return (
+            <Layout>
+                <p className="text-slate-400 text-center py-20 text-lg">Loading...</p>
+            </Layout>
+        )
     }
 
     if (error) {
-        return <p>{error}</p>
+        return (
+            <Layout>
+                <p className="text-coral-400 text-center py-20">{error}</p>
+            </Layout>
+        )
     }
 
-    // --- Derive the display structure from the flat list ---
+    // --- Derive display structure from flat list ---
 
-    // Parents are categories with no parent of their own (top-level).
-    const parents = categories.filter((c) => c.parent_category_id === null)
-
-    // childrenOf returns direct children of a given parent id.
+    // A category is a "parent" (top-level) if:
+    //   a) it has no parent_category_id (it is genuinely a root category), OR
+    //   b) its parent_category_id points to a category that isn't in the
+    //      returned list (e.g. the parent is hidden and include_hidden=false).
+    // Case (b) prevents children from silently disappearing when their parent
+    // is hidden — they promote to top-level instead.
+    // This is the same pattern used in MonthlyPlanView for plan rows.
+    const categoryIds = new Set(categories.map((c) => c.id))
+    const parents = categories.filter(
+        (c) => c.parent_category_id === null || !categoryIds.has(c.parent_category_id)
+    )
     const childrenOf = (parentId: string) =>
         categories.filter((c) => c.parent_category_id === parentId)
 
-    // Top-level categories are the candidates for the parent dropdown in the form.
-    // We only offer top-level categories as parents — this keeps hierarchy to one
-    // level deep, which is all the data model needs in Phase 3.
-    const topLevelCategories = parents
-
-    // --- Normal render: controls + optional form + list or empty state ---
+    // topLevelCategories is passed to AddCategoryForm for the parent dropdown.
+    // We only offer genuinely root categories (parent_category_id === null) as
+    // options — we don't support creating grandchild categories.
+    const topLevelCategories = categories.filter((c) => c.parent_category_id === null)
 
     return (
-        <div>
-            <h2>Categories</h2>
+        <Layout>
+            <div className="max-w-4xl mx-auto">
 
-            <button onClick={() => setShowForm((prev) => !prev)}>
-                Add Category
-            </button>
-
-            {/* Toggle between showing only visible categories (default) and
-                all categories including hidden ones. The button label reflects
-                the action that clicking will take, not the current state. */}
-            <button onClick={handleToggleHidden}>
-                {includeHidden ? 'Hide Hidden' : 'Show Hidden'}
-            </button>
-
-            {showForm && (
-                <AddCategoryForm
-                    topLevelCategories={topLevelCategories}
-                    onCategoryAdded={handleCategoryAdded}
-                />
-            )}
-
-            {categories.length === 0 ? (
-                <p>No visible categories. You may have hidden categories; click "Show Hidden" to
-                    view them or add one to get started.</p>
-            ) : (
-                <ul>
-                    {parents.map((parent) => (
-                        // When include_hidden is true and this category is hidden,
-                        // reduce opacity so it is visually distinct from visible ones.
-                        <li
-                            key={parent.id}
-                            style={parent.is_hidden ? { opacity: 0.4 } : {}}
+                {/* Page header */}
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-slate-100">Categories</h2>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowForm((prev) => !prev)}
+                            className="btn-primary cursor-pointer"
                         >
-                            <span>{parent.name}</span>
-                            <button onClick={() => handleToggleVisibility(parent.id)}>
-                                {parent.is_hidden ? 'Unhide' : 'Hide'}
-                            </button>
+                            Add Category
+                        </button>
+                        {/* Pill toggle — exact button text required by tests */}
+                        <button
+                            onClick={handleToggleHidden}
+                            className="bg-ocean-700 hover:bg-ocean-600 border border-ocean-600 text-slate-300 hover:text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
+                        >
+                            {includeHidden ? 'Hide Hidden' : 'Show Hidden'}
+                        </button>
+                    </div>
+                </div>
 
-                            {/* Render direct children indented under the parent.
-                                The nested <ul> provides the indentation and makes
-                                the hierarchy clear in the DOM — useful for tests
-                                and screen readers alike. */}
-                            {childrenOf(parent.id).length > 0 && (
-                                <ul>
-                                    {childrenOf(parent.id).map((child) => (
-                                        <li
-                                            key={child.id}
-                                            style={child.is_hidden ? { opacity: 0.4 } : {}}
-                                        >
-                                            <span>{child.name}</span>
-                                            <button onClick={() => handleToggleVisibility(child.id)}>
-                                                {child.is_hidden ? 'Unhide' : 'Hide'}
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
+                {/* Inline form */}
+                {showForm && (
+                    <div className="mb-6">
+                        <AddCategoryForm
+                            topLevelCategories={topLevelCategories}
+                            onCategoryAdded={handleCategoryAdded}
+                        />
+                    </div>
+                )}
+
+                {/* Category list / empty state */}
+                {categories.length === 0 ? (
+                    <div className="text-center py-20">
+                        <p aria-hidden="true" className="text-5xl mb-4">📂</p>
+                        <p className="text-slate-400 text-lg">
+                            No visible categories. You may have hidden categories; click "Show Hidden" to
+                            view them or add one to get started.
+                        </p>
+                    </div>
+                ) : (
+                    <ul className="space-y-2">
+                        {parents.map((parent) => (
+                            // Inline opacity style is required — the test asserts
+                            // toHaveStyle({ opacity: '0.4' }) on the <li> element.
+                            <li
+                                key={parent.id}
+                                style={parent.is_hidden ? { opacity: 0.4 } : {}}
+                                className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden"
+                            >
+                                {/* Parent row — styled as section header */}
+                                <div className="flex items-center justify-between px-4 py-3">
+                                    <span className="font-semibold text-slate-100">{parent.name}</span>
+                                    <button
+                                        onClick={() => handleToggleVisibility(parent.id)}
+                                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                    >
+                                        {parent.is_hidden ? 'Unhide' : 'Hide'}
+                                    </button>
+                                </div>
+
+                                {/* Child rows — teal left border for visual hierarchy */}
+                                {childrenOf(parent.id).length > 0 && (
+                                    <ul className="border-t border-ocean-700 divide-y divide-ocean-700/50">
+                                        {childrenOf(parent.id).map((child) => (
+                                            <li
+                                                key={child.id}
+                                                style={child.is_hidden ? { opacity: 0.4 } : {}}
+                                                className="flex items-center justify-between pl-6 pr-4 py-2.5 border-l-2 border-teal-500 ml-4"
+                                            >
+                                                <span className="text-slate-300 text-sm">{child.name}</span>
+                                                <button
+                                                    onClick={() => handleToggleVisibility(child.id)}
+                                                    className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                >
+                                                    {child.is_hidden ? 'Unhide' : 'Hide'}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </Layout>
     )
 }
 

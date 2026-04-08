@@ -1,68 +1,96 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@import "tailwindcss";
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+/*
+ * @theme defines our custom design tokens as CSS variables.
+ * Tailwind v4 uses @theme instead of a tailwind.config.js colours block.
+ * Each --color-* variable becomes a Tailwind utility:
+ *   --color-ocean-900 → bg-ocean-900, text-ocean-900, border-ocean-900, etc.
+ *
+ * Ocean palette — deep navy blues for backgrounds and borders.
+ * Sky palette   — primary blue for links, focus rings, active states.
+ * Teal palette  — secondary accent for sub-elements and child borders.
+ * Coral palette — CTAs, destructive actions, and error states.
+ * Semantic      — success/danger/warning shorthand colours.
+ */
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+@theme {
+  --color-ocean-950: #0a1628;
+  --color-ocean-900: #0f1923;
+  --color-ocean-800: #1a2a3a;
+  --color-ocean-700: #2a3f52;
+  --color-ocean-600: #3d5a73;
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+  --color-sky-400: #38bdf8;
+  --color-sky-500: #0ea5e9;
+  --color-sky-600: #0284c7;
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
+  --color-coral-400: #fb7185;
+  --color-coral-500: #f43f5e;
+  --color-coral-600: #e11d48;
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  --color-success: #10b981;
+  --color-danger:  #ef4444;
+  --color-warning: #f59e0b;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/*
+ * Base layer: document-level defaults.
+ * @apply uses the Tailwind utilities defined above.
+ * Setting bg and text on html here means every page inherits them
+ * without needing a wrapper class on every component.
+ */
+@layer base {
+  html {
+    @apply bg-ocean-900 text-slate-100;
+    font-family: system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  a:hover {
-    color: #747bff;
+
+  body {
+    margin: 0;
+    min-height: 100vh;
   }
-  button {
-    background-color: #f9f9f9;
+
+  #root {
+    min-height: 100vh;
   }
+}
+
+/*
+ * Component layer: reusable multi-utility combos.
+ * These live in @layer components so that utility classes added alongside
+ * them in JSX always win (utilities are in a higher cascade layer).
+ *
+ * Usage: className="btn-primary w-full" — the utility w-full is not in
+ * btn-primary but stacks cleanly; py-2.5 would override btn-primary's py-2.
+ */
+@layer components {
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .btn-primary   { @apply bg-coral-500 hover:bg-coral-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors; }
+  .btn-secondary { @apply bg-ocean-700 hover:bg-ocean-600 text-slate-200 font-semibold px-4 py-2 rounded-lg transition-colors; }
+  .btn-ghost     { @apply text-slate-400 hover:text-slate-200 px-3 py-1 rounded transition-colors text-sm; }
+
+  /* ── Form controls ──────────────────────────────────────────────────── */
+  .input-base { @apply w-full bg-ocean-900 border border-ocean-700 rounded-lg px-3 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent; }
+  .label-base { @apply block text-sm font-medium text-slate-300 mb-1.5; }
+
+  /* ── Cards ──────────────────────────────────────────────────────────── */
+  .card       { @apply bg-ocean-800 border border-ocean-700 rounded-xl p-4; }
+  .card-hover { @apply bg-ocean-800 border border-ocean-700 rounded-xl p-4 hover:border-ocean-600 transition-colors; }
+
+  /* ── Page layout ────────────────────────────────────────────────────── */
+  .page-container { @apply max-w-4xl mx-auto px-4 py-8; }
+  .page-title     { @apply text-2xl font-bold text-slate-100 mb-6; }
+  .section-header { @apply text-lg font-semibold text-slate-200; }
+
+  /* ── Badges ─────────────────────────────────────────────────────────── */
+  /* badge-sky and badge-teal repeat the base badge utilities because
+   * Tailwind v4 @apply only accepts utility classes, not component classes. */
+  .badge      { @apply text-xs font-medium px-2 py-0.5 rounded-full; }
+  .badge-sky  { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400; }
+  .badge-teal { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400; }
 }
