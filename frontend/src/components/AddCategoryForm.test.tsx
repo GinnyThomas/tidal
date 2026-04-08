@@ -165,3 +165,133 @@ describe('AddCategoryForm', () => {
         expect(mockOnCategoryAdded).not.toHaveBeenCalled()
     })
 })
+
+// =============================================================================
+// Edit mode (editingCategory prop provided)
+// =============================================================================
+
+describe('AddCategoryForm — edit mode', () => {
+    const mockOnCategoryUpdated = vi.fn()
+
+    const editingCategory = {
+        id: 'cat-1',
+        name: 'Food & Drink',
+        parent_category_id: null,
+        colour: '#ff6600',
+        icon: '🍔',
+    }
+
+    beforeEach(() => {
+        localStorage.setItem('access_token', 'fake-token')
+        mockOnCategoryUpdated.mockClear()
+    })
+
+    afterEach(() => {
+        localStorage.clear()
+        vi.clearAllMocks()
+    })
+
+    it('pre-populates the name and colour fields from the editing category', () => {
+        render(
+            <MemoryRouter>
+                <AddCategoryForm
+                    topLevelCategories={mockParents}
+                    onCategoryAdded={vi.fn()}
+                    editingCategory={editingCategory}
+                    onCategoryUpdated={mockOnCategoryUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        expect(screen.getByLabelText(/category name/i)).toHaveValue('Food & Drink')
+        expect(screen.getByLabelText(/colour/i)).toHaveValue('#ff6600')
+        // The matching emoji button should be aria-pressed=true
+        expect(screen.getByRole('button', { pressed: true, name: '🍔' })).toBeInTheDocument()
+    })
+
+    it('shows "Update Category" as the submit button text', () => {
+        render(
+            <MemoryRouter>
+                <AddCategoryForm
+                    topLevelCategories={[]}
+                    onCategoryAdded={vi.fn()}
+                    editingCategory={editingCategory}
+                    onCategoryUpdated={mockOnCategoryUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        expect(screen.getByRole('button', { name: /update category/i })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /save category/i })).not.toBeInTheDocument()
+    })
+
+    it('submits PUT /api/v1/categories/{id} with the Authorization header', async () => {
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <AddCategoryForm
+                    topLevelCategories={mockParents}
+                    onCategoryAdded={vi.fn()}
+                    editingCategory={editingCategory}
+                    onCategoryUpdated={mockOnCategoryUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByRole('button', { name: /update category/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/categories/cat-1`,
+                expect.objectContaining({
+                    name: 'Food & Drink',
+                    colour: '#ff6600',
+                    icon: '🍔',
+                }),
+                expect.objectContaining({
+                    headers: { Authorization: 'Bearer fake-token' },
+                })
+            )
+        })
+    })
+
+    it('calls onCategoryUpdated after a successful update', async () => {
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <AddCategoryForm
+                    topLevelCategories={[]}
+                    onCategoryAdded={vi.fn()}
+                    editingCategory={editingCategory}
+                    onCategoryUpdated={mockOnCategoryUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByRole('button', { name: /update category/i }))
+
+        await waitFor(() => expect(mockOnCategoryUpdated).toHaveBeenCalledTimes(1))
+    })
+
+    it('shows an error message when the update fails', async () => {
+        vi.mocked(axios.put).mockRejectedValueOnce(new Error('Server error'))
+
+        render(
+            <MemoryRouter>
+                <AddCategoryForm
+                    topLevelCategories={[]}
+                    onCategoryAdded={vi.fn()}
+                    editingCategory={editingCategory}
+                    onCategoryUpdated={mockOnCategoryUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByRole('button', { name: /update category/i }))
+
+        expect(await screen.findByText(/could not update category/i)).toBeInTheDocument()
+        expect(mockOnCategoryUpdated).not.toHaveBeenCalled()
+    })
+})
