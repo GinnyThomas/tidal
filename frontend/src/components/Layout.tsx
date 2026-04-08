@@ -36,9 +36,12 @@ function Layout({ children }: Props) {
     }
 
     // Returns Tailwind classes for a nav link, highlighting it when active.
-    // We match on the exact path to avoid /dashboard matching /dashboard/something.
-    const navClass = (path: string) => {
-        const isActive = pathname === path
+    // Accepts a single path string or an array of paths — useful when multiple
+    // routes map to the same nav item (e.g. /dashboard and /plan both render
+    // the Monthly Plan View, so the Dashboard link should be active on either).
+    const navClass = (paths: string | string[]) => {
+        const pathList = Array.isArray(paths) ? paths : [paths]
+        const isActive = pathList.includes(pathname)
         return [
             'px-3 py-2 rounded-md text-sm font-medium transition-colors',
             isActive
@@ -61,7 +64,7 @@ function Layout({ children }: Props) {
 
                 {/* Page links */}
                 <div className="flex items-center gap-1">
-                    <Link to="/dashboard" className={navClass('/dashboard')}>Dashboard</Link>
+                    <Link to="/dashboard" className={navClass(['/dashboard', '/plan'])}>Dashboard</Link>
                     <Link to="/accounts"  className={navClass('/accounts')}>Accounts</Link>
                     <Link to="/categories" className={navClass('/categories')}>Categories</Link>
                 </div>

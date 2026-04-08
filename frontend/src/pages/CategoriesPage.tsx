@@ -165,47 +165,55 @@ function CategoriesPage() {
                     </div>
                 ) : (
                     <ul className="space-y-2">
-                        {parents.map((parent) => (
-                            // Inline opacity style is required — the test asserts
-                            // toHaveStyle({ opacity: '0.4' }) on the <li> element.
-                            <li
-                                key={parent.id}
-                                style={parent.is_hidden ? { opacity: 0.4 } : {}}
-                                className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden"
-                            >
-                                {/* Parent row — styled as section header */}
-                                <div className="flex items-center justify-between px-4 py-3">
-                                    <span className="font-semibold text-slate-100">{parent.name}</span>
-                                    <button
-                                        onClick={() => handleToggleVisibility(parent.id)}
-                                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                    >
-                                        {parent.is_hidden ? 'Unhide' : 'Hide'}
-                                    </button>
-                                </div>
+                        {parents.map((parent) => {
+                            // Compute children once per parent.
+                            // childrenOf iterates the entire categories array, so
+                            // calling it twice (length check + map) would do double
+                            // the work. Block-body form lets us declare this const
+                            // before the return without needing an IIFE.
+                            const children = childrenOf(parent.id)
+                            return (
+                                // Inline opacity style is required — the test asserts
+                                // toHaveStyle({ opacity: '0.4' }) on the <li> element.
+                                <li
+                                    key={parent.id}
+                                    style={parent.is_hidden ? { opacity: 0.4 } : {}}
+                                    className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden"
+                                >
+                                    {/* Parent row — styled as section header */}
+                                    <div className="flex items-center justify-between px-4 py-3">
+                                        <span className="font-semibold text-slate-100">{parent.name}</span>
+                                        <button
+                                            onClick={() => handleToggleVisibility(parent.id)}
+                                            className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                        >
+                                            {parent.is_hidden ? 'Unhide' : 'Hide'}
+                                        </button>
+                                    </div>
 
-                                {/* Child rows — teal left border for visual hierarchy */}
-                                {childrenOf(parent.id).length > 0 && (
-                                    <ul className="border-t border-ocean-700 divide-y divide-ocean-700/50">
-                                        {childrenOf(parent.id).map((child) => (
-                                            <li
-                                                key={child.id}
-                                                style={child.is_hidden ? { opacity: 0.4 } : {}}
-                                                className="flex items-center justify-between pl-6 pr-4 py-2.5 border-l-2 border-teal-500 ml-4"
-                                            >
-                                                <span className="text-slate-300 text-sm">{child.name}</span>
-                                                <button
-                                                    onClick={() => handleToggleVisibility(child.id)}
-                                                    className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                    {/* Child rows — teal left border for visual hierarchy */}
+                                    {children.length > 0 && (
+                                        <ul className="border-t border-ocean-700 divide-y divide-ocean-700/50">
+                                            {children.map((child) => (
+                                                <li
+                                                    key={child.id}
+                                                    style={child.is_hidden ? { opacity: 0.4 } : {}}
+                                                    className="flex items-center justify-between pl-6 pr-4 py-2.5 border-l-2 border-teal-500 ml-4"
                                                 >
-                                                    {child.is_hidden ? 'Unhide' : 'Hide'}
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </li>
-                        ))}
+                                                    <span className="text-slate-300 text-sm">{child.name}</span>
+                                                    <button
+                                                        onClick={() => handleToggleVisibility(child.id)}
+                                                        className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                    >
+                                                        {child.is_hidden ? 'Unhide' : 'Hide'}
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </li>
+                            )
+                        })}
                     </ul>
                 )}
             </div>

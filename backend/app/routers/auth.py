@@ -15,6 +15,7 @@
 # and delegates all logic to services/auth.py. Routes should be short.
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,7 +143,11 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> dict:
     """
     # Normalise to lowercase so "GINNY@example.com" matches a stored "ginny@example.com".
     email = credentials.email.lower()
-    user = db.query(User).filter(User.email == email).first()
+    # Use func.lower() on the stored column as well as the input so that any
+    # pre-existing rows with uppercase emails (registered before the normalisation
+    # change) can still log in. Both sides are lowercased, making the comparison
+    # fully case-insensitive at the database level.
+    user = db.query(User).filter(func.lower(User.email) == email).first()
 
     # The `or` short-circuits: if user is None, verify_password is not called.
     # Both failure cases raise the same 401 with the same generic message.

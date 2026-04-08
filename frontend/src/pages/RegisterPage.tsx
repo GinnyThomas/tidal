@@ -39,7 +39,7 @@ function RegisterPage() {
                     { email, password }
                 )
                 localStorage.setItem('access_token', response.data.access_token)
-                localStorage.setItem('user_email', email)
+                localStorage.setItem('user_email', email.toLowerCase())
                 navigate('/dashboard')
             } catch {
                 setError('Invalid Credentials')

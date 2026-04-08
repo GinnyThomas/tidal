@@ -123,7 +123,8 @@ function AddAccountForm({ onAccountAdded }: Props) {
                         id="note"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        className="input-base resize-none rows-3"
+                        className="input-base resize-none"
+                        rows={3}
                     />
                 </div>
 

@@ -32,7 +32,7 @@ function LoginPage() {
             )
             localStorage.setItem('access_token', response.data.access_token)
             // Store email so Layout can display it in the authenticated nav bar.
-            localStorage.setItem('user_email', email)
+            localStorage.setItem('user_email', email.toLowerCase())
             navigate('/dashboard')
         } catch {
             setError('Invalid Credentials')
