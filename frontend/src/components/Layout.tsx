@@ -68,6 +68,7 @@ function Layout({ children }: Props) {
                     <Link to="/transactions"  className={navClass('/transactions')}>Transactions</Link>
                     <Link to="/accounts"      className={navClass('/accounts')}>Accounts</Link>
                     <Link to="/categories"    className={navClass('/categories')}>Categories</Link>
+                    <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
                 </div>
 
                 {/* User identity + logout */}
