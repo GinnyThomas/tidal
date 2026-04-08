@@ -45,10 +45,11 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
 
     # --- Helper: build a Category object (not yet added to the session) ---
     def cat(
-        name: str,
-        parent_category_id: uuid.UUID | None = None,
+            name: str,
+            parent_category_id: uuid.UUID | None = None,
     ) -> Category:
         return Category(
+            id=uuid.uuid4(),        # ← generate explicitly, don't rely on default
             user_id=user_id,
             name=name,
             is_system=True,

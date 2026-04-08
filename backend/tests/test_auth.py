@@ -180,3 +180,69 @@ def test_login_with_unknown_email_returns_401(test_client) -> None:
     )
 
     assert response.status_code == 401
+
+
+# =============================================================================
+# Email case normalisation tests
+# =============================================================================
+
+
+def test_register_normalises_email_to_lowercase(test_client) -> None:
+    """
+    Registering with a mixed-case email should store it as lowercase.
+
+    This prevents the same person from creating duplicate accounts by varying
+    the capitalisation of their email address. Email addresses are
+    case-insensitive by RFC 5321 (the local part technically isn't, but no
+    real mail server distinguishes case in practice).
+    """
+    response = test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "Ginny@Example.COM", "password": "securepassword"},
+    )
+
+    assert response.status_code == 201
+    # The stored email should be fully lowercase regardless of input casing.
+    assert response.json()["email"] == "ginny@example.com"
+
+
+def test_login_with_uppercase_email_succeeds(test_client) -> None:
+    """
+    Logging in with uppercase email should succeed even when the account was
+    registered with a lowercase email.
+
+    Both the stored email and the login email are lowercased before comparison,
+    so Ginny@Example.com matches the stored ginny@example.com.
+    """
+    # Register with lowercase
+    test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+
+    # Log in with different capitalisation
+    response = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "GINNY@EXAMPLE.COM", "password": "securepassword"},
+    )
+
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+
+def test_duplicate_email_check_is_case_insensitive(test_client) -> None:
+    """
+    Attempting to register GINNY@EXAMPLE.COM when ginny@example.com already
+    exists should return 400 — they are the same address.
+    """
+    test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+
+    response = test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "GINNY@EXAMPLE.COM", "password": "securepassword"},
+    )
+
+    assert response.status_code == 400

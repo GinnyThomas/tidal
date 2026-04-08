@@ -1,30 +1,17 @@
 // components/AddAccountForm.tsx
 //
 // Purpose: Form for creating a new account.
+//          Styled as an ocean-800 card — looks like a modal panel whether
+//          rendered inline (AccountsPage) or standalone (tests).
 //
 // Props:
-//   onAccountAdded — called by the parent (AccountsPage) after a successful
-//                    submit so it can re-fetch the accounts list and hide
-//                    this form. The parent owns "what happens next".
-//
-// Design decisions:
-//   - All fields are controlled inputs (value + onChange) — React owns the
-//     state, not the DOM. This makes testing straightforward and prevents
-//     stale reads.
-//   - account_type uses a <select> with the six valid values from the backend
-//     AccountType enum. No free-text entry, so no validation needed here.
-//   - Optional string fields send null when empty. The backend schema has
-//     Optional[str] = None for institution and note, so null is correct.
-//   - current_balance is type="number" so the browser enforces numeric input.
-//     We pass the string value of the input; Pydantic on the backend coerces
-//     it to Decimal.
-//   - JWT comes from localStorage — same pattern as LoginPage.
+//   onAccountAdded — called after successful submit so the parent can
+//                    re-fetch and hide this form.
 
 import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
-
 
 type Props = {
     onAccountAdded: () => void
@@ -42,9 +29,7 @@ function AddAccountForm({ onAccountAdded }: Props) {
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
         setError(null)
-
         const token = localStorage.getItem('access_token')
-
         try {
             await axios.post(
                 `${getApiBaseUrl()}/api/v1/accounts`,
@@ -53,17 +38,11 @@ function AddAccountForm({ onAccountAdded }: Props) {
                     account_type: accountType,
                     currency,
                     current_balance: currentBalance,
-                    // Send null for empty optional strings — the backend expects
-                    // Optional[str] = None, not an empty string.
                     institution: institution || null,
                     note: note || null,
                 },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
+                { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Tell the parent the account was created.
-            // The parent decides what to do next (re-fetch, hide form, etc.).
             onAccountAdded()
         } catch {
             setError('Could not create account. Please try again.')
@@ -71,68 +50,98 @@ function AddAccountForm({ onAccountAdded }: Props) {
     }
 
     return (
-        <form onSubmit={handleSubmit}>
-            <label htmlFor="name">Account Name</label>
-            <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-            />
+        <div className="bg-ocean-800 border border-ocean-700 rounded-xl p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-200 mb-5">New Account</h3>
 
-            {/* account_type is a select — the browser ensures only valid values
-                can be chosen, and the initial value matches the backend default */}
-            <label htmlFor="accountType">Account Type</label>
-            <select
-                id="accountType"
-                value={accountType}
-                onChange={(e) => setAccountType(e.target.value)}
-            >
-                <option value="checking">Checking</option>
-                <option value="savings">Savings</option>
-                <option value="credit_card">Credit Card</option>
-                <option value="cash">Cash</option>
-                <option value="mortgage">Mortgage</option>
-                <option value="loan">Loan</option>
-            </select>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label htmlFor="name" className="label-base">Account Name</label>
+                    <input
+                        id="name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="input-base"
+                        required
+                    />
+                </div>
 
-            <label htmlFor="currency">Currency</label>
-            <input
-                id="currency"
-                type="text"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-            />
+                <div>
+                    <label htmlFor="accountType" className="label-base">Account Type</label>
+                    <select
+                        id="accountType"
+                        value={accountType}
+                        onChange={(e) => setAccountType(e.target.value)}
+                        className="input-base"
+                    >
+                        <option value="checking">Checking</option>
+                        <option value="savings">Savings</option>
+                        <option value="credit_card">Credit Card</option>
+                        <option value="cash">Cash</option>
+                        <option value="mortgage">Mortgage</option>
+                        <option value="loan">Loan</option>
+                    </select>
+                </div>
 
-            <label htmlFor="currentBalance">Current Balance</label>
-            <input
-                id="currentBalance"
-                type="number"
-                value={currentBalance}
-                onChange={(e) => setCurrentBalance(e.target.value)}
-                step="0.01"
-            />
+                <div>
+                    <label htmlFor="currency" className="label-base">Currency</label>
+                    <input
+                        id="currency"
+                        type="text"
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value)}
+                        className="input-base"
+                    />
+                </div>
 
-            <label htmlFor="institution">Institution (optional)</label>
-            <input
-                id="institution"
-                type="text"
-                value={institution}
-                onChange={(e) => setInstitution(e.target.value)}
-            />
+                <div>
+                    <label htmlFor="currentBalance" className="label-base">Current Balance</label>
+                    <input
+                        id="currentBalance"
+                        type="number"
+                        value={currentBalance}
+                        onChange={(e) => setCurrentBalance(e.target.value)}
+                        className="input-base"
+                        step="0.01"
+                    />
+                </div>
 
-            <label htmlFor="note">Note (optional)</label>
-            <textarea
-                id="note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-            />
+                <div>
+                    <label htmlFor="institution" className="label-base">Institution (optional)</label>
+                    <input
+                        id="institution"
+                        type="text"
+                        value={institution}
+                        onChange={(e) => setInstitution(e.target.value)}
+                        className="input-base"
+                    />
+                </div>
 
-            {error && <p>{error}</p>}
+                <div>
+                    <label htmlFor="note" className="label-base">Note (optional)</label>
+                    <textarea
+                        id="note"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className="input-base resize-none"
+                        rows={3}
+                    />
+                </div>
 
-            <button type="submit">Save Account</button>
-        </form>
+                {error && (
+                    <div className="bg-coral-500/10 border border-coral-500/30 rounded-lg px-3 py-2">
+                        <p className="text-coral-400 text-sm">{error}</p>
+                    </div>
+                )}
+
+                <button
+                    type="submit"
+                    className="btn-primary w-full cursor-pointer"
+                >
+                    Save Account
+                </button>
+            </form>
+        </div>
     )
 }
 

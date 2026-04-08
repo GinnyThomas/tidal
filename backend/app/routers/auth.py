@@ -15,6 +15,7 @@
 # and delegates all logic to services/auth.py. Routes should be short.
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -50,26 +51,40 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> User:
     runs — invalid email or short password returns 422 before we touch the DB.
 
     Steps:
-        1. Check the email isn't already taken → 400 if it is
-        2. Hash the password with bcrypt
-        3. Create the User row in the database
-        4. Return the new user (FastAPI filters to UserResponse shape — no password_hash)
+        1. Normalise the email to lowercase
+        2. Check the email isn't already taken → 400 if it is
+        3. Hash the password with bcrypt
+        4. Create the User row in the database
+        5. Return the new user (FastAPI filters to UserResponse shape — no password_hash)
     """
-    # Step 1: reject duplicate emails
+    # Step 1: normalise email to lowercase.
+    # Email addresses are case-insensitive by RFC 5321 — no real mail server
+    # distinguishes "Ginny@example.com" from "ginny@example.com". Storing in
+    # lowercase means login lookups are always exact-match fast and there is
+    # no risk of duplicate accounts created with different capitalisations.
+    #
+    # NOTE: Existing users registered before this change who have uppercase
+    # characters in their stored email would need a one-off migration:
+    #   UPDATE users SET email = LOWER(email);
+    # For now we only normalise going forward; all new registrations and logins
+    # will be case-insensitive from this point.
+    email = user_in.email.lower()
+
+    # Step 2: reject duplicate emails
     # We check explicitly rather than catching a database IntegrityError because:
     #   - It's clearer what went wrong
     #   - IntegrityError messages are database-specific and hard to parse reliably
-    existing = db.query(User).filter(User.email == user_in.email).first()
+    existing = db.query(User).filter(User.email == email).first()
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email already exists.",
         )
 
-    # Step 2 + 3: hash the password and persist the user
+    # Step 3 + 4: hash the password and persist the user
     # We NEVER store user_in.password — only the bcrypt hash goes into the DB.
     user = User(
-        email=user_in.email,
+        email=email,
         password_hash=hash_password(user_in.password),
     )
     db.add(user)
@@ -126,7 +141,13 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> dict:
         Returning 401 for both cases is intentionally ambiguous: "invalid
         credentials" — we're not telling you which part was wrong.
     """
-    user = db.query(User).filter(User.email == credentials.email).first()
+    # Normalise to lowercase so "GINNY@example.com" matches a stored "ginny@example.com".
+    email = credentials.email.lower()
+    # Use func.lower() on the stored column as well as the input so that any
+    # pre-existing rows with uppercase emails (registered before the normalisation
+    # change) can still log in. Both sides are lowercased, making the comparison
+    # fully case-insensitive at the database level.
+    user = db.query(User).filter(func.lower(User.email) == email).first()
 
     # The `or` short-circuits: if user is None, verify_password is not called.
     # Both failure cases raise the same 401 with the same generic message.

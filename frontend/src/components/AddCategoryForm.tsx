@@ -1,31 +1,17 @@
 // components/AddCategoryForm.tsx
 //
 // Purpose: Form for creating a new category.
+//          Styled as an ocean-800 card.
 //
 // Props:
-//   topLevelCategories — list of parent categories to populate the parent
-//                        dropdown. Passed in from CategoriesPage, which already
-//                        has the full list, so we avoid a second API call.
-//   onCategoryAdded   — called by the parent (CategoriesPage) after a
-//                       successful submit so it can re-fetch and hide this form.
-//
-// Design decisions:
-//   - parent_category_id sends null when "None" is selected (default) so the
-//     new category becomes top-level. A UUID string is sent when a parent is
-//     chosen. The backend schema accepts Optional[uuid.UUID] = None.
-//   - colour and icon are optional. We send null for empty strings — same
-//     pattern as institution/note in AddAccountForm.
-//   - is_system is never sent — user-created categories are always is_system=False.
-//   - JWT comes from localStorage — same pattern as all other forms.
+//   topLevelCategories — list of parents for the dropdown (from CategoriesPage)
+//   onCategoryAdded   — called after successful submit
 
 import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
 
-
-// Minimal shape needed to populate the parent dropdown.
-// CategoriesPage passes the full Category objects but we only need id + name.
 type ParentOption = {
     id: string
     name: string
@@ -38,8 +24,6 @@ type Props = {
 
 function AddCategoryForm({ topLevelCategories, onCategoryAdded }: Props) {
     const [name, setName] = useState('')
-    // Empty string = no parent selected (top-level category).
-    // A UUID string = the chosen parent's id.
     const [parentId, setParentId] = useState('')
     const [colour, setColour] = useState('')
     const [icon, setIcon] = useState('')
@@ -48,24 +32,17 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded }: Props) {
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
         setError(null)
-
         const token = localStorage.getItem('access_token')
-
         try {
             await axios.post(
                 `${getApiBaseUrl()}/api/v1/categories`,
                 {
                     name,
-                    // null = top-level. A non-empty string = child of that parent.
                     parent_category_id: parentId || null,
-                    // Send null for empty optional strings — backend expects
-                    // Optional[str] = None, not an empty string.
                     colour: colour || null,
                     icon: icon || null,
                 },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                }
+                { headers: { Authorization: `Bearer ${token}` } }
             )
             onCategoryAdded()
         } catch {
@@ -74,58 +51,77 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded }: Props) {
     }
 
     return (
-        <form onSubmit={handleSubmit}>
-            <label htmlFor="categoryName">Category Name</label>
-            <input
-                id="categoryName"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-            />
+        <div className="bg-ocean-800 border border-ocean-700 rounded-xl p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-200 mb-5">New Category</h3>
 
-            {/* Parent dropdown — empty value = no parent (top-level category).
-                Only top-level categories are offered as parents. This prevents
-                nesting deeper than one level, which keeps the data model simple. */}
-            <label htmlFor="parentCategory">Parent Category</label>
-            <select
-                id="parentCategory"
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-            >
-                <option value="">— None (top-level) —</option>
-                {topLevelCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                    </option>
-                ))}
-            </select>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label htmlFor="categoryName" className="label-base">Category Name</label>
+                    <input
+                        id="categoryName"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="input-base"
+                        required
+                    />
+                </div>
 
-            {/* Colour is an optional hex colour code e.g. "#FF5733".
-                type="text" keeps the label simple — a colour picker can be
-                added later as a UI enhancement. */}
-            <label htmlFor="colour">Colour (optional)</label>
-            <input
-                id="colour"
-                type="text"
-                value={colour}
-                onChange={(e) => setColour(e.target.value)}
-                placeholder="#RRGGBB"
-                maxLength={7}
-            />
+                <div>
+                    <label htmlFor="parentCategory" className="label-base">Parent Category</label>
+                    <select
+                        id="parentCategory"
+                        value={parentId}
+                        onChange={(e) => setParentId(e.target.value)}
+                        className="input-base"
+                    >
+                        <option value="">— None (top-level) —</option>
+                        {topLevelCategories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                                {cat.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
 
-            <label htmlFor="icon">Icon (optional)</label>
-            <input
-                id="icon"
-                type="text"
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-            />
+                <div>
+                    <label htmlFor="colour" className="label-base">Colour (optional)</label>
+                    <input
+                        id="colour"
+                        type="text"
+                        value={colour}
+                        onChange={(e) => setColour(e.target.value)}
+                        className="input-base"
+                        placeholder="#RRGGBB"
+                        maxLength={7}
+                    />
+                </div>
 
-            {error && <p>{error}</p>}
+                <div>
+                    <label htmlFor="icon" className="label-base">Icon (optional)</label>
+                    <input
+                        id="icon"
+                        type="text"
+                        value={icon}
+                        onChange={(e) => setIcon(e.target.value)}
+                        className="input-base"
+                    />
+                </div>
 
-            <button type="submit">Save Category</button>
-        </form>
+                {error && (
+                    <div className="bg-coral-500/10 border border-coral-500/30 rounded-lg px-3 py-2">
+                        <p className="text-coral-400 text-sm">{error}</p>
+                    </div>
+                )}
+
+                <button
+                    type="submit"
+                    className="btn-primary w-full cursor-pointer"
+                >
+                    Save Category
+                </button>
+            </form>
+        </div>
     )
 }
 

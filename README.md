@@ -39,7 +39,7 @@ tidal/
 
 You will need:
 - Python 3.13
-- Node.js (LTS) (react-router-dom v7 requires Node 20+)
+- Node.js 20+ (react-router-dom v7 requires Node 20 minimum; `frontend/.nvmrc` pins v24 for development — run `nvm use` inside `frontend/` to switch automatically)
 - PostgreSQL 16 or 17
 
 On Ubuntu/Debian, install PostgreSQL with:

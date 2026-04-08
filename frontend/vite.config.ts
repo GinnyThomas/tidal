@@ -1,11 +1,14 @@
-// vite.config.ts — production build and dev server configuration only.
+// vite.config.ts — production build and dev server configuration.
 //
-// Test configuration has been moved to vitest.config.ts so that this file
-// stays clean and the production build does not need the vitest type augmentation.
+// @tailwindcss/vite handles the @import "tailwindcss" directive in index.css.
+// This is the Tailwind v4 approach — no postcss.config.js needed.
+//
+// Test configuration lives in vitest.config.ts.
 
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
 })
