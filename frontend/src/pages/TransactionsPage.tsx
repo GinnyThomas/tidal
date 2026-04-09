@@ -142,7 +142,7 @@ function TransactionsPage() {
                 { status: next },
                 { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Optimistic update — no need to re-fetch the entire list
+            // After the PUT succeeds, without requiring a full re-fetch
             setTransactions(prev =>
                 prev.map(t => t.id === tx.id ? { ...t, status: next } : t)
             )

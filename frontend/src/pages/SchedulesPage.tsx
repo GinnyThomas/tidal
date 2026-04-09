@@ -115,7 +115,7 @@ function SchedulesPage() {
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Optimistic update — flip is_active without re-fetching the whole list
+            // Updates local state after the request succeeds (without a full re-fetch)
             setSchedules(prev =>
                 prev.map(s => s.id === schedule.id ? { ...s, is_active: !s.is_active } : s)
             )

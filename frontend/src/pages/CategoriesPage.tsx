@@ -141,7 +141,7 @@ function CategoriesPage() {
                     <h2 className="text-2xl font-bold text-slate-100">Categories</h2>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setShowForm((prev) => !prev)}
+                            onClick={() => { setShowForm((prev) => !prev); setEditingCategory(null) }}
                             className="btn-primary cursor-pointer"
                         >
                             Add Category

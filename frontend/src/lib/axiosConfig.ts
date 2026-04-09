@@ -8,8 +8,12 @@
 //   fires on every 401 across the entire app without per-request boilerplate.
 //
 // What it does:
-//   On any 401 response: clears access_token and user_email from localStorage,
-//   then redirects to /login. This covers both expired JWTs and revoked tokens.
+//   On any 401 response, redirects to /login — but only when the failing
+//   request is NOT an auth endpoint (/auth/login or /auth/register) AND
+//   either carries an Authorization header or has an access_token in
+//   localStorage. This prevents redirect loops on deliberate login failures
+//   (wrong password) while still catching expired/revoked tokens on all
+//   protected routes.
 //
 // Initialisation:
 //   Import this file once in main.tsx — importing it executes the side effect
@@ -22,7 +26,13 @@ axios.interceptors.response.use(
     // Pass through successful responses unchanged
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        const url: string = error.config?.url ?? ''
+        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+        const hasToken =
+            error.config?.headers?.Authorization ||
+            localStorage.getItem('access_token')
+
+        if (error.response?.status === 401 && !isAuthEndpoint && hasToken) {
             localStorage.removeItem('access_token')
             localStorage.removeItem('user_email')
             window.location.href = '/login'
