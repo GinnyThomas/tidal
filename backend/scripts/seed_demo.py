@@ -59,7 +59,12 @@ def seed_demo() -> None:
             db.commit()
             print(f"✓ Created demo user: {DEMO_EMAIL}")
         else:
-            print(f"  Demo user already exists: {DEMO_EMAIL}")
+            # Always reset password so the demo button works even if someone
+            # changed it via the Change Password page.
+            user.password_hash = hash_password(DEMO_PASSWORD)
+            db.add(user)
+            db.commit()
+            print(f"  Demo user already exists: {DEMO_EMAIL} (password reset to demo default)")
 
         # ── Step 2: Accounts ────────────────────────────────────────────────
         existing_accounts = (
@@ -116,11 +121,37 @@ def seed_demo() -> None:
         )
         cat_map = {c.name: c.id for c in categories}
 
+        # If cat_map is empty (e.g. user existed but categories were never seeded
+        # or were removed), seed them now and rebuild the map.
+        if not cat_map:
+            print("  No categories found — seeding default categories...")
+            seed_default_categories(user.id, db)
+            db.commit()
+            categories = (
+                db.query(Category)
+                .filter(Category.user_id == user.id, Category.deleted_at.is_(None))
+                .all()
+            )
+            cat_map = {c.name: c.id for c in categories}
+
+        # Raise a clear error if categories are still missing after seeding.
+        # This should never happen — seed_default_categories creates 35 categories.
+        if not cat_map:
+            raise RuntimeError(
+                "Failed to seed default categories for demo user. "
+                "Check seed_default_categories() in app/services/categories.py."
+            )
+
         # Helper: find a category by name, falling back to the first available.
-        # The fallback is defensive coding — the default categories are always
-        # seeded on user creation, so the names below should always be present.
+        # The fallback is defensive — the names below should always be present
+        # in the default set, but this prevents a KeyError if the seed list changes.
         def cat(name: str):
-            return cat_map.get(name) or next(iter(cat_map.values()))
+            result = cat_map.get(name)
+            if result is None:
+                fallback = next(iter(cat_map.values()))
+                print(f"  Warning: category '{name}' not found — using fallback")
+                return fallback
+            return result
 
         # ── Step 4: Schedules ───────────────────────────────────────────────
         existing_schedules = (
