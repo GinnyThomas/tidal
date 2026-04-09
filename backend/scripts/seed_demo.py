@@ -11,6 +11,7 @@
 #   - Default system categories (same 35 categories every user gets)
 #   - 2 accounts: Current Account (GBP) and Savings Account (GBP)
 #   - 8 realistic recurring schedules covering common household bills
+#   - 19 transactions across Feb–Apr 2026 (mix of cleared and pending)
 #
 # Idempotent: safe to run multiple times. Each section checks whether the
 # records already exist before inserting — running twice creates no duplicates.
@@ -33,6 +34,7 @@ from app.database import SessionLocal
 from app.models.account import Account
 from app.models.category import Category
 from app.models.schedule import Schedule
+from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.auth import hash_password
 from app.services.categories import seed_default_categories
@@ -297,6 +299,86 @@ def seed_demo() -> None:
                 print(f"  Schedule already exists: {sched.name}")
 
         db.commit()
+
+        # ── Step 5: Transactions ────────────────────────────────────────────
+        # Three months of realistic transactions (Feb–Apr 2026).
+        # Idempotency check: skip any row where (date, payee, amount) already
+        # exists for this user. This is a good-enough uniqueness proxy for demo
+        # data — real deduplication would also check account_id, but for seeding
+        # purposes this prevents obvious duplicates on re-runs.
+        #
+        # Each tuple: (account_name, category_name, date_str, amount,
+        #              transaction_type, status, payee)
+
+        transaction_rows = [
+            # February 2026 — all cleared
+            ("Current Account", "Salary",           "2026-02-28", 3200.00, "income",  "cleared", "Employer Ltd"),
+            ("Current Account", "Rent/Mortgage",    "2026-02-01", 1200.00, "expense", "cleared", "Landlord"),
+            ("Current Account", "Groceries",        "2026-02-07",   62.45, "expense", "cleared", "Tesco"),
+            ("Current Account", "Eating Out",       "2026-02-14",   48.20, "expense", "cleared", "Pizza Express"),
+            ("Current Account", "Streaming",        "2026-02-15",   10.99, "expense", "cleared", "Netflix"),
+            ("Current Account", "Fuel",             "2026-02-18",   55.00, "expense", "cleared", "Shell"),
+            ("Current Account", "Clothing",         "2026-02-22",   85.00, "expense", "cleared", "Zara"),
+
+            # March 2026 — all cleared
+            ("Current Account", "Salary",           "2026-03-28", 3200.00, "income",  "cleared", "Employer Ltd"),
+            ("Current Account", "Rent/Mortgage",    "2026-03-01", 1200.00, "expense", "cleared", "Landlord"),
+            ("Current Account", "Groceries",        "2026-03-06",   70.12, "expense", "cleared", "Sainsbury's"),
+            ("Current Account", "Eating Out",       "2026-03-13",   32.50, "expense", "cleared", "Wagamama"),
+            ("Current Account", "Public Transport", "2026-03-15",   24.30, "expense", "cleared", "National Rail"),
+            ("Current Account", "Fitness",          "2026-03-20",   45.00, "expense", "cleared", "PureGym"),
+
+            # April 2026 — mix of cleared and pending
+            ("Current Account", "Rent/Mortgage",    "2026-04-01", 1200.00, "expense", "cleared", "Landlord"),
+            ("Current Account", "Groceries",        "2026-04-04",   65.77, "expense", "cleared", "Aldi"),
+            ("Current Account", "Eating Out",       "2026-04-06",   27.40, "expense", "cleared", "Nando's"),
+            ("Current Account", "Fuel",             "2026-04-08",   52.10, "expense", "pending", "BP"),
+            ("Current Account", "Salary",           "2026-04-28", 3200.00, "income",  "pending", "Employer Ltd"),
+        ]
+
+        # Build a set of existing (date, payee, amount) tuples for fast lookup.
+        existing_transactions = (
+            db.query(Transaction)
+            .filter(Transaction.user_id == user.id, Transaction.deleted_at.is_(None))
+            .all()
+        )
+        existing_tx_keys = {
+            (str(t.date), t.payee, str(t.amount))
+            for t in existing_transactions
+        }
+
+        tx_created = 0
+        for acct_name, cat_name, date_str, amount, tx_type, tx_status, payee in transaction_rows:
+            key = (date_str, payee, f"{amount:.2f}")
+            if key in existing_tx_keys:
+                continue  # already seeded
+
+            acct_id = account_map.get(acct_name)
+            if acct_id is None:
+                print(f"  Warning: account '{acct_name}' not found — skipping transaction")
+                continue
+
+            tx = Transaction(
+                user_id=user.id,
+                account_id=acct_id,
+                category_id=cat(cat_name),
+                date=date.fromisoformat(date_str),
+                payee=payee,
+                amount=Decimal(str(amount)),
+                currency="GBP",
+                transaction_type=tx_type,
+                status=tx_status,
+            )
+            db.add(tx)
+            existing_tx_keys.add(key)  # prevent within-batch duplicates
+            tx_created += 1
+
+        db.commit()
+        if tx_created:
+            print(f"✓ Created {tx_created} transactions")
+        else:
+            print("  Transactions already exist")
+
         print("\nDemo seed complete.")
 
     except Exception as e:

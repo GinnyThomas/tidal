@@ -31,7 +31,11 @@ import { getApiBaseUrl } from '../lib/api'
 const EMOJI_OPTIONS = [
     '🏠', '🚗', '🍔', '💊', '🎮', '✈️', '💰', '🎓',
     '🎁', '💳', '📱', '⚡', '🛒', '👗', '💆', '🏋️',
-    '🎵', '🐾', '🌱', '⭐',
+    '🎵', '🐾', '🌱', '⭐', '🍕',
+    '☕', '🍺', '🎬', '📚', '🏦', '🚂', '🚌', '⛽',
+    '🏥', '💅', '🐶', '🎪', '🌍', '🔧', '🍷', '🎭',
+    '💻', '📷', '🎨', '🏊', '🎯', '🧴', '🛁', '🧹',
+    '🍰', '🌮', '🥗', '🏡', '🎠',
 ]
 
 type ParentOption = {
@@ -64,10 +68,13 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
     const [colour, setColour] = useState(editingCategory?.colour ?? '#0ea5e9')
     const [icon, setIcon] = useState(editingCategory?.icon ?? '')
     const [error, setError] = useState<string | null>(null)
+    // Tracks in-flight submission — disables the button to prevent double-submit.
+    const [submitting, setSubmitting] = useState(false)
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
         setError(null)
+        setSubmitting(true)
         const token = localStorage.getItem('access_token')
         const body = {
             name,
@@ -95,6 +102,8 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                     ? 'Could not update category. Please try again.'
                     : 'Could not create category. Please try again.'
             )
+        } finally {
+            setSubmitting(false)
         }
     }
 
@@ -189,8 +198,12 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                     </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full cursor-pointer">
-                    {isEditMode ? 'Update Category' : 'Save Category'}
+                <button
+                    type="submit"
+                    disabled={submitting}
+                    className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {submitting ? 'Saving...' : (isEditMode ? 'Update Category' : 'Save Category')}
                 </button>
             </form>
         </div>

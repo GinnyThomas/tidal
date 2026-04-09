@@ -118,6 +118,9 @@ def test_create_expense_returns_201(test_client) -> None:
     assert "user_id" in body
     assert "created_at" in body
     assert body["parent_transaction_id"] is None
+    # category_name is denormalised from the Category row
+    assert "category_name" in body
+    assert isinstance(body["category_name"], str)
 
 
 def test_create_transaction_without_auth_returns_401(test_client) -> None:

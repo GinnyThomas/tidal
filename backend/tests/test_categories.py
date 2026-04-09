@@ -444,6 +444,114 @@ def test_seeded_categories_have_correct_parent_child_relationships(test_client) 
         )
 
 
+# =============================================================================
+# Edit (Fix 1 — system categories can be edited)
+# =============================================================================
+
+
+def test_can_edit_system_category_name_colour_icon(test_client) -> None:
+    """
+    PUT on a system category should succeed (200) and return the updated values.
+
+    System categories can be renamed or have their colour/icon changed so users
+    can personalise them. Only DELETE is blocked for system categories.
+    """
+    token = _register_and_login(test_client)
+
+    categories = test_client.get(
+        "/api/v1/categories", headers=_auth_headers(token)
+    ).json()
+    system_cat = next(c for c in categories if c["is_system"])
+
+    new_name = f"Custom {system_cat['name']}"
+    response = test_client.put(
+        f"/api/v1/categories/{system_cat['id']}",
+        json={"name": new_name, "colour": "#ff5733", "icon": "⭐"},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == new_name
+    assert body["colour"] == "#ff5733"
+    assert body["icon"] == "⭐"
+    # Editing does not change is_system — it should still be True
+    assert body["is_system"] is True
+
+
+# =============================================================================
+# Duplicate name protection (Fix 2)
+# =============================================================================
+
+
+def test_cannot_create_duplicate_category_name(test_client) -> None:
+    """
+    Creating a category whose name already exists (non-deleted) for the same
+    user should return 422.
+
+    This applies to both custom and system categories — "Food & Drink" is a
+    system category seeded on registration, so trying to create a custom
+    category with that name should also fail.
+    """
+    token = _register_and_login(test_client)
+
+    # First creation succeeds
+    first = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Hobbies"},
+        headers=_auth_headers(token),
+    )
+    assert first.status_code == 201
+
+    # Second with identical name fails
+    second = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Hobbies"},
+        headers=_auth_headers(token),
+    )
+    assert second.status_code == 422
+    assert "already exists" in second.json()["detail"]
+
+
+def test_cannot_update_category_to_duplicate_name(test_client) -> None:
+    """
+    Renaming a category to a name that already belongs to another non-deleted
+    category for the same user should return 422.
+
+    Updating a category to keep its own current name (no-op rename) must still
+    succeed — the duplicate check excludes the category being updated.
+    """
+    token = _register_and_login(test_client)
+
+    alpha = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Alpha"},
+        headers=_auth_headers(token),
+    ).json()
+    test_client.post(
+        "/api/v1/categories",
+        json={"name": "Beta"},
+        headers=_auth_headers(token),
+    )
+
+    # Renaming Alpha → Beta collides with the existing Beta category
+    response = test_client.put(
+        f"/api/v1/categories/{alpha['id']}",
+        json={"name": "Beta"},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+    assert "already exists" in response.json()["detail"]
+
+    # Renaming Alpha → Alpha (no-op) must succeed
+    noop = test_client.put(
+        f"/api/v1/categories/{alpha['id']}",
+        json={"name": "Alpha"},
+        headers=_auth_headers(token),
+    )
+    assert noop.status_code == 200
+
+
 def test_deleted_category_does_not_appear_in_list(test_client) -> None:
     """
     After soft-deleting a custom category, it should no longer appear in the

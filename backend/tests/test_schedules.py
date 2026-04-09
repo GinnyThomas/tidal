@@ -117,6 +117,9 @@ def test_create_schedule_returns_201(test_client) -> None:
     assert "id" in body
     assert "user_id" in body
     assert "created_at" in body
+    # category_name is denormalised from the Category row
+    assert "category_name" in body
+    assert isinstance(body["category_name"], str)
 
 
 def test_create_schedule_without_auth_returns_401(test_client) -> None:
