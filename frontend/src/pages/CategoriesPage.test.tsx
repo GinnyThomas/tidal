@@ -218,6 +218,50 @@ describe('CategoriesPage', () => {
     })
 
     // =========================================================================
+    // Edit button (per-row category edit)
+    // =========================================================================
+
+    it('shows an Edit button next to the Hide button on each category row', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeCategory({ id: 'cat-1', name: 'Food & Drink' })],
+        })
+
+        render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    })
+
+    it('clicking Edit opens AddCategoryForm pre-populated with that category', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeCategory({ id: 'cat-1', name: 'Food & Drink', colour: '#0ea5e9', icon: null })],
+        })
+
+        render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+
+        expect(screen.getByLabelText(/category name/i)).toHaveValue('Food & Drink')
+    })
+
+    it('re-fetches and closes the edit form after a successful update', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeCategory({ id: 'cat-1', name: 'Food & Drink' })] })
+            .mockResolvedValueOnce({ data: [makeCategory({ id: 'cat-1', name: 'Food Updated' })] })
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+        await userEvent.click(screen.getByRole('button', { name: /update category/i }))
+
+        expect(await screen.findByText('Food Updated')).toBeInTheDocument()
+        expect(screen.queryByLabelText(/category name/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
     // Visual distinction for hidden categories
     // =========================================================================
 

@@ -33,6 +33,7 @@ function CategoriesPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
+    const [editingCategory, setEditingCategory] = useState<Category | null>(null)
     const [includeHidden, setIncludeHidden] = useState(false)
 
     const fetchCategories = async (withHidden: boolean) => {
@@ -78,6 +79,17 @@ function CategoriesPage() {
 
     const handleCategoryAdded = () => {
         setShowForm(false)
+        fetchCategories(includeHidden)
+    }
+
+    const handleEditCategory = (category: Category) => {
+        // Close the add form so only one form is visible at a time
+        setShowForm(false)
+        setEditingCategory(category)
+    }
+
+    const handleCategoryUpdated = () => {
+        setEditingCategory(null)
         fetchCategories(includeHidden)
     }
 
@@ -129,7 +141,7 @@ function CategoriesPage() {
                     <h2 className="text-2xl font-bold text-slate-100">Categories</h2>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setShowForm((prev) => !prev)}
+                            onClick={() => { setShowForm((prev) => !prev); setEditingCategory(null) }}
                             className="btn-primary cursor-pointer"
                         >
                             Add Category
@@ -144,12 +156,26 @@ function CategoriesPage() {
                     </div>
                 </div>
 
-                {/* Inline form */}
+                {/* Add form — shown when "Add Category" is toggled */}
                 {showForm && (
                     <div className="mb-6">
                         <AddCategoryForm
                             topLevelCategories={topLevelCategories}
                             onCategoryAdded={handleCategoryAdded}
+                        />
+                    </div>
+                )}
+
+                {/* Edit form — shown when an Edit button is clicked.
+                    keyed on id so switching to a different category remounts with fresh state. */}
+                {editingCategory && (
+                    <div className="mb-6">
+                        <AddCategoryForm
+                            key={editingCategory.id}
+                            topLevelCategories={topLevelCategories}
+                            onCategoryAdded={() => {}}
+                            editingCategory={editingCategory}
+                            onCategoryUpdated={handleCategoryUpdated}
                         />
                     </div>
                 )}
@@ -183,12 +209,20 @@ function CategoriesPage() {
                                     {/* Parent row — styled as section header */}
                                     <div className="flex items-center justify-between px-4 py-3">
                                         <span className="font-semibold text-slate-100">{parent.name}</span>
-                                        <button
-                                            onClick={() => handleToggleVisibility(parent.id)}
-                                            className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                        >
-                                            {parent.is_hidden ? 'Unhide' : 'Hide'}
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleEditCategory(parent)}
+                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleToggleVisibility(parent.id)}
+                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                            >
+                                                {parent.is_hidden ? 'Unhide' : 'Hide'}
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Child rows — teal left border for visual hierarchy */}
@@ -201,12 +235,20 @@ function CategoriesPage() {
                                                     className="flex items-center justify-between pl-6 pr-4 py-2.5 border-l-2 border-teal-500 ml-4"
                                                 >
                                                     <span className="text-slate-300 text-sm">{child.name}</span>
-                                                    <button
-                                                        onClick={() => handleToggleVisibility(child.id)}
-                                                        className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                                    >
-                                                        {child.is_hidden ? 'Unhide' : 'Hide'}
-                                                    </button>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => handleEditCategory(child)}
+                                                            className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleToggleVisibility(child.id)}
+                                                            className="text-xs px-2 py-0.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                        >
+                                                            {child.is_hidden ? 'Unhide' : 'Hide'}
+                                                        </button>
+                                                    </div>
                                                 </li>
                                             ))}
                                         </ul>
