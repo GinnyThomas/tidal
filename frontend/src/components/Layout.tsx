@@ -71,11 +71,17 @@ function Layout({ children }: Props) {
                     <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
                 </div>
 
-                {/* User identity + logout */}
+                {/* User identity + account actions + logout */}
                 <div className="flex items-center gap-3">
                     {userEmail && (
                         <span className="text-sm text-slate-400 hidden sm:inline">{userEmail}</span>
                     )}
+                    <Link
+                        to="/change-password"
+                        className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
+                    >
+                        Change Password
+                    </Link>
                     <button
                         onClick={handleLogout}
                         className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors cursor-pointer"

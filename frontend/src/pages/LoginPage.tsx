@@ -15,10 +15,12 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import DemoButton from '../components/DemoButton'
 
 function LoginPage() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const navigate = useNavigate()
 
@@ -81,14 +83,26 @@ function LoginPage() {
                             >
                                 Password
                             </label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="input-base"
-                                required
-                            />
+                            {/* Relative wrapper so the toggle button can be
+                                absolutely positioned inside the right edge of the input. */}
+                            <div className="relative">
+                                <input
+                                    id="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="input-base pr-10"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    onClick={() => setShowPassword(v => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                                >
+                                    {showPassword ? '🔒' : '👁️'}
+                                </button>
+                            </div>
                         </div>
 
                         {error && (
@@ -104,6 +118,15 @@ function LoginPage() {
                             Log In
                         </button>
                     </form>
+
+                    {/* Divider between login form and demo button */}
+                    <div className="flex items-center gap-3 my-4">
+                        <div className="flex-1 border-t border-ocean-700" />
+                        <span className="text-slate-500 text-xs">or</span>
+                        <div className="flex-1 border-t border-ocean-700" />
+                    </div>
+
+                    <DemoButton />
 
                     <p className="text-center text-sm text-slate-400 mt-6">
                         Don't have an account?{' '}

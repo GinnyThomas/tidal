@@ -6,6 +6,7 @@ import CategoriesPage from './pages/CategoriesPage.tsx'
 import MonthlyPlanView from './pages/MonthlyPlanView.tsx'
 import TransactionsPage from './pages/TransactionsPage.tsx'
 import SchedulesPage from './pages/SchedulesPage.tsx'
+import ChangePasswordPage from './pages/ChangePasswordPage.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
 
 // App defines the route tree only.
@@ -24,7 +25,8 @@ function App() {
       <Route path="/accounts" element={<ProtectedRoute><AccountsPage /></ProtectedRoute>} />
       <Route path="/categories" element={<ProtectedRoute><CategoriesPage /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsPage /></ProtectedRoute>} />
-      <Route path="/schedules"    element={<ProtectedRoute><SchedulesPage /></ProtectedRoute>} />
+      <Route path="/schedules"       element={<ProtectedRoute><SchedulesPage /></ProtectedRoute>} />
+      <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

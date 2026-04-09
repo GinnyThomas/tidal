@@ -230,6 +230,75 @@ def test_login_with_uppercase_email_succeeds(test_client) -> None:
     assert "access_token" in response.json()
 
 
+# =============================================================================
+# Change password tests
+# =============================================================================
+
+
+def test_change_password_success(test_client) -> None:
+    """
+    Changing password with the correct current_password should return 204.
+    The user should then be able to log in using the new password.
+    """
+    # Arrange: register and log in to get a token
+    test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+    login_res = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+    token = login_res.json()["access_token"]
+
+    # Act: change the password
+    response = test_client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "securepassword", "new_password": "newpassword123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 204
+
+    # Assert: can now log in with the new password
+    new_login = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "ginny@example.com", "password": "newpassword123"},
+    )
+    assert new_login.status_code == 200
+
+
+def test_change_password_wrong_current_returns_400(test_client) -> None:
+    """
+    Submitting the wrong current_password should return 400 Bad Request.
+    The user's stored password must remain unchanged.
+    """
+    # Arrange
+    test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+    login_res = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+    token = login_res.json()["access_token"]
+
+    # Act: submit wrong current password
+    response = test_client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": "wrongpassword", "new_password": "newpassword123"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 400
+
+    # Assert: original password still works (password was not changed)
+    original_login = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "ginny@example.com", "password": "securepassword"},
+    )
+    assert original_login.status_code == 200
+
+
 def test_duplicate_email_check_is_case_insensitive(test_client) -> None:
     """
     Attempting to register GINNY@EXAMPLE.COM when ginny@example.com already

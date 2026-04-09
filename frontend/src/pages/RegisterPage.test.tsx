@@ -35,6 +35,21 @@ describe('RegisterPage', () => {
         expect(await screen.findByText(/email already exists/i)).toBeInTheDocument()
     })
 
+    it('toggles the password field between password and text type', async () => {
+        render(<MemoryRouter><RegisterPage /></MemoryRouter>)
+        const field = screen.getByLabelText(/^password$/i, { selector: 'input' })
+        expect(field).toHaveAttribute('type', 'password')
+        // Two toggle buttons exist initially (password + confirmPassword).
+        // [0] is the password field toggle.
+        await userEvent.click(screen.getAllByLabelText(/show password/i)[0])
+        expect(field).toHaveAttribute('type', 'text')
+    })
+
+    it('renders a Try Demo button', () => {
+        render(<MemoryRouter><RegisterPage /></MemoryRouter>)
+        expect(screen.getByRole('button', { name: /try demo/i })).toBeInTheDocument()
+    })
+
     it('logs in and redirects to dashboard after successful registration', async () => {
         vi.mocked(axios.post)
             .mockResolvedValueOnce({ data: { email: 'new@test.com' } })
