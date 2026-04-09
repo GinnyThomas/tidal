@@ -4,12 +4,15 @@
 //          Wrapped in Layout for navigation.
 //
 // Features:
-//   - Fetch: accounts, categories, and schedules are loaded together on mount
-//     via Promise.all. Re-fetches when refreshKey changes (after adding a schedule).
+//   - Fetch: accounts and schedules are loaded together on mount via Promise.all.
+//     Re-fetches when refreshKey changes (after adding a schedule) or when
+//     includeInactive is toggled.
 //   - List: shows name, frequency, amount/currency, next occurrence, account,
 //     category, and active status for each schedule.
 //   - Active toggle: clicking the active/inactive badge calls
 //     PATCH /api/v1/schedules/{id}/toggle-active and updates state optimistically.
+//   - Show Inactive toggle: pill button passes ?include_inactive=true to the API.
+//     Same pattern as CategoriesPage's "Show Hidden" button.
 //   - Form: "Add Schedule" button opens AddScheduleForm.
 //     Clicking again closes it.
 //   - Re-fetch: after form submission succeeds, refreshKey increments which
@@ -39,7 +42,7 @@ type Schedule = {
     end_date: string | null
     next_occurrence: string | null
     auto_generate: boolean
-    is_active: boolean
+    active: boolean
     payee: string | null
     note: string | null
 }
@@ -67,12 +70,14 @@ function SchedulesPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showAddForm, setShowAddForm] = useState(false)
+    const [includeInactive, setIncludeInactive] = useState(false)
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
 
     // Fetch accounts and schedules together.
     // Accounts are needed to resolve account names in the table.
     // Category names come directly from the API via category_name on each schedule.
+    // Re-runs when includeInactive changes (Show Inactive toggle) or after a form add.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -81,7 +86,10 @@ function SchedulesPage() {
 
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
-            axios.get(`${getApiBaseUrl()}/api/v1/schedules`, { headers }),
+            axios.get(`${getApiBaseUrl()}/api/v1/schedules`, {
+                headers,
+                params: { include_inactive: includeInactive },
+            }),
         ]).then(([accountsRes, schedulesRes]) => {
             setAccounts(accountsRes.data)
             setSchedules(schedulesRes.data)
@@ -91,7 +99,7 @@ function SchedulesPage() {
             setLoading(false)
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [refreshKey])
+    }, [includeInactive, refreshKey])
 
     // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
@@ -111,7 +119,7 @@ function SchedulesPage() {
             )
             // Updates local state after the request succeeds (without a full re-fetch)
             setSchedules(prev =>
-                prev.map(s => s.id === schedule.id ? { ...s, is_active: !s.is_active } : s)
+                prev.map(s => s.id === schedule.id ? { ...s, active: !s.active } : s)
             )
         } catch {
             // Silent failure — a future improvement could show a toast here
@@ -143,12 +151,21 @@ function SchedulesPage() {
                 {/* Page header */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold text-slate-100">Schedules</h2>
-                    <button
-                        onClick={() => setShowAddForm((prev) => !prev)}
-                        className="btn-primary cursor-pointer"
-                    >
-                        Add Schedule
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowAddForm((prev) => !prev)}
+                            className="btn-primary cursor-pointer"
+                        >
+                            Add Schedule
+                        </button>
+                        {/* Pill toggle — exact button text required by tests */}
+                        <button
+                            onClick={() => setIncludeInactive((prev) => !prev)}
+                            className="bg-ocean-700 hover:bg-ocean-600 border border-ocean-600 text-slate-300 hover:text-white px-4 py-2 rounded-full text-sm font-medium transition-colors cursor-pointer"
+                        >
+                            {includeInactive ? 'Hide Inactive' : 'Show Inactive'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Inline form */}
@@ -206,10 +223,10 @@ function SchedulesPage() {
                                             <button
                                                 onClick={() => handleActiveToggle(s)}
                                                 className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
-                                                    s.is_active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
+                                                    s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
                                                 }`}
                                             >
-                                                {s.is_active ? 'Active' : 'Inactive'}
+                                                {s.active ? 'Active' : 'Inactive'}
                                             </button>
                                         </td>
                                     </tr>
