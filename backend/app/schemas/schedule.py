@@ -68,6 +68,12 @@ class ScheduleResponse(BaseModel):
 
     amount is serialised as a string (not a JSON number) to avoid IEEE 754
     precision loss on the JavaScript client side — same pattern as transactions.
+
+    category_name and category_icon are denormalised from the Category row
+    so the client can display the category without a separate lookup request.
+    They are populated by the router — not read from the Schedule ORM object
+    directly (which is why we build a dict in the router rather than returning
+    the ORM object straight to Pydantic).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -89,6 +95,9 @@ class ScheduleResponse(BaseModel):
     active: bool
     note: Optional[str]
     created_at: datetime
+    # Denormalised from Category — populated by the router helper
+    category_name: str
+    category_icon: Optional[str]
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

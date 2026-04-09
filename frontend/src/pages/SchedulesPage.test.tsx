@@ -42,6 +42,8 @@ const makeSchedule = (overrides = {}) => ({
     name: 'Netflix',
     account_id: 'acc-001',
     category_id: 'cat-001',
+    category_name: 'Bills',
+    category_icon: null,
     amount: '15.99',
     currency: 'GBP',
     frequency: 'monthly',

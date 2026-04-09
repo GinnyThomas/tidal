@@ -30,6 +30,8 @@ type Transaction = {
     id: string
     account_id: string
     category_id: string
+    category_name: string
+    category_icon: string | null
     date: string
     payee: string | null
     amount: string
@@ -275,7 +277,8 @@ function TransactionsPage() {
                                             {tx.payee ?? <span className="text-slate-500 italic">—</span>}
                                         </td>
                                         <td className="px-4 py-3 text-slate-300">
-                                            {categoryById.get(tx.category_id) ?? '—'}
+                                            {tx.category_icon && <span className="mr-1">{tx.category_icon}</span>}
+                                            {tx.category_name || '—'}
                                         </td>
                                         <td className="px-4 py-3 text-slate-300">
                                             {accountById.get(tx.account_id) ?? '—'}

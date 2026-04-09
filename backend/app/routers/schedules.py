@@ -129,6 +129,38 @@ def _get_category_or_404(
     return category
 
 
+def _build_sched_response(sched: Schedule, category: Category) -> dict:
+    """
+    Build a dict matching ScheduleResponse, adding category_name and
+    category_icon from the related Category row.
+
+    Same pattern as _build_tx_response in transactions.py — the new fields
+    are not attributes on the Schedule ORM model, so we build a dict manually
+    rather than returning the ORM object directly to Pydantic.
+    """
+    return {
+        "id": sched.id,
+        "user_id": sched.user_id,
+        "account_id": sched.account_id,
+        "category_id": sched.category_id,
+        "name": sched.name,
+        "payee": sched.payee,
+        "amount": sched.amount,
+        "currency": sched.currency,
+        "frequency": sched.frequency,
+        "interval": sched.interval,
+        "day_of_month": sched.day_of_month,
+        "start_date": sched.start_date,
+        "end_date": sched.end_date,
+        "auto_generate": sched.auto_generate,
+        "active": sched.active,
+        "note": sched.note,
+        "created_at": sched.created_at,
+        "category_name": category.name,
+        "category_icon": category.icon,
+    }
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -143,7 +175,7 @@ def create_schedule(
     schedule_in: ScheduleCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Schedule:
+) -> dict:
     """
     Creates a new recurring schedule for the current user.
 
@@ -151,7 +183,8 @@ def create_schedule(
     before inserting — prevents cross-user injection by guessing UUIDs.
     """
     _get_account_or_404(schedule_in.account_id, current_user.id, db)
-    _get_category_or_404(schedule_in.category_id, current_user.id, db)
+    # Capture the category so we can include its name/icon in the response.
+    category = _get_category_or_404(schedule_in.category_id, current_user.id, db)
 
     schedule = Schedule(
         user_id=current_user.id,
@@ -173,7 +206,7 @@ def create_schedule(
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
-    return schedule
+    return _build_sched_response(schedule, category)
 
 
 @router.get(
@@ -184,7 +217,7 @@ def list_schedules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     include_inactive: bool = Query(default=False),
-) -> list[Schedule]:
+) -> list[dict]:
     """
     Returns all non-deleted schedules for the current user.
 
@@ -205,7 +238,18 @@ def list_schedules(
         # Uses .is_(True) — consistent with SQLAlchemy best practice for booleans.
         query = query.filter(Schedule.active.is_(True))
 
-    return query.all()
+    schedules = query.all()
+
+    # Batch-fetch all referenced categories in a single query to avoid N+1.
+    category_ids = {s.category_id for s in schedules}
+    cat_list = (
+        db.query(Category)
+        .filter(Category.id.in_(category_ids))
+        .all()
+    )
+    cat_map = {c.id: c for c in cat_list}
+
+    return [_build_sched_response(s, cat_map[s.category_id]) for s in schedules]
 
 
 @router.get(
@@ -216,13 +260,15 @@ def get_schedule(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Schedule:
+) -> dict:
     """
     Returns a single schedule by ID.
 
     Returns 404 if not found, soft-deleted, or belongs to another user.
     """
-    return _get_schedule_or_404(schedule_id, current_user.id, db)
+    sched = _get_schedule_or_404(schedule_id, current_user.id, db)
+    category = db.query(Category).filter(Category.id == sched.category_id).first()
+    return _build_sched_response(sched, category)
 
 
 @router.put(
@@ -234,7 +280,7 @@ def update_schedule(
     schedule_in: ScheduleUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Schedule:
+) -> dict:
     """
     Updates a schedule with the provided fields (partial update).
 
@@ -272,7 +318,9 @@ def update_schedule(
 
     db.commit()
     db.refresh(schedule)
-    return schedule
+    # Look up the (potentially updated) category for the response
+    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    return _build_sched_response(schedule, category)
 
 
 @router.patch(
@@ -283,7 +331,7 @@ def toggle_active(
     schedule_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Schedule:
+) -> dict:
     """
     Flips the active flag on a schedule.
 
@@ -302,7 +350,8 @@ def toggle_active(
     schedule.active = not schedule.active
     db.commit()
     db.refresh(schedule)
-    return schedule
+    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    return _build_sched_response(schedule, category)
 
 
 @router.delete(

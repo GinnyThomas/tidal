@@ -41,6 +41,8 @@ const makeTransaction = (overrides = {}) => ({
     id: 'tx-001',
     account_id: 'acc-001',
     category_id: 'cat-001',
+    category_name: 'Groceries',
+    category_icon: null,
     parent_transaction_id: null,
     schedule_id: null,
     date: '2026-04-01',

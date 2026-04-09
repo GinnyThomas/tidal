@@ -208,7 +208,10 @@ function CategoriesPage() {
                                 >
                                     {/* Parent row — styled as section header */}
                                     <div className="flex items-center justify-between px-4 py-3">
-                                        <span className="font-semibold text-slate-100">{parent.name}</span>
+                                        <span className="font-semibold text-slate-100">
+                                            {parent.icon && <span className="mr-2">{parent.icon}</span>}
+                                            {parent.name}
+                                        </span>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handleEditCategory(parent)}
@@ -234,7 +237,10 @@ function CategoriesPage() {
                                                     style={child.is_hidden ? { opacity: 0.4 } : {}}
                                                     className="flex items-center justify-between pl-6 pr-4 py-2.5 border-l-2 border-teal-500 ml-4"
                                                 >
-                                                    <span className="text-slate-300 text-sm">{child.name}</span>
+                                                    <span className="text-slate-300 text-sm">
+                                                        {child.icon && <span className="mr-1.5">{child.icon}</span>}
+                                                        {child.name}
+                                                    </span>
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             onClick={() => handleEditCategory(child)}

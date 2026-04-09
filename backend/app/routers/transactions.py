@@ -152,6 +152,42 @@ def _get_category_or_404(
     return category
 
 
+def _build_tx_response(tx: Transaction, category: Category) -> dict:
+    """
+    Build a dict matching TransactionResponse, adding category_name and
+    category_icon from the related Category row.
+
+    Why return a dict instead of the ORM object?
+      TransactionResponse now includes category_name and category_icon, which
+      are NOT attributes on the Transaction model. Pydantic's from_attributes
+      reads ORM attributes by name — it can't traverse the relationship to get
+      category.name. Building the dict ourselves lets us attach those values
+      without needing SQLAlchemy relationship loading.
+
+    FastAPI validates dicts against response_model the same way it validates
+    ORM objects, so the field serializers (Decimal → str) still fire.
+    """
+    return {
+        "id": tx.id,
+        "user_id": tx.user_id,
+        "account_id": tx.account_id,
+        "category_id": tx.category_id,
+        "schedule_id": tx.schedule_id,
+        "parent_transaction_id": tx.parent_transaction_id,
+        "date": tx.date,
+        "payee": tx.payee,
+        "amount": tx.amount,
+        "currency": tx.currency,
+        "exchange_rate": tx.exchange_rate,
+        "transaction_type": tx.transaction_type,
+        "status": tx.status,
+        "note": tx.note,
+        "created_at": tx.created_at,
+        "category_name": category.name,
+        "category_icon": category.icon,
+    }
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -166,7 +202,7 @@ def create_transfer(
     transfer_in: TransferCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[Transaction]:
+) -> list[dict]:
     """
     Creates two linked Transaction rows atomically — a debit leg and a
     credit leg — representing a transfer between two of the user's accounts.
@@ -186,10 +222,11 @@ def create_transfer(
             detail="Transfer source and destination accounts must be different.",
         )
 
-    # Fix 5: validate accounts and category all belong to the current user
+    # Fix 5: validate accounts and category all belong to the current user.
+    # Capture the category so we can include its name/icon in the response.
     _get_account_or_404(transfer_in.from_account_id, current_user.id, db)
     _get_account_or_404(transfer_in.to_account_id, current_user.id, db)
-    _get_category_or_404(transfer_in.category_id, current_user.id, db)
+    category = _get_category_or_404(transfer_in.category_id, current_user.id, db)
 
     # Generate the debit's UUID in Python so we can pass it to the credit leg
     # as parent_transaction_id WITHOUT needing a DB flush first.
@@ -233,7 +270,7 @@ def create_transfer(
     db.commit()
     db.refresh(debit)
     db.refresh(credit)
-    return [debit, credit]
+    return [_build_tx_response(debit, category), _build_tx_response(credit, category)]
 
 
 @router.post(
@@ -245,7 +282,7 @@ def create_transaction(
     transaction_in: TransactionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Transaction:
+) -> dict:
     """
     Creates a single transaction (expense, income, or refund).
 
@@ -265,9 +302,10 @@ def create_transaction(
             detail="Use POST /api/v1/transactions/transfer to create transfers.",
         )
 
-    # Fix 1: validate account and category ownership
+    # Fix 1: validate account and category ownership.
+    # Capture the category so we can include its name/icon in the response.
     _get_account_or_404(transaction_in.account_id, current_user.id, db)
-    _get_category_or_404(transaction_in.category_id, current_user.id, db)
+    category = _get_category_or_404(transaction_in.category_id, current_user.id, db)
 
     # Fix 3: refunds must reference a parent transaction
     if (
@@ -300,7 +338,7 @@ def create_transaction(
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
-    return transaction
+    return _build_tx_response(transaction, category)
 
 
 @router.get(
@@ -312,7 +350,7 @@ def list_transactions(
     current_user: User = Depends(get_current_user),
     account_id: Optional[uuid.UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
-) -> list[Transaction]:
+) -> list[dict]:
     """
     Returns all non-deleted transactions for the current user.
 
@@ -337,7 +375,19 @@ def list_transactions(
         status_list = [s.strip() for s in status.split(",") if s.strip()]
         query = query.filter(Transaction.status.in_(status_list))
 
-    return query.all()
+    transactions = query.all()
+
+    # Batch-fetch all referenced categories in a single query to avoid N+1.
+    # {tx.category_id for tx in transactions} collects the unique IDs.
+    category_ids = {tx.category_id for tx in transactions}
+    cat_list = (
+        db.query(Category)
+        .filter(Category.id.in_(category_ids))
+        .all()
+    )
+    cat_map = {c.id: c for c in cat_list}
+
+    return [_build_tx_response(tx, cat_map[tx.category_id]) for tx in transactions]
 
 
 @router.get(
@@ -348,13 +398,15 @@ def get_transaction(
     transaction_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Transaction:
+) -> dict:
     """
     Returns a single transaction by ID.
 
     Returns 404 if not found, soft-deleted, or belongs to another user.
     """
-    return _get_transaction_or_404(transaction_id, current_user.id, db)
+    tx = _get_transaction_or_404(transaction_id, current_user.id, db)
+    category = db.query(Category).filter(Category.id == tx.category_id).first()
+    return _build_tx_response(tx, category)
 
 
 @router.put(
@@ -366,7 +418,7 @@ def update_transaction(
     transaction_in: TransactionUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Transaction:
+) -> dict:
     """
     Updates a transaction with the provided fields (partial update).
 
@@ -407,7 +459,9 @@ def update_transaction(
 
     db.commit()
     db.refresh(transaction)
-    return transaction
+    # Look up the (potentially updated) category for the response
+    category = db.query(Category).filter(Category.id == transaction.category_id).first()
+    return _build_tx_response(transaction, category)
 
 
 @router.delete(

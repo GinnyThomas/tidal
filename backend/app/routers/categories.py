@@ -14,11 +14,15 @@
 #   another user's categories.
 #
 # System category protection:
-#   PUT and DELETE check is_system and raise 403 if True.
-#   Why 403 and not 422 or 400?
-#     403 = "Forbidden" — you are authenticated, your request is valid, but
-#     you don't have permission for THIS specific action on THIS resource.
-#     It's semantically precise: the issue is permission, not data validity.
+#   DELETE checks is_system and raises 403 if True — system categories
+#   cannot be deleted because transactions and budgets reference them.
+#   PUT does NOT block system categories — users are allowed to rename them
+#   or change their colour/icon to fit their own workflow.
+#
+# Duplicate name protection:
+#   POST and PUT reject a name that already exists (non-deleted) for the same
+#   user. This applies to both system and custom categories. The check is
+#   case-sensitive, matching how names are stored.
 #
 # is_system on create:
 #   The POST endpoint never accepts is_system from the client.
@@ -129,6 +133,19 @@ def create_category(
     belongs to the current user, and has not been soft-deleted. This prevents
     orphaned child categories and cross-user hierarchy attacks.
     """
+    # Reject duplicate names within the same user's category list.
+    # This includes both system and custom categories so the list stays clean.
+    existing_name = db.query(Category).filter(
+        Category.user_id == current_user.id,
+        Category.name == category_in.name,
+        Category.deleted_at.is_(None),
+    ).first()
+    if existing_name is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A category with this name already exists.",
+        )
+
     if category_in.parent_category_id is not None:
         _get_category_or_404(category_in.parent_category_id, current_user.id, db)
 
@@ -158,18 +175,14 @@ def update_category(
     current_user: User = Depends(get_current_user),
 ) -> Category:
     """
-    Updates a custom category. System categories cannot be modified.
+    Updates a category. Both system and custom categories can be edited.
+    System categories can be renamed or have their colour/icon changed to
+    suit the user's workflow — only deletion is blocked for system categories.
 
     Uses exclude_unset=True so only fields the client explicitly sent are
     changed — omitted fields keep their existing values.
     """
     category = _get_category_or_404(category_id, current_user.id, db)
-
-    if category.is_system:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="System categories cannot be modified.",
-        )
 
     update_data = category_in.model_dump(exclude_unset=True)
 
@@ -182,6 +195,21 @@ def update_category(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"'{field}' cannot be null.",
+            )
+
+    # Reject if the new name collides with another existing category for this user.
+    # We exclude the current category from the check so a no-op rename succeeds.
+    if "name" in update_data:
+        duplicate = db.query(Category).filter(
+            Category.user_id == current_user.id,
+            Category.name == update_data["name"],
+            Category.id != category_id,
+            Category.deleted_at.is_(None),
+        ).first()
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A category with this name already exists.",
             )
 
     for field, value in update_data.items():

@@ -28,6 +28,8 @@ type Schedule = {
     name: string
     account_id: string
     category_id: string
+    category_name: string
+    category_icon: string | null
     amount: string
     currency: string
     frequency: string
@@ -204,7 +206,8 @@ function SchedulesPage() {
                                             {accountById.get(s.account_id) ?? '—'}
                                         </td>
                                         <td className="px-4 py-3 text-slate-300">
-                                            {categoryById.get(s.category_id) ?? '—'}
+                                            {s.category_icon && <span className="mr-1">{s.category_icon}</span>}
+                                            {s.category_name || '—'}
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             {/* Button enables keyboard access and the click-to-toggle behaviour */}
