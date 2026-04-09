@@ -4,7 +4,7 @@
 //
 // Test strategy:
 //   Four render states (loading, error, empty, list), active toggle,
-//   and form toggle for Add Schedule.
+//   Show Inactive toggle, and form toggle for Add Schedule.
 //
 // Two axios.get calls happen on mount: accounts, schedules.
 // Mocks must be queued in that order. Categories are no longer fetched by
@@ -54,7 +54,7 @@ const makeSchedule = (overrides = {}) => ({
     end_date: null,
     next_occurrence: '2026-05-01',
     auto_generate: true,
-    is_active: true,
+    active: true,
     payee: null,
     note: null,
     ...overrides,
@@ -117,7 +117,7 @@ describe('SchedulesPage', () => {
     it('renders a list of schedules after a successful fetch', async () => {
         mockFetch(
             [makeAccount({ id: 'acc-001', name: 'Current Account' })],
-            [makeSchedule({ name: 'Netflix', amount: '15.99', frequency: 'monthly', next_occurrence: '2026-05-01', is_active: true, category_name: 'Bills' })],
+            [makeSchedule({ name: 'Netflix', amount: '15.99', frequency: 'monthly', next_occurrence: '2026-05-01', active: true, category_name: 'Bills' })],
         )
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
@@ -141,7 +141,7 @@ describe('SchedulesPage', () => {
     it('toggles a schedule from active to inactive when the badge is clicked', async () => {
         mockFetch(
             [makeAccount()],
-            [makeSchedule({ id: 'sch-001', is_active: true })],
+            [makeSchedule({ id: 'sch-001', active: true })],
         )
         vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
 
@@ -158,20 +158,20 @@ describe('SchedulesPage', () => {
             )
         })
 
-        // Optimistic update: badge now shows "Inactive"
-        expect(await screen.findByRole('button', { name: /inactive/i })).toBeInTheDocument()
+        // Optimistic update: badge now shows "Inactive" (anchored to avoid matching "Show Inactive")
+        expect(await screen.findByRole('button', { name: /^inactive$/i })).toBeInTheDocument()
     })
 
     it('toggles a schedule from inactive to active when the badge is clicked', async () => {
         mockFetch(
             [makeAccount()],
-            [makeSchedule({ id: 'sch-001', is_active: false })],
+            [makeSchedule({ id: 'sch-001', active: false })],
         )
         vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
 
-        await userEvent.click(await screen.findByRole('button', { name: /inactive/i }))
+        await userEvent.click(await screen.findByRole('button', { name: /^inactive$/i }))
 
         await waitFor(() => {
             expect(vi.mocked(axios.patch)).toHaveBeenCalledWith(
@@ -183,6 +183,57 @@ describe('SchedulesPage', () => {
 
         // Optimistic update: badge now shows "Active"
         expect(await screen.findByRole('button', { name: /^active$/i })).toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Show Inactive toggle
+    // =========================================================================
+
+    it('shows a Show Inactive button once loaded', async () => {
+        mockFetch()
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        expect(await screen.findByRole('button', { name: /show inactive/i })).toBeInTheDocument()
+    })
+
+    it('re-fetches with include_inactive=true when Show Inactive is clicked', async () => {
+        // Initial load (active only) then re-fetch after toggle
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [] })   // initial: accounts
+            .mockResolvedValueOnce({ data: [] })   // initial: schedules
+            .mockResolvedValueOnce({ data: [] })   // re-fetch: accounts
+            .mockResolvedValueOnce({ data: [] })   // re-fetch: schedules
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+        await screen.findByText(/no schedules/i)
+
+        await userEvent.click(screen.getByRole('button', { name: /show inactive/i }))
+
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const schedCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/schedules') &&
+                    (config as { params?: { include_inactive?: boolean } })?.params?.include_inactive === true
+            )
+            expect(schedCall).toBeDefined()
+        })
+    })
+
+    it('button text toggles to Hide Inactive after clicking Show Inactive', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [] })
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+        await screen.findByText(/no schedules/i)
+
+        await userEvent.click(screen.getByRole('button', { name: /show inactive/i }))
+
+        expect(await screen.findByRole('button', { name: /hide inactive/i })).toBeInTheDocument()
     })
 
     // =========================================================================
