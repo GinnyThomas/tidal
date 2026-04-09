@@ -49,11 +49,6 @@ type Account = {
     name: string
 }
 
-type Category = {
-    id: string
-    name: string
-}
-
 // --- Badge colour maps ---
 // Active badge is a <button> (for the inline toggle).
 
@@ -68,7 +63,6 @@ const ACTIVE_BADGE: Record<string, string> = {
 
 function SchedulesPage() {
     const [accounts, setAccounts] = useState<Account[]>([])
-    const [categories, setCategories] = useState<Category[]>([])
     const [schedules, setSchedules] = useState<Schedule[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -76,8 +70,9 @@ function SchedulesPage() {
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
 
-    // Fetch accounts, categories, and schedules together.
-    // Accounts and categories are needed to resolve names displayed in the table.
+    // Fetch accounts and schedules together.
+    // Accounts are needed to resolve account names in the table.
+    // Category names come directly from the API via category_name on each schedule.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -86,11 +81,9 @@ function SchedulesPage() {
 
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
-            axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/schedules`, { headers }),
-        ]).then(([accountsRes, catsRes, schedulesRes]) => {
+        ]).then(([accountsRes, schedulesRes]) => {
             setAccounts(accountsRes.data)
-            setCategories(catsRes.data)
             setSchedules(schedulesRes.data)
         }).catch(() => {
             setError('Could not load schedules. Please try again.')
@@ -100,9 +93,8 @@ function SchedulesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshKey])
 
-    // Build lookup Maps so each table row can resolve names in O(1).
+    // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
-    const categoryById = new Map(categories.map(c => [c.id, c.name]))
 
     const handleScheduleAdded = () => {
         setShowAddForm(false)

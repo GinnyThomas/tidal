@@ -6,8 +6,9 @@
 //   Four render states (loading, error, empty, list), active toggle,
 //   and form toggle for Add Schedule.
 //
-// Three axios.get calls happen on mount: accounts, categories, schedules.
-// Mocks must be queued in that order.
+// Two axios.get calls happen on mount: accounts, schedules.
+// Mocks must be queued in that order. Categories are no longer fetched by
+// the page — category_name comes directly from each schedule in the API response.
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -59,15 +60,14 @@ const makeSchedule = (overrides = {}) => ({
     ...overrides,
 })
 
-// Helper: queue the three standard mocks (accounts, categories, schedules)
+// Helper: queue the two standard mocks (accounts, schedules).
+// Categories are no longer fetched by the page — category_name is on each schedule.
 function mockFetch(
     accounts = [makeAccount()],
-    categories = [makeCategory()],
     schedules: ReturnType<typeof makeSchedule>[] = [],
 ) {
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: accounts })
-        .mockResolvedValueOnce({ data: categories })
         .mockResolvedValueOnce({ data: schedules })
 }
 
@@ -86,8 +86,8 @@ describe('SchedulesPage', () => {
     // =========================================================================
 
     it('shows a loading indicator while the fetch is in progress', () => {
+        // Accounts resolves; schedules never does — page stays in loading state.
         vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: [] })
             .mockResolvedValueOnce({ data: [] })
             .mockReturnValueOnce(new Promise<never>(() => {}))
 
@@ -99,7 +99,6 @@ describe('SchedulesPage', () => {
     it('shows an error message when the fetch fails', async () => {
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [] })
-            .mockResolvedValueOnce({ data: [] })
             .mockRejectedValueOnce(new Error('Network error'))
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
@@ -108,7 +107,7 @@ describe('SchedulesPage', () => {
     })
 
     it('shows an empty-state message when there are no schedules', async () => {
-        mockFetch([], [], [])
+        mockFetch([], [])
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
 
@@ -118,8 +117,7 @@ describe('SchedulesPage', () => {
     it('renders a list of schedules after a successful fetch', async () => {
         mockFetch(
             [makeAccount({ id: 'acc-001', name: 'Current Account' })],
-            [makeCategory({ id: 'cat-001', name: 'Bills' })],
-            [makeSchedule({ name: 'Netflix', amount: '15.99', frequency: 'monthly', next_occurrence: '2026-05-01', is_active: true })],
+            [makeSchedule({ name: 'Netflix', amount: '15.99', frequency: 'monthly', next_occurrence: '2026-05-01', is_active: true, category_name: 'Bills' })],
         )
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
@@ -143,7 +141,6 @@ describe('SchedulesPage', () => {
     it('toggles a schedule from active to inactive when the badge is clicked', async () => {
         mockFetch(
             [makeAccount()],
-            [makeCategory()],
             [makeSchedule({ id: 'sch-001', is_active: true })],
         )
         vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
@@ -168,7 +165,6 @@ describe('SchedulesPage', () => {
     it('toggles a schedule from inactive to active when the badge is clicked', async () => {
         mockFetch(
             [makeAccount()],
-            [makeCategory()],
             [makeSchedule({ id: 'sch-001', is_active: false })],
         )
         vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
@@ -230,21 +226,19 @@ describe('SchedulesPage', () => {
     // =========================================================================
 
     it('re-fetches and hides the form after a schedule is added', async () => {
-        // Initial load: empty list
+        // Initial load: accounts + empty schedules
         vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: [] })
-            .mockResolvedValueOnce({ data: [makeCategory()] })
-            .mockResolvedValueOnce({ data: [] })
-        // AddScheduleForm's own account/category fetch
+            .mockResolvedValueOnce({ data: [] })                    // page: accounts
+            .mockResolvedValueOnce({ data: [] })                    // page: schedules
+        // AddScheduleForm's own account/category fetch (the form fetches both)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeCategory()] })
         // Post succeeds
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
-        // Re-fetch after add: one schedule now
+        // Re-fetch after add: accounts + one schedule now
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
-            .mockResolvedValueOnce({ data: [makeCategory()] })
             .mockResolvedValueOnce({ data: [makeSchedule({ name: 'Rent' })] })
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)

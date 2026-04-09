@@ -47,11 +47,6 @@ type Account = {
     name: string
 }
 
-type Category = {
-    id: string
-    name: string
-}
-
 // --- Status cycle ---
 // pending → cleared → reconciled → pending.
 // Only cleared and reconciled count toward budget actual spend.
@@ -85,7 +80,6 @@ const TYPE_BADGE: Record<string, string> = {
 
 function TransactionsPage() {
     const [accounts, setAccounts] = useState<Account[]>([])
-    const [categories, setCategories] = useState<Category[]>([])
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -96,9 +90,10 @@ function TransactionsPage() {
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
 
-    // Fetch accounts, categories, and transactions together.
-    // Accounts and categories are needed to resolve names displayed in the table.
-    // All three are re-fetched when filters change or after a form submission.
+    // Fetch accounts and transactions together.
+    // Accounts are needed to resolve account names in the table.
+    // Category names come directly from the API via category_name on each transaction.
+    // Both are re-fetched when filters change or after a form submission.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -111,11 +106,9 @@ function TransactionsPage() {
 
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
-            axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/transactions`, { headers, params }),
-        ]).then(([accountsRes, catsRes, txRes]) => {
+        ]).then(([accountsRes, txRes]) => {
             setAccounts(accountsRes.data)
-            setCategories(catsRes.data)
             setTransactions(txRes.data)
         }).catch(() => {
             setError('Could not load transactions. Please try again.')
@@ -125,9 +118,8 @@ function TransactionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterAccountId, filterStatus, refreshKey])
 
-    // Build lookup Maps so each table row can resolve names in O(1).
+    // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
-    const categoryById = new Map(categories.map(c => [c.id, c.name]))
 
     const handleTransactionAdded = () => {
         setShowAddForm(false)
