@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse
 from app.schemas.user import UserCreate, UserResponse
-from app.services.auth import create_access_token, hash_password, verify_password
+from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.services.categories import seed_default_categories
 
 
@@ -164,3 +164,35 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> dict:
     token = create_access_token(data={"sub": str(user.id)})
 
     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,  # 204 = success with no response body
+)
+def change_password(
+    body: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # requires valid JWT
+) -> None:
+    """
+    Changes the authenticated user's password.
+
+    Steps:
+        1. Verify body.current_password against the stored bcrypt hash.
+           If it doesn't match → 400 Bad Request. We use 400 (not 401)
+           because the user IS authenticated — their token is valid. The
+           problem is the submitted password is wrong, which is a bad
+           request, not an authentication failure.
+        2. Hash the new password and save it.
+
+    Returns 204 No Content on success — no body needed because the client
+    already knows what happened (the password was changed).
+    """
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    current_user.password_hash = hash_password(body.new_password)
+    db.commit()

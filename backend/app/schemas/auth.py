@@ -6,7 +6,7 @@
 # login/token flow and have no direct relationship to the User resource.
 # Grouping by concern makes the codebase easier to navigate.
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -21,6 +21,21 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """
+    Shape of the request body for POST /api/v1/auth/change-password.
+
+    current_password: the user's existing password, verified against the stored hash.
+        If wrong, the endpoint returns 400 — the new password is never set.
+
+    new_password: the replacement password. Must be at least 8 characters,
+        consistent with the minimum enforced at registration.
+    """
+
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 
 class TokenResponse(BaseModel):
