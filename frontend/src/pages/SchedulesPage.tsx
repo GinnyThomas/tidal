@@ -70,6 +70,7 @@ function SchedulesPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showAddForm, setShowAddForm] = useState(false)
+    const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
     const [includeInactive, setIncludeInactive] = useState(false)
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
@@ -106,6 +107,16 @@ function SchedulesPage() {
 
     const handleScheduleAdded = () => {
         setShowAddForm(false)
+        setRefreshKey(k => k + 1)
+    }
+
+    const handleEditSchedule = (schedule: Schedule) => {
+        setShowAddForm(false)
+        setEditingSchedule(schedule)
+    }
+
+    const handleScheduleUpdated = () => {
+        setEditingSchedule(null)
         setRefreshKey(k => k + 1)
     }
 
@@ -153,7 +164,7 @@ function SchedulesPage() {
                     <h2 className="text-2xl font-bold text-slate-100">Schedules</h2>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setShowAddForm((prev) => !prev)}
+                            onClick={() => { setShowAddForm((prev) => !prev); setEditingSchedule(null) }}
                             className="btn-primary cursor-pointer"
                         >
                             Add Schedule
@@ -168,10 +179,22 @@ function SchedulesPage() {
                     </div>
                 </div>
 
-                {/* Inline form */}
+                {/* Inline add form */}
                 {showAddForm && (
                     <div className="mb-6">
                         <AddScheduleForm onScheduleAdded={handleScheduleAdded} />
+                    </div>
+                )}
+
+                {/* Edit form — keyed on id so switching records remounts with fresh state */}
+                {editingSchedule && (
+                    <div className="mb-6">
+                        <AddScheduleForm
+                            key={editingSchedule.id}
+                            onScheduleAdded={() => {}}
+                            editingSchedule={editingSchedule}
+                            onScheduleUpdated={handleScheduleUpdated}
+                        />
                     </div>
                 )}
 
@@ -195,6 +218,7 @@ function SchedulesPage() {
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Account</th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Status</th>
+                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -227,6 +251,14 @@ function SchedulesPage() {
                                                 }`}
                                             >
                                                 {s.active ? 'Active' : 'Inactive'}
+                                            </button>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => handleEditSchedule(s)}
+                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                            >
+                                                Edit
                                             </button>
                                         </td>
                                     </tr>

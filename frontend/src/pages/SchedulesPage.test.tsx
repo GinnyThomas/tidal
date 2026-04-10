@@ -273,6 +273,81 @@ describe('SchedulesPage', () => {
     })
 
     // =========================================================================
+    // Edit Schedule
+    // =========================================================================
+
+    it('renders an Edit button for each schedule row', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ name: 'Netflix' })],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        expect(await screen.findByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    })
+
+    it('opens the edit form when Edit is clicked', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ name: 'Netflix' })],
+        )
+        // Edit form's account + category fetch
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await userEvent.click(await screen.findByRole('button', { name: /^edit$/i }))
+
+        // Edit form has "Edit Schedule" heading
+        expect(await screen.findByText('Edit Schedule')).toBeInTheDocument()
+        // "Update Schedule" submit button
+        expect(screen.getByRole('button', { name: /update schedule/i })).toBeInTheDocument()
+    })
+
+    it('closes the Add form when Edit is clicked (mutual exclusion)', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule()],
+        )
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        // Open the Add form first
+        await userEvent.click(await screen.findByRole('button', { name: /add schedule/i }))
+        expect(screen.getByLabelText(/^frequency$/i)).toBeInTheDocument()
+
+        // Click Edit — Add form should disappear, Edit form appears
+        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+
+        expect(await screen.findByText('Edit Schedule')).toBeInTheDocument()
+        // Add form's frequency select is now gone (Edit form also has frequency, but heading distinguishes)
+        // The "New Schedule" heading should not be present
+        expect(screen.queryByText('New Schedule')).not.toBeInTheDocument()
+    })
+
+    it('clears the edit form when Add Schedule is clicked', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule()],
+        )
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        // Open edit form
+        await userEvent.click(await screen.findByRole('button', { name: /^edit$/i }))
+        expect(await screen.findByText('Edit Schedule')).toBeInTheDocument()
+
+        // Click Add Schedule — edit form should close, add form opens
+        await userEvent.click(screen.getByRole('button', { name: /add schedule/i }))
+
+        expect(await screen.findByText('New Schedule')).toBeInTheDocument()
+        expect(screen.queryByText('Edit Schedule')).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
     // Integration: schedule added triggers re-fetch
     // =========================================================================
 

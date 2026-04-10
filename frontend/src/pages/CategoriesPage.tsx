@@ -190,7 +190,9 @@ function CategoriesPage() {
                         </p>
                     </div>
                 ) : (
-                    <ul className="space-y-2">
+                    // grid-cols-1 on mobile, 2-column on md+. self-start prevents
+                    // short cards from stretching to match their taller neighbour.
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {parents.map((parent) => {
                             // Compute children once per parent.
                             // childrenOf iterates the entire categories array, so
@@ -204,7 +206,7 @@ function CategoriesPage() {
                                 <li
                                     key={parent.id}
                                     style={parent.is_hidden ? { opacity: 0.4 } : {}}
-                                    className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden"
+                                    className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden self-start"
                                 >
                                     {/* Parent row — styled as section header */}
                                     <div className="flex items-center justify-between px-4 py-3">
