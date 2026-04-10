@@ -348,6 +348,37 @@ def test_annual_plan_returns_12_months(test_client) -> None:
         assert month_plan["month"] == i + 1
 
 
+def test_plan_row_includes_schedule_names(test_client) -> None:
+    """
+    Each PlanRow should include a 'schedules' list containing the individual
+    schedules that contribute to the planned amount. Each entry has the
+    schedule's id, name, and its planned contribution for the month.
+
+    This powers the frontend expand/collapse feature that shows users which
+    schedules make up a category's planned total.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    schedule = _create_schedule(
+        test_client, token, account_id, category_id,
+        name="Rent",
+        amount="950.00",
+        frequency="monthly",
+        start_date="2026-01-01",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
+
+    assert len(row["schedules"]) == 1
+    sched = row["schedules"][0]
+    assert sched["schedule_id"] == schedule["id"]
+    assert sched["schedule_name"] == "Rent"
+    assert sched["planned"] == "950.00"
+
+
 def test_plan_schedule_excluded_after_end_date(test_client) -> None:
     """
     A schedule whose end_date falls before the first day of the target month
