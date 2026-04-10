@@ -227,6 +227,11 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
     # Also track which individual schedules contribute to each category's
     # planned total — this powers the expand/collapse schedule breakdown
     # in the Monthly Plan View frontend.
+    #
+    # NOTE: schedules_by_category reflects pre-reallocation planned amounts.
+    # Reallocations (Step 3) adjust planned_by_category but NOT the individual
+    # ScheduleRow entries, so the sum of a row's schedules may differ from the
+    # row's final planned total when reallocations have been applied.
     planned_by_category: dict[uuid.UUID, Decimal] = {}
     schedules_by_category: dict[uuid.UUID, list[ScheduleRow]] = {}
     for schedule in schedules:

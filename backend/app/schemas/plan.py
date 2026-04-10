@@ -22,7 +22,7 @@ import uuid
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer
 
 
 class ScheduleRow(BaseModel):
@@ -68,7 +68,7 @@ class PlanRow(BaseModel):
     actual: Decimal
     remaining: Decimal
     pending: Decimal
-    schedules: list[ScheduleRow] = []
+    schedules: list[ScheduleRow] = Field(default_factory=list)
 
     @field_serializer("planned", "actual", "remaining", "pending")
     def serialize_amount(self, value: Decimal) -> str:
