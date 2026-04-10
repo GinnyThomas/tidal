@@ -21,12 +21,12 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.budget import Budget, BudgetOverride
+from app.models.category import Category
 from app.models.user import User
 from app.schemas.budget import (
     BudgetCreate,
@@ -45,6 +45,29 @@ router = APIRouter(
 # =============================================================================
 # Helpers
 # =============================================================================
+
+
+def _get_category_or_404(
+    category_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Category:
+    """Validate that a category exists, belongs to the user, and is not soft-deleted."""
+    category = (
+        db.query(Category)
+        .filter(
+            Category.id == category_id,
+            Category.user_id == user_id,
+            Category.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if category is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found",
+        )
+    return category
 
 
 def _get_budget_or_404(
@@ -81,6 +104,25 @@ def create_budget(
     current_user: User = Depends(get_current_user),
 ) -> Budget:
     """Create a new budget for a category/year. Returns 409 if one already exists."""
+    # Validate category belongs to this user and is not soft-deleted
+    _get_category_or_404(data.category_id, current_user.id, db)
+
+    # Check for duplicate (user + category + year) before inserting
+    existing = (
+        db.query(Budget)
+        .filter(
+            Budget.user_id == current_user.id,
+            Budget.category_id == data.category_id,
+            Budget.year == data.year,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A budget already exists for this category and year",
+        )
+
     budget = Budget(
         user_id=current_user.id,
         category_id=data.category_id,
@@ -89,14 +131,7 @@ def create_budget(
         currency=data.currency,
     )
     db.add(budget)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A budget already exists for this category and year",
-        )
+    db.commit()
     db.refresh(budget)
     return budget
 
@@ -108,7 +143,11 @@ def list_budgets(
     current_user: User = Depends(get_current_user),
 ) -> list[Budget]:
     """List all budgets for the current user. Optional ?year= filter."""
-    query = db.query(Budget).filter(Budget.user_id == current_user.id)
+    query = (
+        db.query(Budget)
+        .options(selectinload(Budget.overrides))
+        .filter(Budget.user_id == current_user.id)
+    )
     if year is not None:
         query = query.filter(Budget.year == year)
     return query.order_by(Budget.year, Budget.created_at).all()
@@ -133,10 +172,19 @@ def update_budget(
 ) -> Budget:
     """Update a budget's default_amount and/or currency."""
     budget = _get_budget_or_404(budget_id, current_user.id, db)
-    if data.default_amount is not None:
-        budget.default_amount = data.default_amount
-    if data.currency is not None:
-        budget.currency = data.currency
+
+    # exclude_unset=True means only fields the client actually sent are included.
+    # This distinguishes "not sent" from "sent as null" — both default_amount and
+    # currency must not be set to None (they are required fields on the model).
+    updates = data.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        if value is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{field} cannot be null",
+            )
+        setattr(budget, field, value)
+
     db.commit()
     db.refresh(budget)
     return budget
@@ -206,7 +254,7 @@ def set_override(
 )
 def delete_override(
     budget_id: uuid.UUID,
-    month: int,
+    month: int = Path(..., ge=1, le=12),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:

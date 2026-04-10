@@ -273,17 +273,23 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
         .all()
     )
 
-    for budget in budgets:
-        # Check for a month-specific override
-        override = (
+    # Batch-fetch all overrides for this month in a single query (avoids N+1).
+    # Build a dict keyed by budget_id for O(1) lookup per budget below.
+    budget_ids = [b.id for b in budgets]
+    overrides_by_budget: dict[uuid.UUID, Decimal] = {}
+    if budget_ids:
+        overrides = (
             db.query(BudgetOverride)
             .filter(
-                BudgetOverride.budget_id == budget.id,
+                BudgetOverride.budget_id.in_(budget_ids),
                 BudgetOverride.month == month,
             )
-            .first()
+            .all()
         )
-        budget_amount = override.amount if override else budget.default_amount
+        overrides_by_budget = {o.budget_id: o.amount for o in overrides}
+
+    for budget in budgets:
+        budget_amount = overrides_by_budget.get(budget.id, budget.default_amount)
         cat_id = budget.category_id
         planned_by_category[cat_id] = (
             planned_by_category.get(cat_id, Decimal("0")) + budget_amount
