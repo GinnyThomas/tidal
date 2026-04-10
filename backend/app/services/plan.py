@@ -46,6 +46,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
 from app.models.reallocation import Reallocation
 from app.models.schedule import Schedule
@@ -197,6 +198,8 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
       1. Load all active, non-deleted schedules for the user.
       2. For each schedule, count occurrences in the target month and accumulate
          planned amounts by category.
+      2b. Load budgets for this year and add their amounts (override or default)
+          to planned — budgets and schedules are additive per category.
       3. Load reallocations for this month/year and apply them to planned:
          subtract amount from from_category, add to to_category.
          Planned can go negative if the user reallocated more than scheduled.
@@ -251,6 +254,40 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
                     planned=schedule_planned,
                 )
             )
+
+    # --- Step 2b: Budget amounts by category ---
+    #
+    # Budgets define monthly spending targets for variable categories.
+    # They are additive with schedules — a category can have both a schedule
+    # (fixed) and a budget (variable), and its planned total is the sum.
+    #
+    # For each budget matching this year, get the effective amount:
+    #   - If a BudgetOverride exists for this month, use override amount
+    #   - Otherwise use default_amount
+    budgets = (
+        db.query(Budget)
+        .filter(
+            Budget.user_id == user_id,
+            Budget.year == year,
+        )
+        .all()
+    )
+
+    for budget in budgets:
+        # Check for a month-specific override
+        override = (
+            db.query(BudgetOverride)
+            .filter(
+                BudgetOverride.budget_id == budget.id,
+                BudgetOverride.month == month,
+            )
+            .first()
+        )
+        budget_amount = override.amount if override else budget.default_amount
+        cat_id = budget.category_id
+        planned_by_category[cat_id] = (
+            planned_by_category.get(cat_id, Decimal("0")) + budget_amount
+        )
 
     # --- Step 3: Apply reallocations to planned amounts ---
     #

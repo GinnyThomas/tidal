@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import accounts, auth, categories, plan, reallocations, schedules, transactions
+from app.routers import accounts, auth, budgets, categories, plan, reallocations, schedules, transactions
 
 
 # --- Create the FastAPI application ---
@@ -56,6 +56,7 @@ app.add_middleware(
 # The router's `prefix` (e.g. "/api/v1/auth") is applied to every route in it.
 app.include_router(auth.router)
 app.include_router(accounts.router)
+app.include_router(budgets.router)
 app.include_router(categories.router)
 app.include_router(schedules.router)
 app.include_router(transactions.router)

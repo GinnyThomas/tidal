@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import SessionLocal
 from app.models.account import Account
+from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
