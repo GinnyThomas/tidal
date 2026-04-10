@@ -199,7 +199,13 @@ function MonthlyPlanView() {
                                         {/* Parent row */}
                                         <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                                             <td className="px-4 py-3 text-slate-100 font-medium">{parent.category_name}</td>
-                                            <td className="px-4 py-3 text-right text-sky-400">{parent.planned}</td>
+                                            {/* Non-zero planned amounts link to /schedules.
+                                                TODO: link to /schedules?category_id=xxx once schedule filtering is added. */}
+                                            <td className="px-4 py-3 text-right text-sky-400">
+                                                {parseFloat(parent.planned) !== 0 ? (
+                                                    <Link to="/schedules" className="hover:underline">{parent.planned}</Link>
+                                                ) : parent.planned}
+                                            </td>
                                             <td className="px-4 py-3 text-right text-teal-400">
                                                 {/* Non-zero actual links to transactions filtered by this category */}
                                                 {parseFloat(parent.actual) !== 0 ? (
@@ -229,7 +235,11 @@ function MonthlyPlanView() {
                                                 >
                                                     {child.category_name}
                                                 </td>
-                                                <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">{child.planned}</td>
+                                                <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
+                                                    {parseFloat(child.planned) !== 0 ? (
+                                                        <Link to="/schedules" className="hover:underline">{child.planned}</Link>
+                                                    ) : child.planned}
+                                                </td>
                                                 <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
                                                     {parseFloat(child.actual) !== 0 ? (
                                                         <Link to={`/transactions?category_id=${child.category_id}`} className="hover:underline">

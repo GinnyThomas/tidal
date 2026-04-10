@@ -22,6 +22,7 @@ import axios from 'axios'
 import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import AddScheduleForm from '../components/AddScheduleForm'
+import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
@@ -108,6 +109,8 @@ function SchedulesPage() {
     const handleScheduleAdded = () => {
         setShowAddForm(false)
         setRefreshKey(k => k + 1)
+        // Schedule changes affect planned amounts — invalidate annual plan cache
+        annualPlanCache.clear()
     }
 
     const handleEditSchedule = (schedule: Schedule) => {
@@ -118,6 +121,7 @@ function SchedulesPage() {
     const handleScheduleUpdated = () => {
         setEditingSchedule(null)
         setRefreshKey(k => k + 1)
+        annualPlanCache.clear()
     }
 
     const handleActiveToggle = async (schedule: Schedule) => {
@@ -132,6 +136,8 @@ function SchedulesPage() {
             setSchedules(prev =>
                 prev.map(s => s.id === schedule.id ? { ...s, active: !s.active } : s)
             )
+            // Active/inactive changes affect planned amounts in the annual plan
+            annualPlanCache.clear()
         } catch {
             // Silent failure — a future improvement could show a toast here
         }

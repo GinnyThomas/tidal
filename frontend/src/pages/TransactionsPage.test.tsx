@@ -378,4 +378,38 @@ describe('TransactionsPage', () => {
         // Form should be hidden
         expect(screen.queryByLabelText(/type/i)).not.toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Edit transaction
+    // =========================================================================
+
+    it('shows an Edit button on each transaction row', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeTransaction({ payee: 'Tesco' })],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+        expect(screen.getByRole('button', { name: /^edit transaction/i })).toBeInTheDocument()
+    })
+
+    it('clicking Edit opens AddTransactionForm in edit mode', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeTransaction({ payee: 'Tesco', amount: '45.50', status: 'pending' })],
+        )
+        // AddTransactionForm fetches accounts + categories on mount
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+        await userEvent.click(screen.getByRole('button', { name: /^edit transaction/i }))
+
+        // The edit form heading should be visible
+        expect(screen.getByText('Edit Transaction')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /update transaction/i })).toBeInTheDocument()
+    })
 })

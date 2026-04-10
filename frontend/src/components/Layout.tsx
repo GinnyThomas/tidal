@@ -24,6 +24,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { annualPlanCache } from '../lib/annualPlanCache'
 
 type Props = {
     children: ReactNode
@@ -42,6 +43,8 @@ function Layout({ children }: Props) {
     const handleLogout = () => {
         localStorage.removeItem('access_token')
         localStorage.removeItem('user_email')
+        // Clear the annual plan session cache so a different user doesn't see stale data
+        annualPlanCache.clear()
         navigate('/login')
     }
 
