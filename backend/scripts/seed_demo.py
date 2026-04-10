@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import SessionLocal
 from app.models.account import Account
+from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
@@ -374,9 +375,107 @@ def seed_demo() -> None:
         else:
             print("  All transactions already exist")
 
+        # ── Step 6: Budgets ─────────────────────────────────────────────
+        # Budgets are monthly spending targets for variable categories.
+        # Schedules handle fixed recurring transactions (rent, subscriptions);
+        # budgets handle discretionary spending (groceries, eating out, etc.).
+        #
+        # Idempotency: check (user_id, category_id, year) before inserting.
+        # For overrides: check (budget_id, month) before inserting.
+
+        BUDGET_YEAR = 2026
+
+        existing_budgets = (
+            db.query(Budget)
+            .filter(Budget.user_id == user.id, Budget.year == BUDGET_YEAR)
+            .all()
+        )
+        existing_budget_keys = {
+            (str(b.category_id), b.year) for b in existing_budgets
+        }
+        # Map category_id → Budget for override idempotency checks
+        budget_by_cat = {str(b.category_id): b for b in existing_budgets}
+
+        # Each entry: (category_name, default_amount, currency, overrides_dict)
+        # overrides_dict maps month number → override amount
+        budget_definitions = [
+            # ── GBP budgets (Current Account user's categories) ──
+            ("Groceries",            Decimal("300.00"), "GBP", {12: Decimal("350.00")}),
+            ("Eating Out",           Decimal("150.00"), "GBP", {}),
+            ("Clothing",             Decimal("100.00"), "GBP", {1: Decimal("200.00"), 12: Decimal("200.00")}),
+            ("Fuel",                 Decimal("80.00"),  "GBP", {}),
+            ("Medical",              Decimal("50.00"),  "GBP", {}),
+            ("Gifts & Celebrations", Decimal("50.00"),  "GBP", {12: Decimal("500.00")}),
+            ("Travel",               Decimal("100.00"), "GBP", {6: Decimal("500.00"), 8: Decimal("300.00")}),
+            ("Education",            Decimal("50.00"),  "GBP", {}),
+
+            # ── EUR budgets ──
+            ("Groceries",            Decimal("200.00"), "EUR", {}),
+            ("Eating Out",           Decimal("100.00"), "EUR", {}),
+            ("Clothing",             Decimal("80.00"),  "EUR", {}),
+        ]
+
+        budgets_created = 0
+        overrides_created = 0
+
+        for cat_name, default_amount, currency, overrides in budget_definitions:
+            category_id = cat(cat_name)
+            key = (str(category_id), BUDGET_YEAR)
+
+            if key in existing_budget_keys:
+                # Budget exists — just check for missing overrides
+                budget_obj = budget_by_cat.get(str(category_id))
+                if budget_obj and overrides:
+                    existing_override_months = {
+                        ov.month for ov in
+                        db.query(BudgetOverride)
+                        .filter(BudgetOverride.budget_id == budget_obj.id)
+                        .all()
+                    }
+                    for month_num, override_amount in overrides.items():
+                        if month_num not in existing_override_months:
+                            db.add(BudgetOverride(
+                                budget_id=budget_obj.id,
+                                month=month_num,
+                                amount=override_amount,
+                            ))
+                            overrides_created += 1
+                continue
+
+            # Create the budget
+            budget_obj = Budget(
+                user_id=user.id,
+                category_id=category_id,
+                year=BUDGET_YEAR,
+                default_amount=default_amount,
+                currency=currency,
+            )
+            db.add(budget_obj)
+            db.flush()  # get the id for overrides
+            budgets_created += 1
+            existing_budget_keys.add(key)
+            budget_by_cat[str(category_id)] = budget_obj
+
+            # Create overrides for this budget
+            for month_num, override_amount in overrides.items():
+                db.add(BudgetOverride(
+                    budget_id=budget_obj.id,
+                    month=month_num,
+                    amount=override_amount,
+                ))
+                overrides_created += 1
+
+        db.commit()
+
+        if budgets_created or overrides_created:
+            print(f"✓ Created {budgets_created} budgets, {overrides_created} overrides (year {BUDGET_YEAR})")
+        else:
+            print(f"  All budgets already exist for {BUDGET_YEAR}")
+
         print("\nDemo seed complete.")
         print(f"  Accounts : Nationwide Current (GBP) · Nationwide Savings (GBP) · Santander España (EUR)")
         print(f"  Schedules: {len(new_schedules)} total — monthly GBP + EUR, annual (Claude.ai, Christmas), quarterly (Massage)")
+        print(f"  Budgets  : {len(budget_definitions)} budget definitions for {BUDGET_YEAR}")
         print(f"  Window   : {_months_back(3).strftime('%B %Y')} → {today.strftime('%B %Y')}")
 
     except Exception as e:
