@@ -148,49 +148,69 @@ describe('AnnualView', () => {
     // =========================================================================
 
     it('shows the current year (2026) as the page heading on initial load', async () => {
-        vi.mocked(axios.get).mockResolvedValueOnce({ data: makeAnnualPlan(2026) })
+        // toFake: ['Date'] fakes only the Date constructor, leaving setTimeout/Promise
+        // timers real so findByRole's internal waitFor still works correctly.
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-06-15'))
+        try {
+            vi.mocked(axios.get).mockResolvedValueOnce({ data: makeAnnualPlan(2026) })
 
-        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-        // h2 shows the year number once loading completes
-        const heading = await screen.findByRole('heading', { level: 2 })
-        expect(heading).toHaveTextContent('2026')
+            // h2 shows the year number once loading completes
+            const heading = await screen.findByRole('heading', { level: 2 })
+            expect(heading).toHaveTextContent('2026')
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('fetches the previous year when < Prev is clicked', async () => {
-        vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: makeAnnualPlan(2026) }) // initial load
-            .mockResolvedValueOnce({ data: makeAnnualPlan(2025) }) // after prev
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-06-15'))
+        try {
+            vi.mocked(axios.get)
+                .mockResolvedValueOnce({ data: makeAnnualPlan(2026) }) // initial load
+                .mockResolvedValueOnce({ data: makeAnnualPlan(2025) }) // after prev
 
-        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-        // Wait for initial load then click Prev
-        await screen.findByRole('heading', { level: 2 })
-        await userEvent.click(screen.getByRole('button', { name: /prev/i }))
+            // Wait for initial load then click Prev
+            await screen.findByRole('heading', { level: 2 })
+            await userEvent.click(screen.getByRole('button', { name: /prev/i }))
 
-        await waitFor(() => {
-            expect(vi.mocked(axios.get)).toHaveBeenCalledWith(
-                expect.stringContaining(`${getApiBaseUrl()}/api/v1/plan/2025`),
-                expect.anything()
-            )
-        })
+            await waitFor(() => {
+                expect(vi.mocked(axios.get)).toHaveBeenCalledWith(
+                    expect.stringContaining(`${getApiBaseUrl()}/api/v1/plan/2025`),
+                    expect.anything()
+                )
+            })
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('fetches the next year when Next > is clicked', async () => {
-        vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: makeAnnualPlan(2026) }) // initial load
-            .mockResolvedValueOnce({ data: makeAnnualPlan(2027) }) // after next
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-06-15'))
+        try {
+            vi.mocked(axios.get)
+                .mockResolvedValueOnce({ data: makeAnnualPlan(2026) }) // initial load
+                .mockResolvedValueOnce({ data: makeAnnualPlan(2027) }) // after next
 
-        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-        await screen.findByRole('heading', { level: 2 })
-        await userEvent.click(screen.getByRole('button', { name: /next/i }))
+            await screen.findByRole('heading', { level: 2 })
+            await userEvent.click(screen.getByRole('button', { name: /next/i }))
 
-        await waitFor(() => {
-            expect(vi.mocked(axios.get)).toHaveBeenCalledWith(
-                expect.stringContaining(`${getApiBaseUrl()}/api/v1/plan/2027`),
-                expect.anything()
-            )
-        })
+            await waitFor(() => {
+                expect(vi.mocked(axios.get)).toHaveBeenCalledWith(
+                    expect.stringContaining(`${getApiBaseUrl()}/api/v1/plan/2027`),
+                    expect.anything()
+                )
+            })
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })
