@@ -24,7 +24,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { annualPlanCache } from '../pages/AnnualView'
+import { annualPlanCache } from '../lib/annualPlanCache'
 
 type Props = {
     children: ReactNode

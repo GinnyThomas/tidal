@@ -32,7 +32,7 @@ import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
 import AddTransferForm from '../components/AddTransferForm'
-import { annualPlanCache } from './AnnualView'
+import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
@@ -202,6 +202,8 @@ function TransactionsPage() {
             setTransactions(prev =>
                 prev.map(t => t.id === tx.id ? { ...t, status: next } : t)
             )
+            // Status changes affect which transactions count toward budget actuals
+            annualPlanCache.clear()
         } catch {
             // Silent failure — a future improvement could show a toast here
         }
@@ -407,9 +409,17 @@ function TransactionsPage() {
                                             </button>
                                         </td>
                                         <td className="px-4 py-3 text-center">
+                                            {/* Transfers are two linked rows — editing one side
+                                                without the other would break the pair. */}
                                             <button
                                                 onClick={() => handleEditTransaction(tx)}
-                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                disabled={tx.transaction_type === 'transfer'}
+                                                aria-label={`Edit transaction ${tx.payee ?? tx.id}`}
+                                                className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                                                    tx.transaction_type === 'transfer'
+                                                        ? 'border-ocean-700 text-slate-600 cursor-not-allowed'
+                                                        : 'border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 cursor-pointer'
+                                                }`}
                                             >
                                                 Edit
                                             </button>

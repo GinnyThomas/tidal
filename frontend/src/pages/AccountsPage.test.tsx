@@ -29,6 +29,7 @@ const makeAccount = (overrides = {}) => ({
     currency: 'GBP',
     current_balance: '1500.00',
     institution: 'Nationwide',
+    note: null,
     is_active: true,
     ...overrides,
 })
@@ -168,7 +169,7 @@ describe('AccountsPage', () => {
         render(<MemoryRouter><AccountsPage /></MemoryRouter>)
 
         await screen.findByText('Nationwide Current')
-        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^edit /i })).toBeInTheDocument()
     })
 
     it('clicking Edit opens AddAccountForm pre-populated with the account values', async () => {
@@ -179,7 +180,7 @@ describe('AccountsPage', () => {
         render(<MemoryRouter><AccountsPage /></MemoryRouter>)
 
         await screen.findByText('My Savings')
-        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+        await userEvent.click(screen.getByRole('button', { name: /^edit /i }))
 
         // The form should be pre-populated with the account's existing values
         expect(screen.getByLabelText(/account name/i)).toHaveValue('My Savings')
@@ -201,7 +202,7 @@ describe('AccountsPage', () => {
         render(<MemoryRouter><AccountsPage /></MemoryRouter>)
 
         await screen.findByText('Current')
-        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+        await userEvent.click(screen.getByRole('button', { name: /^edit /i }))
         await userEvent.click(screen.getByRole('button', { name: /update account/i }))
 
         await waitFor(() => {

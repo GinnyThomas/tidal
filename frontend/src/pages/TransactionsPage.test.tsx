@@ -392,7 +392,7 @@ describe('TransactionsPage', () => {
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
         await screen.findByText('Tesco')
-        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^edit transaction/i })).toBeInTheDocument()
     })
 
     it('clicking Edit opens AddTransactionForm in edit mode', async () => {
@@ -406,7 +406,7 @@ describe('TransactionsPage', () => {
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
         await screen.findByText('Tesco')
-        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+        await userEvent.click(screen.getByRole('button', { name: /^edit transaction/i }))
 
         // The edit form heading should be visible
         expect(screen.getByText('Edit Transaction')).toBeInTheDocument()

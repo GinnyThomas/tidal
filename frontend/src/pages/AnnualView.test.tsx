@@ -15,7 +15,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
-import AnnualView, { annualPlanCache } from './AnnualView'
+import AnnualView from './AnnualView'
+import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 
 vi.mock('axios')
@@ -66,6 +67,31 @@ describe('AnnualView', () => {
         vi.clearAllMocks()
         // Clear the module-level session cache so each test starts fresh
         annualPlanCache.clear()
+    })
+
+    // =========================================================================
+    // Session cache
+    // =========================================================================
+
+    it('uses cached data and skips the API call when the year is already cached', async () => {
+        // Pre-populate the cache with data for 2026
+        const cachedPlan = makeAnnualPlan(2026, { 0: [makePlanRow({ category_name: 'Bills' })] })
+        annualPlanCache.set('2026', cachedPlan)
+
+        // Fix the system clock so the component defaults to 2026
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-06-15'))
+        try {
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            // The cached category should appear immediately — no loading state
+            expect(await screen.findByText('Bills')).toBeInTheDocument()
+
+            // axios.get should NOT have been called — data came from the cache
+            expect(vi.mocked(axios.get)).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     // =========================================================================

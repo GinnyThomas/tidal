@@ -33,6 +33,7 @@ import axios from 'axios'
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
+import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
@@ -57,7 +58,7 @@ type MonthlyPlan = {
     total_pending: string
 }
 
-type AnnualPlan = {
+export type AnnualPlan = {
     year: number
     months: MonthlyPlan[]
 }
@@ -84,16 +85,6 @@ function fmtPlanned(amount: string): React.ReactNode {
 function sumAmounts(amounts: string[]): string {
     return amounts.reduce((acc, a) => acc + parseFloat(a), 0).toFixed(2)
 }
-
-// =============================================================================
-// Session cache
-// =============================================================================
-
-// Module-level cache — persists across re-renders and route changes within the
-// same browser tab, cleared automatically when the tab closes.
-// Keyed by year string (e.g. "2026").
-// Exported so Layout (logout) and other pages (data mutations) can invalidate it.
-export const annualPlanCache = new Map<string, AnnualPlan>()
 
 // =============================================================================
 // Component

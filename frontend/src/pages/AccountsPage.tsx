@@ -34,6 +34,7 @@ type Account = {
     currency: string
     current_balance: string
     institution: string | null
+    note: string | null
     is_active: boolean
 }
 
@@ -186,6 +187,7 @@ function AccountsPage() {
                                     </div>
                                     <button
                                         onClick={() => handleEditAccount(account)}
+                                        aria-label={`Edit ${account.name}`}
                                         className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
                                     >
                                         Edit

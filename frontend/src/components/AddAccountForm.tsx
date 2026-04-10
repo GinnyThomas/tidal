@@ -25,6 +25,7 @@ export type EditingAccount = {
     currency: string
     current_balance: string
     institution: string | null
+    note: string | null
 }
 
 type Props = {
@@ -42,7 +43,7 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
     const [currency, setCurrency] = useState(editingAccount?.currency ?? 'GBP')
     const [currentBalance, setCurrentBalance] = useState(editingAccount?.current_balance ?? '0')
     const [institution, setInstitution] = useState(editingAccount?.institution ?? '')
-    const [note, setNote] = useState('')
+    const [note, setNote] = useState(editingAccount?.note ?? '')
     const [error, setError] = useState<string | null>(null)
 
     const handleSubmit = async (e: SyntheticEvent) => {
