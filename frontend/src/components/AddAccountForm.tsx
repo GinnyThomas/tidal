@@ -1,28 +1,47 @@
 // components/AddAccountForm.tsx
 //
-// Purpose: Form for creating a new account.
-//          Styled as an ocean-800 card — looks like a modal panel whether
-//          rendered inline (AccountsPage) or standalone (tests).
+// Purpose: Form for creating OR editing an account.
+//
+// Modes:
+//   Create (default) — no editingAccount prop: POSTs to /api/v1/accounts.
+//   Edit — editingAccount provided: PUTs to /api/v1/accounts/{id}.
 //
 // Props:
-//   onAccountAdded — called after successful submit so the parent can
-//                    re-fetch and hide this form.
+//   onAccountAdded   — called after a successful create (ignored in edit mode)
+//   editingAccount   — (optional) pre-populates fields; switches to edit mode
+//   onAccountUpdated — (optional) called after a successful edit
 
 import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
 
-type Props = {
-    onAccountAdded: () => void
+// The subset of Account fields needed to pre-populate the form in edit mode.
+// Matches the AccountResponse shape returned by GET /api/v1/accounts.
+export type EditingAccount = {
+    id: string
+    name: string
+    account_type: string
+    currency: string
+    current_balance: string
+    institution: string | null
 }
 
-function AddAccountForm({ onAccountAdded }: Props) {
-    const [name, setName] = useState('')
-    const [accountType, setAccountType] = useState('checking')
-    const [currency, setCurrency] = useState('GBP')
-    const [currentBalance, setCurrentBalance] = useState('0')
-    const [institution, setInstitution] = useState('')
+type Props = {
+    onAccountAdded: () => void
+    editingAccount?: EditingAccount
+    onAccountUpdated?: () => void
+}
+
+function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Props) {
+    // isEditMode drives the endpoint, heading, and button text.
+    const isEditMode = editingAccount !== undefined
+
+    const [name, setName] = useState(editingAccount?.name ?? '')
+    const [accountType, setAccountType] = useState(editingAccount?.account_type ?? 'checking')
+    const [currency, setCurrency] = useState(editingAccount?.currency ?? 'GBP')
+    const [currentBalance, setCurrentBalance] = useState(editingAccount?.current_balance ?? '0')
+    const [institution, setInstitution] = useState(editingAccount?.institution ?? '')
     const [note, setNote] = useState('')
     const [error, setError] = useState<string | null>(null)
 
@@ -30,28 +49,40 @@ function AddAccountForm({ onAccountAdded }: Props) {
         e.preventDefault()
         setError(null)
         const token = localStorage.getItem('access_token')
+        const payload = {
+            name,
+            account_type: accountType,
+            currency,
+            current_balance: currentBalance,
+            institution: institution || null,
+            note: note || null,
+        }
         try {
-            await axios.post(
-                `${getApiBaseUrl()}/api/v1/accounts`,
-                {
-                    name,
-                    account_type: accountType,
-                    currency,
-                    current_balance: currentBalance,
-                    institution: institution || null,
-                    note: note || null,
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
-            )
-            onAccountAdded()
+            if (isEditMode) {
+                await axios.put(
+                    `${getApiBaseUrl()}/api/v1/accounts/${editingAccount.id}`,
+                    payload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                onAccountUpdated?.()
+            } else {
+                await axios.post(
+                    `${getApiBaseUrl()}/api/v1/accounts`,
+                    payload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                onAccountAdded()
+            }
         } catch {
-            setError('Could not create account. Please try again.')
+            setError(`Could not ${isEditMode ? 'update' : 'create'} account. Please try again.`)
         }
     }
 
     return (
         <div className="bg-ocean-800 border border-ocean-700 rounded-xl p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-200 mb-5">New Account</h3>
+            <h3 className="text-lg font-semibold text-slate-200 mb-5">
+                {isEditMode ? 'Edit Account' : 'New Account'}
+            </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -138,7 +169,7 @@ function AddAccountForm({ onAccountAdded }: Props) {
                     type="submit"
                     className="btn-primary w-full cursor-pointer"
                 >
-                    Save Account
+                    {isEditMode ? 'Update Account' : 'Save Account'}
                 </button>
             </form>
         </div>

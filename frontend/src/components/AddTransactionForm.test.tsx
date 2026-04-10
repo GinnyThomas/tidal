@@ -196,4 +196,101 @@ describe('AddTransactionForm', () => {
         expect(await screen.findByText(/could not create transaction/i)).toBeInTheDocument()
         expect(mockOnTransactionAdded).not.toHaveBeenCalled()
     })
+
+    // =========================================================================
+    // Edit mode
+    // =========================================================================
+
+    const editingTransaction = {
+        id: 'tx-edit-001',
+        account_id: 'acc-001',
+        category_id: 'cat-001',
+        transaction_type: 'income',
+        date: '2026-03-15',
+        payee: 'Employer',
+        amount: '2500.00',
+        currency: 'EUR',
+        status: 'cleared',
+        note: 'March salary',
+        parent_transaction_id: null,
+    }
+
+    it('pre-populates all fields in edit mode', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                />
+            </MemoryRouter>
+        )
+
+        // Wait for dropdowns to populate
+        await screen.findByRole('option', { name: 'Current Account' })
+
+        expect(screen.getByLabelText(/type/i)).toHaveValue('income')
+        expect(screen.getByLabelText(/date/i)).toHaveValue('2026-03-15')
+        expect(screen.getByLabelText(/payee/i)).toHaveValue('Employer')
+        expect(screen.getByLabelText(/amount/i)).toHaveValue(2500)
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+        expect(screen.getByLabelText(/status/i)).toHaveValue('cleared')
+        expect(screen.getByLabelText(/note/i)).toHaveValue('March salary')
+    })
+
+    it('shows Edit Transaction heading and Update Transaction button in edit mode', () => {
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                />
+            </MemoryRouter>
+        )
+
+        expect(screen.getByText('Edit Transaction')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /update transaction/i })).toBeInTheDocument()
+    })
+
+    it('submits PUT to the correct endpoint in edit mode', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+        const mockOnUpdated = vi.fn()
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                    onTransactionUpdated={mockOnUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await screen.findByRole('option', { name: 'Current Account' })
+        await userEvent.click(screen.getByRole('button', { name: /update transaction/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/transactions/tx-edit-001`,
+                expect.objectContaining({
+                    transaction_type: 'income',
+                    status: 'cleared',
+                    currency: 'EUR',
+                }),
+                expect.objectContaining({
+                    headers: { Authorization: 'Bearer fake-token' },
+                })
+            )
+        })
+
+        expect(mockOnUpdated).toHaveBeenCalledTimes(1)
+        // The create callback should NOT have fired
+        expect(mockOnTransactionAdded).not.toHaveBeenCalled()
+    })
 })

@@ -31,6 +31,7 @@
 
 import axios from 'axios'
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { getApiBaseUrl } from '../lib/api'
 
@@ -71,10 +72,28 @@ function fmt(amount: string): string {
     return parseFloat(amount) === 0 ? '—' : amount
 }
 
+// Non-zero planned amounts render as /schedules links.
+// TODO: update href to /schedules?category_id=xxx once schedule category
+//       filtering is added — for now all planned amounts link to the full list.
+function fmtPlanned(amount: string): React.ReactNode {
+    if (parseFloat(amount) === 0) return '—'
+    return <Link to="/schedules" className="hover:underline">{amount}</Link>
+}
+
 // Sum an array of decimal strings, return a 2-decimal-place string.
 function sumAmounts(amounts: string[]): string {
     return amounts.reduce((acc, a) => acc + parseFloat(a), 0).toFixed(2)
 }
+
+// =============================================================================
+// Session cache
+// =============================================================================
+
+// Module-level cache — persists across re-renders and route changes within the
+// same browser tab, cleared automatically when the tab closes.
+// Keyed by year string (e.g. "2026").
+// Exported so Layout (logout) and other pages (data mutations) can invalidate it.
+export const annualPlanCache = new Map<string, AnnualPlan>()
 
 // =============================================================================
 // Component
@@ -87,7 +106,19 @@ function AnnualView() {
     const [error, setError] = useState<string | null>(null)
 
     // Re-runs whenever year changes (< Prev / Next > navigation).
+    // Checks the session cache first — if the year's plan is already cached,
+    // uses it immediately without making any API calls. The backend endpoint
+    // makes 12 internal calls (one per month), so caching saves significant time.
     useEffect(() => {
+        const cacheKey = String(year)
+        const cached = annualPlanCache.get(cacheKey)
+        if (cached) {
+            setAnnualPlan(cached)
+            setLoading(false)
+            setError(null)
+            return
+        }
+
         const token = localStorage.getItem('access_token')
         setLoading(true)
         setError(null)
@@ -96,6 +127,7 @@ function AnnualView() {
                 headers: { Authorization: `Bearer ${token}` },
             })
             .then((res) => {
+                annualPlanCache.set(cacheKey, res.data)
                 setAnnualPlan(res.data)
             })
             .catch(() => {
@@ -112,7 +144,9 @@ function AnnualView() {
     if (loading) {
         return (
             <Layout>
-                <p className="text-slate-400 text-center py-20 text-lg">Loading...</p>
+                <p className="text-slate-400 text-center py-20 text-lg">
+                    Building your annual plan... (this may take a moment)
+                </p>
             </Layout>
         )
     }
@@ -234,11 +268,11 @@ function AnnualView() {
                                                 </td>
                                                 {parentData.amounts.map((a, i) => (
                                                     <td key={i} className="px-3 py-3 text-right text-sky-400">
-                                                        {fmt(a)}
+                                                        {fmtPlanned(a)}
                                                     </td>
                                                 ))}
                                                 <td className="px-4 py-3 text-right text-teal-400 font-medium">
-                                                    {fmt(parentTotal)}
+                                                    {fmtPlanned(parentTotal)}
                                                 </td>
                                             </tr>
 
@@ -255,11 +289,11 @@ function AnnualView() {
                                                         </td>
                                                         {childData.amounts.map((a, i) => (
                                                             <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">
-                                                                {fmt(a)}
+                                                                {fmtPlanned(a)}
                                                             </td>
                                                         ))}
                                                         <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
-                                                            {fmt(childTotal)}
+                                                            {fmtPlanned(childTotal)}
                                                         </td>
                                                     </tr>
                                                 )

@@ -32,6 +32,7 @@ import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
 import AddTransferForm from '../components/AddTransferForm'
+import { annualPlanCache } from './AnnualView'
 import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
@@ -113,6 +114,7 @@ function TransactionsPage() {
     const [filterStatus, setFilterStatus] = useState('')
     const [showAddForm, setShowAddForm] = useState(false)
     const [showTransferForm, setShowTransferForm] = useState(false)
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
 
@@ -169,7 +171,22 @@ function TransactionsPage() {
     const handleTransactionAdded = () => {
         setShowAddForm(false)
         setShowTransferForm(false)
+        setEditingTransaction(null)
         setRefreshKey(k => k + 1)
+        // Transaction changes may affect budget actuals — invalidate annual plan cache
+        annualPlanCache.clear()
+    }
+
+    const handleEditTransaction = (tx: Transaction) => {
+        setEditingTransaction(tx)
+        setShowAddForm(false)
+        setShowTransferForm(false)
+    }
+
+    const handleTransactionUpdated = () => {
+        setEditingTransaction(null)
+        setRefreshKey(k => k + 1)
+        annualPlanCache.clear()
     }
 
     const handleStatusToggle = async (tx: Transaction) => {
@@ -220,6 +237,7 @@ function TransactionsPage() {
                             onClick={() => {
                                 setShowTransferForm((prev) => !prev)
                                 setShowAddForm(false)
+                                setEditingTransaction(null)
                             }}
                             className="btn-secondary cursor-pointer"
                         >
@@ -229,6 +247,7 @@ function TransactionsPage() {
                             onClick={() => {
                                 setShowAddForm((prev) => !prev)
                                 setShowTransferForm(false)
+                                setEditingTransaction(null)
                             }}
                             className="btn-primary cursor-pointer"
                         >
@@ -246,6 +265,19 @@ function TransactionsPage() {
                 {showTransferForm && (
                     <div className="mb-6">
                         <AddTransferForm onTransactionAdded={handleTransactionAdded} />
+                    </div>
+                )}
+
+                {/* Edit form — shown when an Edit button is clicked on a transaction row.
+                    keyed on id so switching to a different transaction remounts with fresh state. */}
+                {editingTransaction && (
+                    <div className="mb-6">
+                        <AddTransactionForm
+                            key={editingTransaction.id}
+                            onTransactionAdded={() => {}}
+                            editingTransaction={editingTransaction}
+                            onTransactionUpdated={handleTransactionUpdated}
+                        />
                     </div>
                 )}
 
@@ -337,6 +369,7 @@ function TransactionsPage() {
                                     <th className="text-right px-4 py-3 text-sky-400 font-medium">Amount</th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Type</th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Status</th>
+                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -371,6 +404,14 @@ function TransactionsPage() {
                                                 className={`badge cursor-pointer hover:opacity-80 transition-opacity ${STATUS_BADGE[tx.status] ?? 'bg-ocean-700 text-slate-400'}`}
                                             >
                                                 {tx.status}
+                                            </button>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => handleEditTransaction(tx)}
+                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                            >
+                                                Edit
                                             </button>
                                         </td>
                                     </tr>

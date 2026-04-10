@@ -9,12 +9,18 @@
 //   empty    — shows empty state with icon
 //   list     — account cards in ocean-800 with type badges
 //
-// The form is rendered inline (not a fixed modal) so the "Add Account"
-// button remains clickable as a toggle. The form card itself provides
-// the modal-like visual appearance.
+// Features:
+//   - Add Account button toggles AddAccountForm for creating a new account.
+//   - Edit button on each card opens AddAccountForm pre-populated with that
+//     account's values. On submit the form PUTs to /api/v1/accounts/{id}.
+//   - Only one form (Add or Edit) is visible at a time — opening one closes
+//     the other (same mutual-exclusion pattern as CategoriesPage).
+//   - Account name is a <Link> to /transactions?account_id={id} — clicking
+//     navigates to a pre-filtered transactions view for that account.
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddAccountForm from '../components/AddAccountForm'
 import { getApiBaseUrl } from '../lib/api'
@@ -47,6 +53,7 @@ function AccountsPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
+    const [editingAccount, setEditingAccount] = useState<Account | null>(null)
 
     const fetchAccounts = async () => {
         const token = localStorage.getItem('access_token')
@@ -85,10 +92,21 @@ function AccountsPage() {
         )
     }
 
-    // --- Normal render ---
+    // --- Handlers ---
 
     const handleAccountAdded = () => {
         setShowForm(false)
+        fetchAccounts()
+    }
+
+    const handleEditAccount = (account: Account) => {
+        // Close the add form so only one form is visible at a time
+        setShowForm(false)
+        setEditingAccount(account)
+    }
+
+    const handleAccountUpdated = () => {
+        setEditingAccount(null)
         fetchAccounts()
     }
 
@@ -100,18 +118,34 @@ function AccountsPage() {
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold text-slate-100">Accounts</h2>
                     <button
-                        onClick={() => setShowForm((prev) => !prev)}
+                        onClick={() => {
+                            setShowForm((prev) => !prev)
+                            // Opening the add form closes any open edit form
+                            setEditingAccount(null)
+                        }}
                         className="btn-primary cursor-pointer"
                     >
                         Add Account
                     </button>
                 </div>
 
-                {/* Inline form — rendered below the header, not as a fixed overlay,
-                    so the "Add Account" toggle button remains accessible for tests. */}
+                {/* Add form — shown when "Add Account" is toggled */}
                 {showForm && (
                     <div className="mb-6">
                         <AddAccountForm onAccountAdded={handleAccountAdded} />
+                    </div>
+                )}
+
+                {/* Edit form — shown when an Edit button is clicked.
+                    keyed on id so switching to a different account remounts with fresh state. */}
+                {editingAccount && (
+                    <div className="mb-6">
+                        <AddAccountForm
+                            key={editingAccount.id}
+                            onAccountAdded={() => {}}
+                            editingAccount={editingAccount}
+                            onAccountUpdated={handleAccountUpdated}
+                        />
                     </div>
                 )}
 
@@ -129,7 +163,13 @@ function AccountsPage() {
                                 className="card-hover flex items-center justify-between"
                             >
                                 <div>
-                                    <strong className="text-slate-100 text-lg block">{account.name}</strong>
+                                    {/* Name is a link to the pre-filtered transactions view */}
+                                    <Link
+                                        to={`/transactions?account_id=${account.id}`}
+                                        className="hover:text-sky-400 transition-colors"
+                                    >
+                                        <strong className="text-slate-100 text-lg block">{account.name}</strong>
+                                    </Link>
                                     <div className="flex items-center gap-2 mt-1.5">
                                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BADGE[account.account_type] ?? 'bg-ocean-700 text-slate-300'}`}>
                                             {account.account_type}
@@ -140,8 +180,16 @@ function AccountsPage() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-xl font-bold text-slate-100">{account.current_balance}</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-right">
+                                        <span className="text-xl font-bold text-slate-100">{account.current_balance}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => handleEditAccount(account)}
+                                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                    >
+                                        Edit
+                                    </button>
                                 </div>
                             </li>
                         ))}

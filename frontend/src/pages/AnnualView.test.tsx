@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
-import AnnualView from './AnnualView'
+import AnnualView, { annualPlanCache } from './AnnualView'
 import { getApiBaseUrl } from '../lib/api'
 
 vi.mock('axios')
@@ -64,6 +64,8 @@ describe('AnnualView', () => {
     afterEach(() => {
         localStorage.clear()
         vi.clearAllMocks()
+        // Clear the module-level session cache so each test starts fresh
+        annualPlanCache.clear()
     })
 
     // =========================================================================
@@ -76,7 +78,7 @@ describe('AnnualView', () => {
 
         render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-        expect(screen.getByText(/loading/i)).toBeInTheDocument()
+        expect(screen.getByText(/building your annual plan/i)).toBeInTheDocument()
     })
 
     it('shows an error message when the fetch fails', async () => {

@@ -1,20 +1,23 @@
 // components/AddTransactionForm.tsx
 //
-// Purpose: Form for creating a new expense, income, or refund transaction.
-//          Transfers use AddTransferForm (a separate form because they need
-//          two account dropdowns and submit to a different endpoint).
+// Purpose: Form for creating OR editing an expense, income, or refund transaction.
+//          Transfers use AddTransferForm (separate form, two accounts, different endpoint).
+//
+// Modes:
+//   Create (default) — no editingTransaction prop: POSTs to /api/v1/transactions.
+//   Edit — editingTransaction provided: PUTs to /api/v1/transactions/{id}.
 //
 // Props:
-//   onTransactionAdded — called after successful submit so the parent can
-//                        re-fetch and optionally hide this form.
+//   onTransactionAdded   — called after a successful create (ignored in edit mode)
+//   editingTransaction   — (optional) pre-populates all fields; switches to edit mode
+//   onTransactionUpdated — (optional) called after a successful edit
 //
 // Design decisions:
 //   - Fetches accounts and categories on mount to populate the dropdowns.
-//     The fetch is best-effort: empty dropdowns are better than a broken form.
-//   - parent_transaction_id is only shown when type = 'refund'. A refund
-//     links back to the original expense so budget calculations can net it off.
-//   - transfer is intentionally excluded from the type select — use the
-//     dedicated Add Transfer form which handles the two-account logic.
+//     In edit mode, the dropdowns still fetch so the full option list is available;
+//     auto-selection of the first option is skipped (the pre-set values are used instead).
+//   - parent_transaction_id is only shown when type = 'refund'.
+//   - transfer is excluded from the type select — use AddTransferForm for that.
 
 import axios from 'axios'
 import { useState, useEffect } from 'react'
@@ -24,29 +27,51 @@ import { getApiBaseUrl } from '../lib/api'
 type Account = { id: string; name: string }
 type Category = { id: string; name: string }
 
-type Props = {
-    onTransactionAdded: () => void
+// The subset of Transaction fields needed to pre-populate the form in edit mode.
+export type EditingTransaction = {
+    id: string
+    account_id: string
+    category_id: string
+    transaction_type: string
+    date: string
+    payee: string | null
+    amount: string
+    currency: string
+    status: string
+    note: string | null
+    parent_transaction_id: string | null
 }
 
-function AddTransactionForm({ onTransactionAdded }: Props) {
+type Props = {
+    onTransactionAdded: () => void
+    editingTransaction?: EditingTransaction
+    onTransactionUpdated?: () => void
+}
+
+function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransactionUpdated }: Props) {
+    // isEditMode drives which endpoint is called and what the heading/button say.
+    const isEditMode = editingTransaction !== undefined
+
     const [accounts, setAccounts] = useState<Account[]>([])
     const [categories, setCategories] = useState<Category[]>([])
-    const [accountId, setAccountId] = useState('')
-    const [categoryId, setCategoryId] = useState('')
-    const [transactionType, setTransactionType] = useState('expense')
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-    const [payee, setPayee] = useState('')
-    const [amount, setAmount] = useState('')
-    const [currency, setCurrency] = useState('GBP')
-    const [status, setStatus] = useState('pending')
-    const [note, setNote] = useState('')
-    const [parentTransactionId, setParentTransactionId] = useState('')
+
+    // All state is initialised from editingTransaction in edit mode, or defaults in create mode.
+    const [accountId, setAccountId] = useState(editingTransaction?.account_id ?? '')
+    const [categoryId, setCategoryId] = useState(editingTransaction?.category_id ?? '')
+    const [transactionType, setTransactionType] = useState(editingTransaction?.transaction_type ?? 'expense')
+    const [date, setDate] = useState(editingTransaction?.date ?? new Date().toISOString().split('T')[0])
+    const [payee, setPayee] = useState(editingTransaction?.payee ?? '')
+    const [amount, setAmount] = useState(editingTransaction?.amount ?? '')
+    const [currency, setCurrency] = useState(editingTransaction?.currency ?? 'GBP')
+    const [status, setStatus] = useState(editingTransaction?.status ?? 'pending')
+    const [note, setNote] = useState(editingTransaction?.note ?? '')
+    const [parentTransactionId, setParentTransactionId] = useState(
+        editingTransaction?.parent_transaction_id ?? ''
+    )
     const [error, setError] = useState<string | null>(null)
 
     // Fetch accounts and categories to populate the dropdowns.
-    // Both are fetched in parallel via Promise.all to minimise load time.
-    // If the fetch fails, the dropdowns stay empty — the user will see an
-    // error when they try to submit (backend validates account/category ownership).
+    // In edit mode, skip auto-selection — the pre-set values from editingTransaction are used.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -56,48 +81,62 @@ function AddTransactionForm({ onTransactionAdded }: Props) {
         ]).then(([accountsRes, catsRes]) => {
             setAccounts(accountsRes.data)
             setCategories(catsRes.data)
-            // Auto-select the first option so the form is valid on first render
-            if (accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
-            if (catsRes.data.length > 0) setCategoryId(catsRes.data[0].id)
+            // Only auto-select the first option in create mode — in edit mode the
+            // values are already set from the editingTransaction prop.
+            if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
+            if (!isEditMode && catsRes.data.length > 0) setCategoryId(catsRes.data[0].id)
         }).catch(() => {
             // Best-effort — silently leave dropdowns empty
         })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
         setError(null)
         const token = localStorage.getItem('access_token')
+        const payload = {
+            account_id: accountId,
+            category_id: categoryId,
+            transaction_type: transactionType,
+            date,
+            payee: payee || null,
+            amount,
+            currency,
+            status,
+            note: note || null,
+            // Only include parent_transaction_id for refunds, and only if filled in
+            parent_transaction_id:
+                transactionType === 'refund' && parentTransactionId
+                    ? parentTransactionId
+                    : null,
+        }
         try {
-            await axios.post(
-                `${getApiBaseUrl()}/api/v1/transactions`,
-                {
-                    account_id: accountId,
-                    category_id: categoryId,
-                    transaction_type: transactionType,
-                    date,
-                    payee: payee || null,
-                    amount,
-                    currency,
-                    status,
-                    note: note || null,
-                    // Only send parent_transaction_id for refunds, and only if filled in
-                    parent_transaction_id:
-                        transactionType === 'refund' && parentTransactionId
-                            ? parentTransactionId
-                            : null,
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
-            )
-            onTransactionAdded()
+            if (isEditMode) {
+                await axios.put(
+                    `${getApiBaseUrl()}/api/v1/transactions/${editingTransaction.id}`,
+                    payload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                onTransactionUpdated?.()
+            } else {
+                await axios.post(
+                    `${getApiBaseUrl()}/api/v1/transactions`,
+                    payload,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                onTransactionAdded()
+            }
         } catch {
-            setError('Could not create transaction. Please try again.')
+            setError(`Could not ${isEditMode ? 'update' : 'create'} transaction. Please try again.`)
         }
     }
 
     return (
         <div className="bg-ocean-800 border border-ocean-700 rounded-xl p-6 shadow-xl">
-            <h3 className="section-header mb-5">New Transaction</h3>
+            <h3 className="section-header mb-5">
+                {isEditMode ? 'Edit Transaction' : 'New Transaction'}
+            </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -243,7 +282,7 @@ function AddTransactionForm({ onTransactionAdded }: Props) {
                 )}
 
                 <button type="submit" className="btn-primary w-full cursor-pointer">
-                    Save Transaction
+                    {isEditMode ? 'Update Transaction' : 'Save Transaction'}
                 </button>
             </form>
         </div>

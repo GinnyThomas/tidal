@@ -4,18 +4,20 @@
 //
 // Test strategy:
 //   We test the four render states (loading, error, empty, list), the
-//   Add Account toggle, and the integration loop where submitting the
-//   form triggers a re-fetch and updates the list.
+//   Add Account toggle, the integration loop where submitting the form
+//   triggers a re-fetch, account edit mode (pre-population + PUT), and
+//   the account name drill-down link to /transactions?account_id=xxx.
 //
 // axios is mocked globally so no real HTTP requests are made.
 // localStorage holds the fake JWT token each test needs.
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
 import AccountsPage from './AccountsPage'
+import { getApiBaseUrl } from '../lib/api'
 
 vi.mock('axios')
 
@@ -154,5 +156,81 @@ describe('AccountsPage', () => {
 
         // The form should be hidden after a successful submit
         expect(screen.queryByLabelText(/account name/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Edit account
+    // =========================================================================
+
+    it('shows an Edit button on each account card', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: [makeAccount()] })
+
+        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+
+        await screen.findByText('Nationwide Current')
+        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+    })
+
+    it('clicking Edit opens AddAccountForm pre-populated with the account values', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeAccount({ name: 'My Savings', account_type: 'savings', currency: 'EUR', current_balance: '3000.00', institution: 'Revolut' })],
+        })
+
+        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+
+        await screen.findByText('My Savings')
+        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+
+        // The form should be pre-populated with the account's existing values
+        expect(screen.getByLabelText(/account name/i)).toHaveValue('My Savings')
+        expect(screen.getByLabelText(/account type/i)).toHaveValue('savings')
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+        expect(screen.getByLabelText(/current balance/i)).toHaveValue(3000)
+        expect(screen.getByLabelText(/institution/i)).toHaveValue('Revolut')
+        // Heading and button reflect edit mode
+        expect(screen.getByText('Edit Account')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /update account/i })).toBeInTheDocument()
+    })
+
+    it('submits PUT to update the account in edit mode', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
+            .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current Updated' })] })
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+
+        await screen.findByText('Current')
+        await userEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+        await userEvent.click(screen.getByRole('button', { name: /update account/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/accounts/acc-001`,
+                expect.objectContaining({ name: 'Current' }),
+                expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } })
+            )
+        })
+
+        // After re-fetch the updated name appears and the form is hidden
+        expect(await screen.findByText('Current Updated')).toBeInTheDocument()
+        expect(screen.queryByLabelText(/account name/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Account drill-down link
+    // =========================================================================
+
+    it('account name is a link to the filtered transactions view', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeAccount({ id: 'acc-001', name: 'Nationwide Current' })],
+        })
+
+        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+
+        await screen.findByText('Nationwide Current')
+
+        const link = screen.getByRole('link', { name: 'Nationwide Current' })
+        expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?account_id=acc-001'))
     })
 })
