@@ -192,4 +192,117 @@ describe('AddScheduleForm', () => {
         expect(await screen.findByText(/could not create schedule/i)).toBeInTheDocument()
         expect(mockOnScheduleAdded).not.toHaveBeenCalled()
     })
+
+    // =========================================================================
+    // Edit mode
+    // =========================================================================
+
+    const makeEditingSchedule = (overrides = {}) => ({
+        id: 'sch-001',
+        name: 'Netflix',
+        account_id: 'acc-001',
+        category_id: 'cat-001',
+        amount: '15.99',
+        currency: 'GBP',
+        frequency: 'monthly',
+        interval: 1,
+        day_of_month: 1,
+        start_date: '2026-01-01',
+        end_date: null,
+        auto_generate: true,
+        payee: null,
+        note: null,
+        ...overrides,
+    })
+
+    it('shows "Edit Schedule" heading and "Update Schedule" button in edit mode', () => {
+        render(
+            <MemoryRouter>
+                <AddScheduleForm
+                    onScheduleAdded={mockOnScheduleAdded}
+                    editingSchedule={makeEditingSchedule()}
+                    onScheduleUpdated={vi.fn()}
+                />
+            </MemoryRouter>
+        )
+
+        expect(screen.getByText('Edit Schedule')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /update schedule/i })).toBeInTheDocument()
+        // Create-mode button should NOT appear
+        expect(screen.queryByRole('button', { name: /save schedule/i })).not.toBeInTheDocument()
+    })
+
+    it('pre-populates all fields from editingSchedule', () => {
+        render(
+            <MemoryRouter>
+                <AddScheduleForm
+                    onScheduleAdded={mockOnScheduleAdded}
+                    editingSchedule={makeEditingSchedule({ name: 'Spotify', amount: '9.99', currency: 'USD' })}
+                    onScheduleUpdated={vi.fn()}
+                />
+            </MemoryRouter>
+        )
+
+        expect(screen.getByLabelText(/^name$/i)).toHaveValue('Spotify')
+        expect(screen.getByLabelText(/^amount$/i)).toHaveValue(9.99)
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('USD')
+    })
+
+    it('submits to PUT /api/v1/schedules/{id} in edit mode', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001' })] })
+            .mockResolvedValueOnce({ data: [makeCategory({ id: 'cat-001' })] })
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        const mockOnScheduleUpdated = vi.fn()
+
+        render(
+            <MemoryRouter>
+                <AddScheduleForm
+                    onScheduleAdded={mockOnScheduleAdded}
+                    editingSchedule={makeEditingSchedule()}
+                    onScheduleUpdated={mockOnScheduleUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await screen.findByRole('option', { name: 'Current Account' })
+        await userEvent.click(screen.getByRole('button', { name: /update schedule/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/schedules/sch-001`,
+                expect.objectContaining({ name: 'Netflix', frequency: 'monthly' }),
+                expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } })
+            )
+        })
+
+        expect(mockOnScheduleUpdated).toHaveBeenCalledTimes(1)
+        expect(mockOnScheduleAdded).not.toHaveBeenCalled()
+    })
+
+    it('shows "could not update schedule" error when PUT fails', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+        vi.mocked(axios.put).mockRejectedValueOnce(new Error('Server error'))
+
+        const mockOnScheduleUpdated = vi.fn()
+
+        render(
+            <MemoryRouter>
+                <AddScheduleForm
+                    onScheduleAdded={mockOnScheduleAdded}
+                    editingSchedule={makeEditingSchedule()}
+                    onScheduleUpdated={mockOnScheduleUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await screen.findByRole('option', { name: 'Current Account' })
+        await userEvent.click(screen.getByRole('button', { name: /update schedule/i }))
+
+        expect(await screen.findByText(/could not update schedule/i)).toBeInTheDocument()
+        expect(mockOnScheduleUpdated).not.toHaveBeenCalled()
+    })
 })
