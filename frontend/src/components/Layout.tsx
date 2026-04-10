@@ -82,6 +82,7 @@ function Layout({ children }: Props) {
                         <Link to="/accounts"     className={navClass('/accounts')}>Accounts</Link>
                         <Link to="/categories"   className={navClass('/categories')}>Categories</Link>
                         <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
+                        <Link to="/annual"       className={navClass('/annual')}>Annual</Link>
                     </div>
 
                     {/* User identity + account actions — hidden on mobile */}
@@ -125,6 +126,7 @@ function Layout({ children }: Props) {
                         <Link to="/accounts"     className={navClass('/accounts')}              onClick={() => setMenuOpen(false)}>Accounts</Link>
                         <Link to="/categories"   className={navClass('/categories')}            onClick={() => setMenuOpen(false)}>Categories</Link>
                         <Link to="/schedules"    className={navClass('/schedules')}             onClick={() => setMenuOpen(false)}>Schedules</Link>
+                        <Link to="/annual"       className={navClass('/annual')}                onClick={() => setMenuOpen(false)}>Annual</Link>
 
                         {/* Divider + user identity + account actions */}
                         <div className="border-t border-ocean-700 mt-2 pt-3 flex flex-col gap-2">
