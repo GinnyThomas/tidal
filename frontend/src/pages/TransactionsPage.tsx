@@ -245,8 +245,8 @@ function TransactionsPage() {
                         </p>
                     </div>
                 ) : (
-                    <div className="bg-ocean-800 border border-ocean-700 rounded-xl overflow-hidden">
-                        <table className="w-full text-sm">
+                    <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
+                        <table className="w-full text-sm min-w-[640px]">
                             <thead>
                                 <tr className="border-b border-ocean-700 bg-ocean-950">
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Date</th>

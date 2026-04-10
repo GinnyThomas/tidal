@@ -78,3 +78,15 @@ class MonthlyPlan(BaseModel):
     def serialize_total(self, value: Decimal) -> str:
         """Return total as a string with exactly 2 decimal places."""
         return str(value.quantize(Decimal("0.01")))
+
+
+class AnnualPlan(BaseModel):
+    """
+    Full response from GET /api/v1/plan/{year}.
+
+    year   — the calendar year.
+    months — one MonthlyPlan per month, in order January (1) through December (12).
+    """
+
+    year: int
+    months: list[MonthlyPlan]

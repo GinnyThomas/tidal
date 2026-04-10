@@ -1,27 +1,29 @@
 # app/routers/plan.py
 #
-# Purpose: HTTP endpoint for the Monthly Plan View.
+# Purpose: HTTP endpoints for the Plan views.
 #
 # Endpoints:
 #   GET /api/v1/plan/{year}/{month} → MonthlyPlan (200)
+#   GET /api/v1/plan/{year}         → AnnualPlan  (200)
 #
-# This endpoint is the primary view of Tidal — the "living spreadsheet" that
-# shows planned vs actual vs remaining vs pending for every category in a month.
+# The monthly endpoint is the primary view of Tidal — the "living spreadsheet"
+# that shows planned vs actual vs remaining vs pending for every category in a month.
 #
-# It delegates all business logic to app/services/plan.py. The router's only
-# job is to validate inputs, inject dependencies, call the service, and return.
+# The annual endpoint calls the monthly service 12 times (once per month) and
+# returns all results as a single AnnualPlan. This avoids duplicating recurrence
+# logic — the same service that powers the monthly view powers the annual view.
 #
-# Path parameter validation:
-#   FastAPI validates that year and month are integers. We add a manual check
-#   that month is 1–12 because a path like /api/v1/plan/2026/13 is syntactically
-#   valid (it's still an int) but semantically nonsensical.
+# Route ordering: /{year}/{month} is defined first so FastAPI matches the
+# more-specific two-segment path before the one-segment /{year} path.
+# In practice FastAPI matches by path segment count so there is no ambiguity,
+# but declaring the specific route first is conventional best practice.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.plan import MonthlyPlan
+from app.schemas.plan import AnnualPlan, MonthlyPlan
 from app.services.auth import get_current_user
 from app.services.plan import get_monthly_plan
 
@@ -61,3 +63,29 @@ def get_plan(
         )
 
     return get_monthly_plan(year=year, month=month, user_id=current_user.id, db=db)
+
+
+@router.get(
+    "/{year}",
+    response_model=AnnualPlan,
+)
+def get_annual_plan(
+    year: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnnualPlan:
+    """
+    Returns the annual plan for all 12 months of the given year.
+
+    Calls get_monthly_plan once per month (January–December) and returns
+    the results wrapped in an AnnualPlan. Reuses the same recurrence engine
+    and budget logic as the monthly endpoint — no duplicated business logic.
+
+    This powers the Annual Budget View: a spreadsheet-style table showing
+    planned amounts per category across every month of the year.
+    """
+    months = [
+        get_monthly_plan(year=year, month=m, user_id=current_user.id, db=db)
+        for m in range(1, 13)
+    ]
+    return AnnualPlan(year=year, months=months)

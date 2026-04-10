@@ -335,5 +335,8 @@ authlib integration. Users table gets optional google_id column.
 Cross-cutting transaction labels via TagAssignment join table.
 
 ---
+- Annual view calls get_monthly_plan 12 times (N×12 DB queries) — optimise
+  in Phase 9 with a single-pass annual service that loads data once for the
+  full year
 
 *Last updated: Phase 8 styling — April 2026*

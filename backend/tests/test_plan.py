@@ -329,6 +329,25 @@ def test_plan_annually_schedule_only_in_correct_month(test_client) -> None:
     assert march_row["planned"] == "1200.00"
 
 
+def test_annual_plan_returns_12_months(test_client) -> None:
+    """
+    GET /api/v1/plan/{year} should return an AnnualPlan with exactly 12
+    MonthlyPlan objects — one per calendar month, in order January through
+    December. Each month object must carry the correct year and month number.
+    """
+    token, _, _ = _setup(test_client)
+
+    response = test_client.get("/api/v1/plan/2026", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["year"] == 2026
+    assert len(body["months"]) == 12
+    for i, month_plan in enumerate(body["months"]):
+        assert month_plan["year"] == 2026
+        assert month_plan["month"] == i + 1
+
+
 def test_plan_schedule_excluded_after_end_date(test_client) -> None:
     """
     A schedule whose end_date falls before the first day of the target month
