@@ -8,12 +8,20 @@
 //   - User email display (read from localStorage, stored at login/register)
 //   - Logout button (clears localStorage, redirects to /login)
 //   - Main content area with consistent padding
+//   - Responsive hamburger menu on mobile (below md breakpoint)
+//
+// Mobile layout:
+//   - Nav links and user actions are hidden; a hamburger button (☰) appears.
+//   - Clicking the hamburger toggles a dropdown showing all links vertically
+//     plus the user email and Log out button.
+//   - Clicking any link in the dropdown closes the menu.
 //
 // Usage:
 //   Every protected page wraps its content in <Layout>.
 //   LoginPage and RegisterPage do NOT use Layout — they are full-screen
 //   standalone cards without a nav bar.
 
+import { useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 
@@ -24,6 +32,8 @@ type Props = {
 function Layout({ children }: Props) {
     const { pathname } = useLocation()
     const navigate = useNavigate()
+    // Controls the mobile dropdown visibility
+    const [menuOpen, setMenuOpen] = useState(false)
 
     // Email is stored in localStorage at login/register time so it can be
     // displayed without a separate API call to /api/v1/users/me.
@@ -54,45 +64,96 @@ function Layout({ children }: Props) {
         <div className="min-h-screen bg-ocean-900 flex flex-col">
 
             {/* ── Navigation bar ─────────────────────────────────────────── */}
-            <nav className="bg-ocean-950 border-b border-ocean-700 px-6 py-3 flex items-center justify-between">
+            <nav className="bg-ocean-950 border-b border-ocean-700">
 
-                {/* Logo — emoji is decorative, Tidal is the readable brand text */}
-                <div className="flex items-center gap-2">
-                    <span aria-hidden="true" className="text-2xl">🌊</span>
-                    <span className="text-sky-500 font-bold text-xl">Tidal</span>
-                </div>
+                {/* Main nav row — always visible */}
+                <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
 
-                {/* Page links */}
-                <div className="flex items-center gap-1">
-                    <Link to="/dashboard"     className={navClass(['/dashboard', '/plan'])}>Dashboard</Link>
-                    <Link to="/transactions"  className={navClass('/transactions')}>Transactions</Link>
-                    <Link to="/accounts"      className={navClass('/accounts')}>Accounts</Link>
-                    <Link to="/categories"    className={navClass('/categories')}>Categories</Link>
-                    <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
-                </div>
+                    {/* Logo — emoji is decorative, Tidal is the readable brand text */}
+                    <div className="flex items-center gap-2">
+                        <span aria-hidden="true" className="text-2xl">🌊</span>
+                        <span className="text-sky-500 font-bold text-xl">Tidal</span>
+                    </div>
 
-                {/* User identity + account actions + logout */}
-                <div className="flex items-center gap-3">
-                    {userEmail && (
-                        <span className="text-sm text-slate-400 hidden sm:inline">{userEmail}</span>
-                    )}
-                    <Link
-                        to="/change-password"
-                        className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
-                    >
-                        Change Password
-                    </Link>
+                    {/* Page links — hidden on mobile, shown as row on md+ */}
+                    <div className="hidden md:flex items-center gap-1">
+                        <Link to="/dashboard"    className={navClass(['/dashboard', '/plan'])}>Dashboard</Link>
+                        <Link to="/transactions" className={navClass('/transactions')}>Transactions</Link>
+                        <Link to="/accounts"     className={navClass('/accounts')}>Accounts</Link>
+                        <Link to="/categories"   className={navClass('/categories')}>Categories</Link>
+                        <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
+                    </div>
+
+                    {/* User identity + account actions — hidden on mobile */}
+                    <div className="hidden md:flex items-center gap-3">
+                        {userEmail && (
+                            <span className="text-sm text-slate-400">{userEmail}</span>
+                        )}
+                        <Link
+                            to="/change-password"
+                            className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
+                        >
+                            Change Password
+                        </Link>
+                        <button
+                            onClick={handleLogout}
+                            className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors cursor-pointer"
+                        >
+                            Log out
+                        </button>
+                    </div>
+
+                    {/* Hamburger button — visible on mobile only */}
                     <button
-                        onClick={handleLogout}
-                        className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors cursor-pointer"
+                        onClick={() => setMenuOpen((prev) => !prev)}
+                        className="md:hidden p-2 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                        aria-label="Toggle menu"
+                        aria-expanded={menuOpen}
                     >
-                        Log out
+                        {menuOpen ? '✕' : '☰'}
                     </button>
+
                 </div>
+
+                {/* Mobile dropdown — slides in below the nav row when open */}
+                {menuOpen && (
+                    <div className="md:hidden border-t border-ocean-700 px-4 py-3 flex flex-col gap-1">
+
+                        {/* Nav links stacked vertically */}
+                        <Link to="/dashboard"    className={navClass(['/dashboard', '/plan'])}  onClick={() => setMenuOpen(false)}>Dashboard</Link>
+                        <Link to="/transactions" className={navClass('/transactions')}           onClick={() => setMenuOpen(false)}>Transactions</Link>
+                        <Link to="/accounts"     className={navClass('/accounts')}              onClick={() => setMenuOpen(false)}>Accounts</Link>
+                        <Link to="/categories"   className={navClass('/categories')}            onClick={() => setMenuOpen(false)}>Categories</Link>
+                        <Link to="/schedules"    className={navClass('/schedules')}             onClick={() => setMenuOpen(false)}>Schedules</Link>
+
+                        {/* Divider + user identity + account actions */}
+                        <div className="border-t border-ocean-700 mt-2 pt-3 flex flex-col gap-2">
+                            {userEmail && (
+                                <span className="text-sm text-slate-400 px-3">{userEmail}</span>
+                            )}
+                            <Link
+                                to="/change-password"
+                                className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors"
+                                onClick={() => setMenuOpen(false)}
+                            >
+                                Change Password
+                            </Link>
+                            <button
+                                onClick={() => { handleLogout(); setMenuOpen(false) }}
+                                className="px-3 py-1.5 text-sm rounded border border-ocean-600 text-slate-300 hover:text-white hover:border-sky-500 transition-colors cursor-pointer text-left"
+                            >
+                                Log out
+                            </button>
+                        </div>
+
+                    </div>
+                )}
+
             </nav>
 
             {/* ── Page content ───────────────────────────────────────────── */}
-            <main className="flex-1 p-6">
+            {/* px-4 on mobile, wider padding on larger screens */}
+            <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6">
                 {children}
             </main>
 
