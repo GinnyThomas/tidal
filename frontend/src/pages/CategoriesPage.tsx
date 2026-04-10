@@ -13,6 +13,7 @@
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddCategoryForm from '../components/AddCategoryForm'
 import { getApiBaseUrl } from '../lib/api'
@@ -212,7 +213,13 @@ function CategoriesPage() {
                                     <div className="flex items-center justify-between px-4 py-3">
                                         <span className="font-semibold text-slate-100">
                                             {parent.icon && <span className="mr-2">{parent.icon}</span>}
-                                            {parent.name}
+                                            {/* Link navigates to /transactions pre-filtered by this category */}
+                                            <Link
+                                                to={`/transactions?category_id=${parent.id}`}
+                                                className="hover:text-sky-400 transition-colors"
+                                            >
+                                                {parent.name}
+                                            </Link>
                                         </span>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -241,7 +248,12 @@ function CategoriesPage() {
                                                 >
                                                     <span className="text-slate-300 text-sm">
                                                         {child.icon && <span className="mr-1.5">{child.icon}</span>}
-                                                        {child.name}
+                                                        <Link
+                                                            to={`/transactions?category_id=${child.id}`}
+                                                            className="hover:text-sky-400 transition-colors"
+                                                        >
+                                                            {child.name}
+                                                        </Link>
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button

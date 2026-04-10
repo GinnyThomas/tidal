@@ -4,9 +4,18 @@
 //          Wrapped in Layout for navigation.
 //
 // Features:
-//   - Fetch: accounts, categories, and transactions are loaded together on
-//     mount via Promise.all. Filters re-trigger the full fetch.
-//   - Filters: account dropdown (maps id → name) and status dropdown.
+//   - Fetch: accounts and transactions are fetched together (Promise.all) and
+//     re-fetched whenever any filter changes.
+//     Categories are fetched once on mount in a separate useEffect (empty deps)
+//     so that the filter dropdown is populated without re-fetching on every
+//     filter change.
+//   - Filters: account dropdown, category dropdown, and status dropdown.
+//     Category filter also reads ?category_id from the URL on mount so
+//     clicking a category link in CategoriesPage or MonthlyPlanView
+//     pre-selects the filter automatically (category drill-down).
+//   - Active filter badge: when a category is selected a "Filtered by: Name"
+//     pill with an × clear button appears above the table. Clicking × also
+//     calls setSearchParams({}) to keep the URL in sync.
 //   - Inline status toggle: clicking the status badge cycles
 //     pending → cleared → reconciled → pending via PUT /api/v1/transactions/{id}.
 //     State is updated optimistically so the badge reflects the new value
@@ -19,6 +28,7 @@
 
 import axios from 'axios'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
 import AddTransferForm from '../components/AddTransferForm'
@@ -45,6 +55,12 @@ type Transaction = {
 type Account = {
     id: string
     name: string
+}
+
+type Category = {
+    id: string
+    name: string
+    parent_category_id: string | null
 }
 
 // --- Status cycle ---
@@ -79,21 +95,30 @@ const TYPE_BADGE: Record<string, string> = {
 // =============================================================================
 
 function TransactionsPage() {
+    // Read ?category_id from URL on mount — powers the category drill-down:
+    // clicking a category in CategoriesPage or MonthlyPlanView navigates here
+    // with the filter pre-set.
+    const [searchParams, setSearchParams] = useSearchParams()
+
     const [accounts, setAccounts] = useState<Account[]>([])
+    const [categories, setCategories] = useState<Category[]>([])
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [filterAccountId, setFilterAccountId] = useState('')
+    // Initialise from URL — '' means no filter
+    const [filterCategoryId, setFilterCategoryId] = useState(
+        () => searchParams.get('category_id') ?? ''
+    )
     const [filterStatus, setFilterStatus] = useState('')
     const [showAddForm, setShowAddForm] = useState(false)
     const [showTransferForm, setShowTransferForm] = useState(false)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
 
-    // Fetch accounts and transactions together.
-    // Accounts are needed to resolve account names in the table.
-    // Category names come directly from the API via category_name on each transaction.
-    // Both are re-fetched when filters change or after a form submission.
+    // Main filter effect: fetches accounts and transactions.
+    // Re-runs whenever any filter changes or after a form submission (refreshKey).
+    // Categories are NOT re-fetched here — they live in a separate effect below.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -102,6 +127,7 @@ function TransactionsPage() {
 
         const params: Record<string, string> = {}
         if (filterAccountId) params.account_id = filterAccountId
+        if (filterCategoryId) params.category_id = filterCategoryId
         if (filterStatus) params.status = filterStatus
 
         Promise.all([
@@ -116,10 +142,29 @@ function TransactionsPage() {
             setLoading(false)
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterAccountId, filterStatus, refreshKey])
+    }, [filterAccountId, filterCategoryId, filterStatus, refreshKey])
+
+    // Categories effect: runs once on mount.
+    // Fetching categories separately means filter dropdowns are populated
+    // without triggering a re-fetch every time the user changes a filter.
+    useEffect(() => {
+        const token = localStorage.getItem('access_token')
+        axios.get(`${getApiBaseUrl()}/api/v1/categories`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(res => {
+            setCategories(res.data)
+        }).catch(() => {
+            // Silent failure — the category filter dropdown is non-critical
+        })
+    }, [])
 
     // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
+
+    // Find the active filter category name for the badge (if filter is set).
+    const filterCategoryName = filterCategoryId
+        ? (categories.find(c => c.id === filterCategoryId)?.name ?? filterCategoryId)
+        : ''
 
     const handleTransactionAdded = () => {
         setShowAddForm(false)
@@ -221,6 +266,20 @@ function TransactionsPage() {
                         </select>
                     </div>
                     <div>
+                        <label htmlFor="filterCategory" className="label-base">Filter by category</label>
+                        <select
+                            id="filterCategory"
+                            value={filterCategoryId}
+                            onChange={(e) => setFilterCategoryId(e.target.value)}
+                            className="input-base"
+                        >
+                            <option value="">All categories</option>
+                            {categories.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
                         <label htmlFor="filterStatus" className="label-base">Filter by status</label>
                         <select
                             id="filterStatus"
@@ -235,6 +294,28 @@ function TransactionsPage() {
                         </select>
                     </div>
                 </div>
+
+                {/* Active category filter badge — shown when a category is pre-selected
+                    (e.g. from a drill-down link). × clears the filter. */}
+                {filterCategoryId && (
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className="text-sm text-slate-400">Filtered by:</span>
+                        <span className="badge bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                            {filterCategoryName}
+                        </span>
+                        <button
+                            onClick={() => {
+                                setFilterCategoryId('')
+                                // Sync the URL so the back button / share URL reflects cleared state
+                                setSearchParams({})
+                            }}
+                            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
+                            aria-label="Clear category filter"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
 
                 {/* Transaction list / empty state */}
                 {transactions.length === 0 ? (

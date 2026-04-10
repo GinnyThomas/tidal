@@ -349,17 +349,21 @@ def list_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     account_id: Optional[uuid.UUID] = Query(default=None),
+    category_id: Optional[uuid.UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
 ) -> list[dict]:
     """
     Returns all non-deleted transactions for the current user.
 
     Optional filters:
-      account_id — return only transactions for a specific account.
-      status     — comma-separated list of statuses to include.
-                   e.g. "cleared,reconciled" returns only settled transactions.
-                   This is the query the budget engine uses to compute
-                   "actual spend" — pending transactions are deliberately excluded.
+      account_id  — return only transactions for a specific account.
+      category_id — return only transactions for a specific category.
+                    Supports the category drill-down feature: clicking a
+                    category navigates to /transactions?category_id=<uuid>.
+      status      — comma-separated list of statuses to include.
+                    e.g. "cleared,reconciled" returns only settled transactions.
+                    This is the query the budget engine uses to compute
+                    "actual spend" — pending transactions are deliberately excluded.
     """
     query = db.query(Transaction).filter(
         Transaction.user_id == current_user.id,
@@ -368,6 +372,9 @@ def list_transactions(
 
     if account_id is not None:
         query = query.filter(Transaction.account_id == account_id)
+
+    if category_id is not None:
+        query = query.filter(Transaction.category_id == category_id)
 
     if status is not None:
         # Split on commas to support multi-value filter: "cleared,reconciled"
