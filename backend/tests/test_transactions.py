@@ -199,6 +199,47 @@ def test_list_transactions_can_filter_by_account(test_client) -> None:
     assert body[0]["payee"] == "Shop A"
 
 
+def test_list_transactions_can_filter_by_category(test_client) -> None:
+    """
+    GET /api/v1/transactions?category_id=<id> should return only transactions
+    belonging to that category. Transactions in other categories are excluded.
+
+    This powers the category drill-down feature: clicking a category name
+    navigates to /transactions?category_id=<uuid> so the user can see all
+    spending in that category.
+    """
+    token, account_id, _ = _setup(test_client)
+
+    # Get two different category IDs from the seeded categories
+    categories = test_client.get(
+        "/api/v1/categories",
+        headers=_auth_headers(token),
+    ).json()
+    category_a = categories[0]["id"]
+    category_b = categories[1]["id"]
+
+    test_client.post(
+        "/api/v1/transactions",
+        json={**_TXN, "account_id": account_id, "category_id": category_a, "payee": "Payee A"},
+        headers=_auth_headers(token),
+    )
+    test_client.post(
+        "/api/v1/transactions",
+        json={**_TXN, "account_id": account_id, "category_id": category_b, "payee": "Payee B"},
+        headers=_auth_headers(token),
+    )
+
+    response = test_client.get(
+        f"/api/v1/transactions?category_id={category_a}",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["payee"] == "Payee A"
+
+
 def test_only_cleared_and_reconciled_count_toward_actual_spend(test_client) -> None:
     """
     GET /api/v1/transactions?status=cleared,reconciled should return only

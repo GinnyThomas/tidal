@@ -4,11 +4,12 @@
 //
 // Test strategy:
 //   Four render states (loading, error, empty, list), inline status toggle,
-//   account filter, and form toggle for Add Transaction / Add Transfer.
+//   account filter, category filter (including URL pre-selection), and form
+//   toggle for Add Transaction / Add Transfer.
 //
-// Two axios.get calls happen on mount: accounts, transactions.
-// Mocks must be queued in that order. Categories are no longer fetched by
-// the page — category_name comes directly from each transaction in the API response.
+// Three axios.get calls happen on mount via Promise.all: accounts, transactions,
+// categories. Mocks must be queued in that order. The mockFetch() helper handles
+// this automatically — pass categories as the 3rd argument (defaults to []).
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -57,15 +58,18 @@ const makeTransaction = (overrides = {}) => ({
     ...overrides,
 })
 
-// Helper: queue the two standard mocks (accounts, transactions).
-// Categories are no longer fetched by the page — category_name is on the transaction.
+// Helper: queue the three standard mocks (accounts, transactions, categories).
+// Promise.all fires all three calls in array order, so mocks are consumed in
+// that same order. Pass categories as the 3rd arg to test category filter UI.
 function mockFetch(
     accounts = [makeAccount()],
     transactions: ReturnType<typeof makeTransaction>[] = [],
+    categories: ReturnType<typeof makeCategory>[] = [],
 ) {
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: accounts })
         .mockResolvedValueOnce({ data: transactions })
+        .mockResolvedValueOnce({ data: categories })
 }
 
 describe('TransactionsPage', () => {
@@ -83,10 +87,12 @@ describe('TransactionsPage', () => {
     // =========================================================================
 
     it('shows a loading indicator while the fetch is in progress', () => {
-        // Accounts resolves; transactions never does — page stays in loading state.
+        // Accounts and categories resolve; transactions never does — Promise.all
+        // stays pending so the page remains in loading state.
         vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: [] })
-            .mockReturnValueOnce(new Promise<never>(() => {}))
+            .mockResolvedValueOnce({ data: [] })                  // accounts
+            .mockReturnValueOnce(new Promise<never>(() => {}))    // transactions
+            .mockResolvedValueOnce({ data: [] })                  // categories
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -95,8 +101,9 @@ describe('TransactionsPage', () => {
 
     it('shows an error message when the fetch fails', async () => {
         vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: [] })
-            .mockRejectedValueOnce(new Error('Network error'))
+            .mockResolvedValueOnce({ data: [] })                         // accounts
+            .mockRejectedValueOnce(new Error('Network error'))           // transactions
+            .mockResolvedValueOnce({ data: [] })                         // categories
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -198,12 +205,14 @@ describe('TransactionsPage', () => {
     // =========================================================================
 
     it('sends account_id param when an account filter is selected', async () => {
-        // Initial load + filtered re-fetch (each needs 2 mocked responses: accounts, transactions)
+        // Initial load + filtered re-fetch (each needs 3 mocked responses: accounts, transactions, categories)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
-            .mockResolvedValueOnce({ data: [] })  // initial transactions
+            .mockResolvedValueOnce({ data: [] })   // initial transactions
+            .mockResolvedValueOnce({ data: [] })   // initial categories
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
-            .mockResolvedValueOnce({ data: [] })  // filtered transactions
+            .mockResolvedValueOnce({ data: [] })   // filtered transactions
+            .mockResolvedValueOnce({ data: [] })   // filtered categories
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -220,6 +229,40 @@ describe('TransactionsPage', () => {
             )
             expect(txCall).toBeDefined()
         })
+    })
+
+    // =========================================================================
+    // Category filter
+    // =========================================================================
+
+    it('renders a category filter dropdown populated with fetched categories', async () => {
+        mockFetch([], [], [makeCategory({ id: 'cat-001', name: 'Groceries' })])
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText(/no transactions/i)
+
+        // The filter select is labelled and the fetched category appears as an option
+        expect(screen.getByLabelText(/filter by category/i)).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'Groceries' })).toBeInTheDocument()
+    })
+
+    it('pre-selects the category filter when ?category_id is in the URL', async () => {
+        mockFetch([], [], [makeCategory({ id: 'cat-001', name: 'Groceries' })])
+
+        // MemoryRouter initialEntries sets the initial URL including query string
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText(/no transactions/i)
+
+        // The dropdown should be pre-selected with the URL value
+        expect(screen.getByLabelText(/filter by category/i)).toHaveValue('cat-001')
+        // The "Filtered by:" badge should be visible with the resolved category name
+        expect(screen.getByText('Filtered by:')).toBeInTheDocument()
     })
 
     // =========================================================================
@@ -275,20 +318,22 @@ describe('TransactionsPage', () => {
     // =========================================================================
 
     it('re-fetches and hides the form after a transaction is added', async () => {
-        // Initial load: accounts + empty transactions
+        // Initial load: accounts + empty transactions + categories (3 calls)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [] })        // page: accounts
             .mockResolvedValueOnce({ data: [] })        // page: transactions
+            .mockResolvedValueOnce({ data: [] })        // page: categories
         // AddTransactionForm's own account/category fetch (the form fetches both)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeCategory()] })
         // Post succeeds
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
-        // Re-fetch after add: accounts + one transaction now
+        // Re-fetch after add: accounts + one transaction + categories (3 calls)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeTransaction({ payee: 'Sainsbury\'s' })] })
+            .mockResolvedValueOnce({ data: [] })        // re-fetch: categories
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 

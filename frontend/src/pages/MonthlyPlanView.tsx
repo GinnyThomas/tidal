@@ -14,6 +14,7 @@ import axios from 'axios'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import React from 'react'
+import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { getApiBaseUrl } from '../lib/api'
 
@@ -199,7 +200,14 @@ function MonthlyPlanView() {
                                         <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                                             <td className="px-4 py-3 text-slate-100 font-medium">{parent.category_name}</td>
                                             <td className="px-4 py-3 text-right text-sky-400">{parent.planned}</td>
-                                            <td className="px-4 py-3 text-right text-teal-400">{parent.actual}</td>
+                                            <td className="px-4 py-3 text-right text-teal-400">
+                                                {/* Non-zero actual links to transactions filtered by this category */}
+                                                {parseFloat(parent.actual) !== 0 ? (
+                                                    <Link to={`/transactions?category_id=${parent.category_id}`} className="hover:underline">
+                                                        {parent.actual}
+                                                    </Link>
+                                                ) : parent.actual}
+                                            </td>
                                             <td
                                                 className="px-4 py-3 text-right font-medium"
                                                 style={remainingStyle(parent.remaining)}
@@ -222,7 +230,13 @@ function MonthlyPlanView() {
                                                     {child.category_name}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">{child.planned}</td>
-                                                <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{child.actual}</td>
+                                                <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
+                                                    {parseFloat(child.actual) !== 0 ? (
+                                                        <Link to={`/transactions?category_id=${child.category_id}`} className="hover:underline">
+                                                            {child.actual}
+                                                        </Link>
+                                                    ) : child.actual}
+                                                </td>
                                                 <td
                                                     className="px-4 py-2.5 text-right text-sm"
                                                     style={remainingStyle(child.remaining)}
