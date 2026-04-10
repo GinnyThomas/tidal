@@ -29,6 +29,13 @@ vi.mock('axios')
 
 // --- Helpers ---
 
+const makeScheduleRow = (overrides: Record<string, unknown> = {}) => ({
+    schedule_id: 'sched-1',
+    schedule_name: 'Weekly Groceries',
+    planned: '200.00',
+    ...overrides,
+})
+
 const makeRow = (overrides: Record<string, unknown> = {}) => ({
     category_id: 'cat-1',
     category_name: 'Food & Drink',
@@ -37,6 +44,7 @@ const makeRow = (overrides: Record<string, unknown> = {}) => ({
     actual: '150.00',
     remaining: '50.00',
     pending: '0.00',
+    schedules: [],
     ...overrides,
 })
 
@@ -225,6 +233,76 @@ describe('MonthlyPlanView', () => {
         expect(actualCell).toHaveTextContent('0.00')
         // No <a> element inside the cell — zero amount does not drill down
         expect(actualCell.querySelector('a')).toBeNull()
+    })
+
+    // =========================================================================
+    // Schedule expand/collapse
+    // =========================================================================
+
+    it('shows schedule rows when a category with schedules is expanded (default)', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{
+                category_id: 'cat-1',
+                category_name: 'Food & Drink',
+                schedules: [
+                    makeScheduleRow({ schedule_name: 'Weekly Groceries', planned: '120.00' }),
+                    makeScheduleRow({ schedule_id: 'sched-2', schedule_name: 'Coffee Subscription', planned: '80.00' }),
+                ],
+            }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // Categories with schedules are expanded by default — schedule names visible
+        expect(screen.getByText('Weekly Groceries')).toBeInTheDocument()
+        expect(screen.getByText('Coffee Subscription')).toBeInTheDocument()
+    })
+
+    it('hides schedule rows when a category is collapsed', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{
+                category_id: 'cat-1',
+                category_name: 'Food & Drink',
+                schedules: [makeScheduleRow({ schedule_name: 'Weekly Groceries' })],
+            }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // Schedule visible by default (expanded)
+        expect(screen.getByText('Weekly Groceries')).toBeInTheDocument()
+
+        // Click the collapse button
+        await userEvent.click(screen.getByRole('button', { name: /collapse food/i }))
+
+        // Schedule row should be hidden
+        expect(screen.queryByText('Weekly Groceries')).not.toBeInTheDocument()
+    })
+
+    it('toggle button re-expands a collapsed category', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{
+                category_id: 'cat-1',
+                category_name: 'Food & Drink',
+                schedules: [makeScheduleRow({ schedule_name: 'Weekly Groceries' })],
+            }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // Collapse first
+        await userEvent.click(screen.getByRole('button', { name: /collapse food/i }))
+        expect(screen.queryByText('Weekly Groceries')).not.toBeInTheDocument()
+
+        // Re-expand
+        await userEvent.click(screen.getByRole('button', { name: /expand food/i }))
+        expect(screen.getByText('Weekly Groceries')).toBeInTheDocument()
     })
 
     // =========================================================================

@@ -25,6 +25,26 @@ from typing import Optional
 from pydantic import BaseModel, field_serializer
 
 
+class ScheduleRow(BaseModel):
+    """
+    One schedule's planned contribution within a PlanRow.
+
+    Shows the individual schedule name and how much it contributes to the
+    category's planned total for the month. This powers the expand/collapse
+    feature in the Monthly Plan View — users can drill into a category to
+    see which schedules make up its planned amount.
+    """
+
+    schedule_id: uuid.UUID
+    schedule_name: str
+    planned: Decimal
+
+    @field_serializer("planned")
+    def serialize_amount(self, value: Decimal) -> str:
+        """Return amount as a string with exactly 2 decimal places."""
+        return str(value.quantize(Decimal("0.01")))
+
+
 class PlanRow(BaseModel):
     """
     One category's financial picture for a month.
@@ -33,6 +53,7 @@ class PlanRow(BaseModel):
     actual    — sum of cleared + reconciled transaction amounts.
     remaining — planned minus actual (can be negative if overspent).
     pending   — sum of pending transaction amounts (expected but not settled).
+    schedules — individual schedule breakdowns that make up the planned total.
 
     pending is shown separately because pending transactions intentionally do
     not count toward actual spend — they might never settle. Surfacing them
@@ -47,6 +68,7 @@ class PlanRow(BaseModel):
     actual: Decimal
     remaining: Decimal
     pending: Decimal
+    schedules: list[ScheduleRow] = []
 
     @field_serializer("planned", "actual", "remaining", "pending")
     def serialize_amount(self, value: Decimal) -> str:

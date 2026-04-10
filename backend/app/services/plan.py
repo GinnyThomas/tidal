@@ -50,7 +50,7 @@ from app.models.category import Category
 from app.models.reallocation import Reallocation
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
-from app.schemas.plan import MonthlyPlan, PlanRow
+from app.schemas.plan import MonthlyPlan, PlanRow, ScheduleRow
 
 
 # =============================================================================
@@ -224,13 +224,27 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
     )
 
     # --- Step 2: Planned amounts by category ---
+    # Also track which individual schedules contribute to each category's
+    # planned total — this powers the expand/collapse schedule breakdown
+    # in the Monthly Plan View frontend.
     planned_by_category: dict[uuid.UUID, Decimal] = {}
+    schedules_by_category: dict[uuid.UUID, list[ScheduleRow]] = {}
     for schedule in schedules:
         count = _count_occurrences_in_month(schedule, year, month)
         if count > 0:
             cat_id = schedule.category_id
+            schedule_planned = schedule.amount * count
             planned_by_category[cat_id] = (
-                planned_by_category.get(cat_id, Decimal("0")) + schedule.amount * count
+                planned_by_category.get(cat_id, Decimal("0")) + schedule_planned
+            )
+            if cat_id not in schedules_by_category:
+                schedules_by_category[cat_id] = []
+            schedules_by_category[cat_id].append(
+                ScheduleRow(
+                    schedule_id=schedule.id,
+                    schedule_name=schedule.name,
+                    planned=schedule_planned,
+                )
             )
 
     # --- Step 3: Apply reallocations to planned amounts ---
@@ -347,6 +361,7 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
                 actual=actual,
                 remaining=remaining,
                 pending=pending,
+                schedules=schedules_by_category.get(cat_id, []),
             )
         )
 
