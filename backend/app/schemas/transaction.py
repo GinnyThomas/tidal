@@ -24,7 +24,7 @@
 #   can't represent all decimal fractions exactly).
 
 import uuid
-from datetime import date, datetime
+from datetime import date as date_, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -69,7 +69,7 @@ class TransactionCreate(BaseModel):
 
     account_id: uuid.UUID
     category_id: uuid.UUID
-    date: date
+    date: date_
     amount: Decimal = Field(...)
     transaction_type: TransactionType
     status: TransactionStatus = TransactionStatus.pending
@@ -104,7 +104,7 @@ class TransactionResponse(BaseModel):
     category_id: uuid.UUID
     schedule_id: Optional[uuid.UUID]
     parent_transaction_id: Optional[uuid.UUID]
-    date: date
+    date: date_
     payee: Optional[str]
     amount: Decimal
     currency: str
@@ -140,7 +140,7 @@ class TransactionUpdate(BaseModel):
 
     account_id: Optional[uuid.UUID] = None
     category_id: Optional[uuid.UUID] = None
-    date: Optional[date] = None
+    date: Optional[date_] = None
     amount: Optional[Decimal] = None
     transaction_type: Optional[TransactionType] = None
     status: Optional[TransactionStatus] = None
@@ -166,7 +166,7 @@ class TransferCreate(BaseModel):
     from_account_id: uuid.UUID
     to_account_id: uuid.UUID
     category_id: uuid.UUID
-    date: date
+    date: date_
     amount: Decimal = Field(...)
     currency: str = Field(default="GBP", max_length=3)
     note: Optional[str] = None
