@@ -7,9 +7,11 @@
 //   account filter, category filter (including URL pre-selection), and form
 //   toggle for Add Transaction / Add Transfer.
 //
-// Three axios.get calls happen on mount via Promise.all: accounts, transactions,
-// categories. Mocks must be queued in that order. The mockFetch() helper handles
-// this automatically — pass categories as the 3rd argument (defaults to []).
+// Three axios.get calls happen on mount: accounts and transactions (main filter
+// effect, Promise.all), then categories (separate mount-only effect). Mocks are
+// consumed in that order. The mockFetch() helper queues all three automatically.
+// On re-fetch (filter change), only accounts and transactions are re-fetched —
+// categories use the already-populated state from the mount-only effect.
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -58,9 +60,12 @@ const makeTransaction = (overrides = {}) => ({
     ...overrides,
 })
 
-// Helper: queue the three standard mocks (accounts, transactions, categories).
-// Promise.all fires all three calls in array order, so mocks are consumed in
-// that same order. Pass categories as the 3rd arg to test category filter UI.
+// Helper: queue the three standard mocks for a page mount.
+// Consumption order matches effect definition order:
+//   1. accounts  — main filter effect, Promise.all call #1
+//   2. transactions — main filter effect, Promise.all call #2
+//   3. categories — separate mount-only effect (does NOT re-run on filter change)
+// Pass categories as the 3rd arg to test category filter dropdown UI.
 function mockFetch(
     accounts = [makeAccount()],
     transactions: ReturnType<typeof makeTransaction>[] = [],
@@ -205,14 +210,14 @@ describe('TransactionsPage', () => {
     // =========================================================================
 
     it('sends account_id param when an account filter is selected', async () => {
-        // Initial load + filtered re-fetch (each needs 3 mocked responses: accounts, transactions, categories)
+        // Initial mount: accounts + transactions (main effect) + categories (separate effect).
+        // Re-fetch after filter change: accounts + transactions only — categories NOT re-fetched.
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
             .mockResolvedValueOnce({ data: [] })   // initial transactions
-            .mockResolvedValueOnce({ data: [] })   // initial categories
+            .mockResolvedValueOnce({ data: [] })   // initial categories (mount-only effect)
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
-            .mockResolvedValueOnce({ data: [] })   // filtered transactions
-            .mockResolvedValueOnce({ data: [] })   // filtered categories
+            .mockResolvedValueOnce({ data: [] })   // filtered transactions (no categories re-fetch)
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -245,6 +250,31 @@ describe('TransactionsPage', () => {
         // The filter select is labelled and the fetched category appears as an option
         expect(screen.getByLabelText(/filter by category/i)).toBeInTheDocument()
         expect(screen.getByRole('option', { name: 'Groceries' })).toBeInTheDocument()
+    })
+
+    it('sends category_id param when category filter is selected', async () => {
+        // Initial mount (3 mocks) — include a category so the dropdown has an option to select
+        mockFetch([], [], [makeCategory({ id: 'cat-001', name: 'Groceries' })])
+        // Re-fetch after selection: accounts + transactions only (no categories)
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: [] })
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText(/no transactions/i)
+
+        await userEvent.selectOptions(screen.getByLabelText(/filter by category/i), 'cat-001')
+
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const txCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: { category_id?: string } })?.params?.category_id === 'cat-001'
+            )
+            expect(txCall).toBeDefined()
+        })
     })
 
     it('pre-selects the category filter when ?category_id is in the URL', async () => {
@@ -318,22 +348,21 @@ describe('TransactionsPage', () => {
     // =========================================================================
 
     it('re-fetches and hides the form after a transaction is added', async () => {
-        // Initial load: accounts + empty transactions + categories (3 calls)
+        // Initial mount: accounts + transactions (main effect) + categories (mount-only effect)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [] })        // page: accounts
             .mockResolvedValueOnce({ data: [] })        // page: transactions
-            .mockResolvedValueOnce({ data: [] })        // page: categories
+            .mockResolvedValueOnce({ data: [] })        // page: categories (mount-only effect)
         // AddTransactionForm's own account/category fetch (the form fetches both)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeCategory()] })
         // Post succeeds
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
-        // Re-fetch after add: accounts + one transaction + categories (3 calls)
+        // Re-fetch after add: accounts + transactions only (categories NOT re-fetched)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeTransaction({ payee: 'Sainsbury\'s' })] })
-            .mockResolvedValueOnce({ data: [] })        // re-fetch: categories
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 

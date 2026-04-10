@@ -4,16 +4,18 @@
 //          Wrapped in Layout for navigation.
 //
 // Features:
-//   - Fetch: accounts, transactions, and categories are loaded together on
-//     mount via Promise.all. Filters re-trigger the full fetch.
-//     Category fetch result is guarded with `if (categoriesRes)` so that
-//     tests which don't set up a categories mock don't error out.
+//   - Fetch: accounts and transactions are fetched together (Promise.all) and
+//     re-fetched whenever any filter changes.
+//     Categories are fetched once on mount in a separate useEffect (empty deps)
+//     so that the filter dropdown is populated without re-fetching on every
+//     filter change.
 //   - Filters: account dropdown, category dropdown, and status dropdown.
 //     Category filter also reads ?category_id from the URL on mount so
 //     clicking a category link in CategoriesPage or MonthlyPlanView
 //     pre-selects the filter automatically (category drill-down).
 //   - Active filter badge: when a category is selected a "Filtered by: Name"
-//     pill with an × clear button appears above the table.
+//     pill with an × clear button appears above the table. Clicking × also
+//     calls setSearchParams({}) to keep the URL in sync.
 //   - Inline status toggle: clicking the status badge cycles
 //     pending → cleared → reconciled → pending via PUT /api/v1/transactions/{id}.
 //     State is updated optimistically so the badge reflects the new value
@@ -96,7 +98,7 @@ function TransactionsPage() {
     // Read ?category_id from URL on mount — powers the category drill-down:
     // clicking a category in CategoriesPage or MonthlyPlanView navigates here
     // with the filter pre-set.
-    const [searchParams] = useSearchParams()
+    const [searchParams, setSearchParams] = useSearchParams()
 
     const [accounts, setAccounts] = useState<Account[]>([])
     const [categories, setCategories] = useState<Category[]>([])
@@ -114,18 +116,9 @@ function TransactionsPage() {
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
 
-    // Fetch accounts, transactions, and categories together.
-    // Accounts resolve account names in the table.
-    // Categories populate the filter dropdown.
-    // Category names on individual transactions come from the API response
-    // (category_name field) — not looked up from the categories list.
-    //
-    // The `if (categoriesRes)` guard allows tests to mock only the first two
-    // calls (accounts + transactions) without providing a categories mock —
-    // Promise.all resolves non-Promise values as undefined, and we skip the
-    // setter rather than throwing on undefined.data.
-    //
-    // Re-runs when any filter changes or after a form submission.
+    // Main filter effect: fetches accounts and transactions.
+    // Re-runs whenever any filter changes or after a form submission (refreshKey).
+    // Categories are NOT re-fetched here — they live in a separate effect below.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
@@ -140,12 +133,9 @@ function TransactionsPage() {
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/transactions`, { headers, params }),
-            axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
-        ]).then(([accountsRes, txRes, categoriesRes]) => {
+        ]).then(([accountsRes, txRes]) => {
             setAccounts(accountsRes.data)
             setTransactions(txRes.data)
-            // Guard: tests that don't mock the categories call get undefined here
-            if (categoriesRes) setCategories(categoriesRes.data)
         }).catch(() => {
             setError('Could not load transactions. Please try again.')
         }).finally(() => {
@@ -153,6 +143,20 @@ function TransactionsPage() {
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterAccountId, filterCategoryId, filterStatus, refreshKey])
+
+    // Categories effect: runs once on mount.
+    // Fetching categories separately means filter dropdowns are populated
+    // without triggering a re-fetch every time the user changes a filter.
+    useEffect(() => {
+        const token = localStorage.getItem('access_token')
+        axios.get(`${getApiBaseUrl()}/api/v1/categories`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(res => {
+            setCategories(res.data)
+        }).catch(() => {
+            // Silent failure — the category filter dropdown is non-critical
+        })
+    }, [])
 
     // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
@@ -300,7 +304,11 @@ function TransactionsPage() {
                             {filterCategoryName}
                         </span>
                         <button
-                            onClick={() => setFilterCategoryId('')}
+                            onClick={() => {
+                                setFilterCategoryId('')
+                                // Sync the URL so the back button / share URL reflects cleared state
+                                setSearchParams({})
+                            }}
                             className="text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
                             aria-label="Clear category filter"
                         >

@@ -192,6 +192,42 @@ describe('MonthlyPlanView', () => {
     })
 
     // =========================================================================
+    // Category drill-down links
+    // =========================================================================
+
+    it('renders non-zero actual amounts as links to the category transactions view', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_id: 'cat-1', actual: '150.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // The actual amount in the data row should be a clickable link
+        const link = screen.getByRole('link', { name: '150.00' })
+        expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-1'))
+    })
+
+    it('renders zero actual amounts as plain text with no link', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_id: 'cat-1', actual: '0.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // actual column is cells[2] in the first data row (0=name, 1=planned, 2=actual)
+        const rows = screen.getAllByRole('row')
+        const actualCell = rows[1].querySelectorAll('td')[2]
+
+        expect(actualCell).toHaveTextContent('0.00')
+        // No <a> element inside the cell — zero amount does not drill down
+        expect(actualCell.querySelector('a')).toBeNull()
+    })
+
+    // =========================================================================
     // Month navigation
     // =========================================================================
 

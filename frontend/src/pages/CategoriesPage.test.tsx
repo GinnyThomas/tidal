@@ -262,6 +262,29 @@ describe('CategoriesPage', () => {
     })
 
     // =========================================================================
+    // Category drill-down links
+    // =========================================================================
+
+    it('category names link to the transactions page filtered by that category', async () => {
+        const parent = makeCategory({ id: 'cat-parent', name: 'Food & Drink', parent_category_id: null })
+        const child = makeCategory({ id: 'cat-child', name: 'Groceries', parent_category_id: 'cat-parent' })
+
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: [parent, child] })
+
+        render(<MemoryRouter><CategoriesPage /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // Parent category name is a link to /transactions?category_id=<id>
+        const parentLink = screen.getByRole('link', { name: 'Food & Drink' })
+        expect(parentLink).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-parent'))
+
+        // Child category name is also a link
+        const childLink = screen.getByRole('link', { name: 'Groceries' })
+        expect(childLink).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-child'))
+    })
+
+    // =========================================================================
     // Visual distinction for hidden categories
     // =========================================================================
 
