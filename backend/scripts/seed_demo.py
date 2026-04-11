@@ -452,8 +452,11 @@ def seed_demo() -> None:
             key = (str(category_id), BUDGET_YEAR)
 
             if key in existing_budget_keys:
-                # Budget exists — just check for missing overrides
+                # Budget exists — update group if not already set
                 budget_obj = budget_by_cat.get(str(category_id))
+                if budget_obj and budget_obj.group != budget_group:
+                    budget_obj.group = budget_group
+                    db.add(budget_obj)
                 if budget_obj and overrides:
                     existing_override_months = {
                         ov.month for ov in

@@ -195,38 +195,80 @@ function MonthlyPlanView() {
     } : null
 
     // --- Group sections (when no group filter is active) ---
-    // Determine each parent row's effective group: use the parent's own group,
-    // or if null, check if any of its children have a group.
-    const getEffectiveGroup = (parent: PlanRow): string => {
-        if (parent.group) return parent.group
-        const children = childrenOf(parent.category_id)
-        for (const child of children) {
-            if (child.group) return child.group
-        }
-        return 'General'
-    }
+    //
+    // Each row uses its OWN group field (from its budget) first.
+    // A parent with no group inherits from its children only if ALL children
+    // share the same group. If children span multiple groups, the parent
+    // appears in each child's section with only the matching children.
+    //
+    // The data structure is: { group, entries[] } where each entry is
+    // { parent, children } — the children subset that belongs to this group.
 
-    // Build ordered list of groups with their parent rows.
-    // Only used when filterGroup is empty (showing all groups with headers).
+    const getRowGroup = (row: PlanRow): string => row.group ?? 'General'
+
+    type GroupEntry = { parent: PlanRow; children: PlanRow[] }
+    type GroupSection = { group: string; entries: GroupEntry[] }
+
     const GROUP_ORDER = ['UK', 'España', 'General']
-    const groupedParents: { group: string; parents: PlanRow[] }[] = []
+    const groupedSections: GroupSection[] = []
+
     if (!filterGroup) {
-        const byGroup = new Map<string, PlanRow[]>()
+        const byGroup = new Map<string, GroupEntry[]>()
+
         for (const parent of parentRows) {
-            const g = getEffectiveGroup(parent)
-            if (!byGroup.has(g)) byGroup.set(g, [])
-            byGroup.get(g)!.push(parent)
+            const children = childrenOf(parent.category_id)
+            const parentGroup = parent.group
+
+            if (children.length === 0) {
+                // Leaf parent (no children) — use its own group
+                const g = getRowGroup(parent)
+                if (!byGroup.has(g)) byGroup.set(g, [])
+                byGroup.get(g)!.push({ parent, children: [] })
+            } else {
+                // Parent with children — group children by their own group.
+                // The parent appears in each group section that has matching children.
+                const childrenByGroup = new Map<string, PlanRow[]>()
+                for (const child of children) {
+                    const cg = getRowGroup(child)
+                    if (!childrenByGroup.has(cg)) childrenByGroup.set(cg, [])
+                    childrenByGroup.get(cg)!.push(child)
+                }
+
+                if (parentGroup) {
+                    // Parent has its own group — show it there with all children
+                    // that match, plus any "General" children (no group of their own)
+                    const matching = childrenByGroup.get(parentGroup) ?? []
+                    const general = parentGroup !== 'General' ? (childrenByGroup.get('General') ?? []) : []
+                    if (!byGroup.has(parentGroup)) byGroup.set(parentGroup, [])
+                    byGroup.get(parentGroup)!.push({ parent, children: [...matching, ...general] })
+
+                    // Children with OTHER groups go to their own sections
+                    for (const [cg, cgChildren] of childrenByGroup) {
+                        if (cg !== parentGroup && cg !== 'General') {
+                            if (!byGroup.has(cg)) byGroup.set(cg, [])
+                            byGroup.get(cg)!.push({ parent, children: cgChildren })
+                        }
+                    }
+                } else {
+                    // Parent has no group — appears in each child group section
+                    for (const [cg, cgChildren] of childrenByGroup) {
+                        if (!byGroup.has(cg)) byGroup.set(cg, [])
+                        byGroup.get(cg)!.push({ parent, children: cgChildren })
+                    }
+                }
+            }
         }
+
         for (const g of GROUP_ORDER) {
-            const parents = byGroup.get(g)
-            if (parents && parents.length > 0) {
-                groupedParents.push({ group: g, parents })
+            const entries = byGroup.get(g)
+            if (entries && entries.length > 0) {
+                groupedSections.push({ group: g, entries })
             }
         }
         // Any groups not in GROUP_ORDER (defensive)
-        for (const [g, parents] of byGroup) {
-            if (!GROUP_ORDER.includes(g) && parents.length > 0) {
-                groupedParents.push({ group: g, parents })
+        for (const [g, entries] of byGroup) {
+            if (!GROUP_ORDER.includes(g) && entries.length > 0) {
+                groupedSections.push({ group: g, entries })
             }
         }
     }
@@ -253,13 +295,19 @@ function MonthlyPlanView() {
         ))
     }
 
-    // Renders a parent category row with its schedule breakdown and child rows.
-    // Extracted as a function so it can be called from both the grouped and flat paths.
-    const renderParentAndChildren = (parent: PlanRow) => {
+    // Renders a parent category row with its schedule breakdown and a specific
+    // set of child rows. When called from the grouped path, `children` is the
+    // subset matching that group section. When called from the flat path
+    // (filtered view), `children` is all children of the parent.
+    // The optional `groupKey` suffix ensures unique React keys when the same
+    // parent appears in multiple group sections.
+    const renderParentAndChildren = (parent: PlanRow, children?: PlanRow[], groupKey?: string) => {
+        const actualChildren = children ?? childrenOf(parent.category_id)
         const hasSchedules = parent.schedules?.length > 0
         const isExpanded = expandedCategories.has(parent.category_id)
+        const key = groupKey ? `${parent.category_id}-${groupKey}` : parent.category_id
         return (
-            <React.Fragment key={parent.category_id}>
+            <React.Fragment key={key}>
                 {/* Parent row */}
                 <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                     <td className="px-4 py-3 text-slate-100 font-medium">
@@ -299,7 +347,7 @@ function MonthlyPlanView() {
                 {renderScheduleRows(parent, 'pl-6 pr-4')}
 
                 {/* Child rows — paddingLeft inline style MUST stay (test assertion) */}
-                {childrenOf(parent.category_id).map(child => {
+                {actualChildren.map(child => {
                     const childHasSchedules = child.schedules?.length > 0
                     const childIsExpanded = expandedCategories.has(child.category_id)
                     return (
@@ -411,18 +459,52 @@ function MonthlyPlanView() {
                                 {/* Render grouped sections only when "All" is selected AND there
                                     are multiple distinct groups. A single group (e.g. only "General")
                                     doesn't benefit from section headers. */}
-                                {!filterGroup && groupedParents.length > 1 ? (
-                                    groupedParents.map(({ group: sectionGroup, parents }) => (
-                                        <React.Fragment key={sectionGroup}>
-                                            {/* Group section header */}
-                                            <tr className="bg-ocean-950/60">
-                                                <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
-                                                    ── {sectionGroup} ──
-                                                </td>
-                                            </tr>
-                                            {parents.map(parent => renderParentAndChildren(parent))}
-                                        </React.Fragment>
-                                    ))
+                                {!filterGroup && groupedSections.length > 1 ? (
+                                    groupedSections.map(({ group: sectionGroup, entries }) => {
+                                        // Compute subtotals for all rows in this group section.
+                                        // Include both parent rows and their children.
+                                        const allSectionRows = entries.flatMap(({ parent, children }) => [parent, ...children])
+                                        const subPlanned = allSectionRows.reduce((s, r) => s + parseFloat(r.planned), 0)
+                                        const subActual = allSectionRows.reduce((s, r) => s + parseFloat(r.actual), 0)
+                                        const subRemaining = subPlanned - subActual
+                                        const subPending = allSectionRows.reduce((s, r) => s + parseFloat(r.pending), 0)
+                                        const fmt2 = (v: number) => v === 0 ? '—' : v.toFixed(2)
+
+                                        return (
+                                            <React.Fragment key={sectionGroup}>
+                                                {/* Group section header */}
+                                                <tr className="bg-ocean-950/60">
+                                                    <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                        ── {sectionGroup} ──
+                                                    </td>
+                                                </tr>
+                                                {entries.map(({ parent, children }) =>
+                                                    renderParentAndChildren(parent, children, sectionGroup)
+                                                )}
+                                                {/* Group subtotal row */}
+                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
+                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm">
+                                                        ── {sectionGroup} Total
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right text-sky-400 font-semibold text-sm">
+                                                        {fmt2(subPlanned)}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">
+                                                        {fmt2(subActual)}
+                                                    </td>
+                                                    <td
+                                                        className="px-4 py-2.5 text-right font-semibold text-sm"
+                                                        style={remainingStyle(subRemaining.toFixed(2))}
+                                                    >
+                                                        {fmt2(subRemaining)}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right font-semibold text-sm" style={{ color: '#f59e0b' }}>
+                                                        {fmt2(subPending)}
+                                                    </td>
+                                                </tr>
+                                            </React.Fragment>
+                                        )
+                                    })
                                 ) : (
                                     parentRows.map(parent => renderParentAndChildren(parent))
                                 )}
