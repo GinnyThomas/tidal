@@ -231,7 +231,9 @@ function SchedulesPage() {
                                 {schedules.map((s) => (
                                     <tr
                                         key={s.id}
-                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors"
+                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
+                                        onClick={() => handleEditSchedule(s)}
+                                        aria-label="Click to edit"
                                     >
                                         <td className="px-4 py-3 text-slate-100 font-medium">{s.name}</td>
                                         <td className="px-4 py-3 text-slate-300">{s.frequency}</td>

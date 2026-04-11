@@ -173,6 +173,7 @@ def _build_tx_response(tx: Transaction, category: Category) -> dict:
         "account_id": tx.account_id,
         "category_id": tx.category_id,
         "schedule_id": tx.schedule_id,
+        "promotion_id": tx.promotion_id,
         "parent_transaction_id": tx.parent_transaction_id,
         "date": tx.date,
         "payee": tx.payee,
@@ -334,6 +335,7 @@ def create_transaction(
         payee=transaction_in.payee,
         note=transaction_in.note,
         parent_transaction_id=transaction_in.parent_transaction_id,
+        promotion_id=transaction_in.promotion_id,
     )
     db.add(transaction)
     db.commit()

@@ -17,11 +17,12 @@ from app.models.user import User
 from app.models.account import Account
 from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
+from app.models.promotion import Promotion
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
 from app.models.reallocation import Reallocation
 
 __all__ = [
     "User", "Account", "Budget", "BudgetOverride", "Category",
-    "Schedule", "Transaction", "Reallocation",
+    "Promotion", "Schedule", "Transaction", "Reallocation",
 ]

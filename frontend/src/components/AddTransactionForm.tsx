@@ -26,6 +26,7 @@ import { getApiBaseUrl } from '../lib/api'
 
 type Account = { id: string; name: string }
 type Category = { id: string; name: string }
+type PromotionOption = { id: string; name: string }
 
 // The subset of Transaction fields needed to pre-populate the form in edit mode.
 export type EditingTransaction = {
@@ -40,6 +41,7 @@ export type EditingTransaction = {
     status: string
     note: string | null
     parent_transaction_id: string | null
+    promotion_id: string | null
 }
 
 type Props = {
@@ -54,6 +56,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
 
     const [accounts, setAccounts] = useState<Account[]>([])
     const [categories, setCategories] = useState<Category[]>([])
+    const [promotions, setPromotions] = useState<PromotionOption[]>([])
 
     // All state is initialised from editingTransaction in edit mode, or defaults in create mode.
     const [accountId, setAccountId] = useState(editingTransaction?.account_id ?? '')
@@ -68,6 +71,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
     const [parentTransactionId, setParentTransactionId] = useState(
         editingTransaction?.parent_transaction_id ?? ''
     )
+    const [promotionId, setPromotionId] = useState(editingTransaction?.promotion_id ?? '')
     const [error, setError] = useState<string | null>(null)
 
     // Fetch accounts and categories to populate the dropdowns.
@@ -78,9 +82,11 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
-        ]).then(([accountsRes, catsRes]) => {
+            axios.get(`${getApiBaseUrl()}/api/v1/promotions?active_only=true`, { headers }),
+        ]).then(([accountsRes, catsRes, promosRes]) => {
             setAccounts(accountsRes.data)
             setCategories(catsRes.data)
+            if (promosRes) setPromotions(promosRes.data)
             // Only auto-select the first option in create mode — in edit mode the
             // values are already set from the editingTransaction prop.
             if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
@@ -110,6 +116,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                 transactionType === 'refund' && parentTransactionId
                     ? parentTransactionId
                     : null,
+            promotion_id: promotionId || null,
         }
         try {
             if (isEditMode) {
@@ -261,6 +268,24 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                             className="input-base"
                             placeholder="UUID of the original expense"
                         />
+                    </div>
+                )}
+
+                {/* Link to promotion — optional, only shown if promotions exist */}
+                {promotions.length > 0 && (
+                    <div>
+                        <label htmlFor="txPromotion" className="label-base">Link to Promotion (optional)</label>
+                        <select
+                            id="txPromotion"
+                            value={promotionId}
+                            onChange={(e) => setPromotionId(e.target.value)}
+                            className="input-base"
+                        >
+                            <option value="">None</option>
+                            {promotions.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
                     </div>
                 )}
 

@@ -80,6 +80,7 @@ class TransactionCreate(BaseModel):
     # For refunds: set to the original expense's id.
     # For transfers: set automatically by the transfer endpoint.
     parent_transaction_id: Optional[uuid.UUID] = None
+    promotion_id: Optional[uuid.UUID] = None
 
 
 class TransactionResponse(BaseModel):
@@ -103,6 +104,7 @@ class TransactionResponse(BaseModel):
     account_id: uuid.UUID
     category_id: uuid.UUID
     schedule_id: Optional[uuid.UUID]
+    promotion_id: Optional[uuid.UUID]
     parent_transaction_id: Optional[uuid.UUID]
     date: date_
     payee: Optional[str]
@@ -149,6 +151,7 @@ class TransactionUpdate(BaseModel):
     exchange_rate: Optional[Decimal] = None
     note: Optional[str] = None
     parent_transaction_id: Optional[uuid.UUID] = None
+    promotion_id: Optional[uuid.UUID] = None
 
 
 class TransferCreate(BaseModel):

@@ -31,7 +31,7 @@
 import os
 import sys
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,6 +40,7 @@ from app.database import SessionLocal
 from app.models.account import Account
 from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
+from app.models.promotion import Promotion
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -504,6 +505,54 @@ def seed_demo() -> None:
             print(f"✓ Created {budgets_created} budgets, {overrides_created} overrides (year {BUDGET_YEAR})")
         else:
             print(f"  All budgets already exist for {BUDGET_YEAR}")
+
+        # ── Step 7: Promotions ──────────────────────────────────────────
+        existing_promos = (
+            db.query(Promotion)
+            .filter(Promotion.user_id == user.id)
+            .all()
+        )
+        existing_promo_names = {p.name for p in existing_promos}
+
+        promo_definitions = [
+            Promotion(
+                user_id=user.id,
+                account_id=current_id,
+                name="MBNA Balance Transfer",
+                promotion_type="balance_transfer",
+                original_balance=Decimal("2000.00"),
+                interest_rate=Decimal("0.00"),
+                start_date=today - timedelta(days=30),
+                end_date=today + timedelta(days=180),
+                minimum_monthly_payment=Decimal("50.00"),
+                is_active=True,
+                notes="0% balance transfer from old credit card. Must clear by end date.",
+            ),
+            Promotion(
+                user_id=user.id,
+                account_id=current_id,
+                name="PayPal BNPL - MacBook",
+                promotion_type="bnpl",
+                original_balance=Decimal("800.00"),
+                interest_rate=Decimal("0.00"),
+                start_date=today - timedelta(days=60),
+                end_date=today + timedelta(days=60),
+                minimum_monthly_payment=None,
+                is_active=True,
+                notes="PayPal Pay in 4. Must clear before promo ends.",
+            ),
+        ]
+
+        promos_created = 0
+        for promo in promo_definitions:
+            if promo.name not in existing_promo_names:
+                db.add(promo)
+                promos_created += 1
+                print(f"✓ Created promotion: {promo.name}")
+            else:
+                print(f"  Promotion already exists: {promo.name}")
+
+        db.commit()
 
         print("\nDemo seed complete.")
         print(f"  Accounts : Nationwide Current (GBP) · Nationwide Savings (GBP) · Santander España (EUR)")

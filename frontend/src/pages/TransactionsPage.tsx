@@ -51,6 +51,7 @@ type Transaction = {
     status: string
     note: string | null
     parent_transaction_id: string | null
+    promotion_id: string | null
 }
 
 type Account = {
@@ -428,7 +429,9 @@ function TransactionsPage() {
                                 {sortedTransactions.map((tx) => (
                                     <tr
                                         key={tx.id}
-                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors"
+                                        className={`border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors ${tx.transaction_type !== 'transfer' ? 'cursor-pointer' : ''}`}
+                                        onClick={() => { if (tx.transaction_type !== 'transfer') handleEditTransaction(tx) }}
+                                        aria-label={tx.transaction_type !== 'transfer' ? 'Click to edit' : undefined}
                                     >
                                         <td className="px-4 py-3 text-slate-300">{tx.date}</td>
                                         <td className="px-4 py-3 text-slate-100">

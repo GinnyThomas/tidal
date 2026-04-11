@@ -234,4 +234,22 @@ describe('AccountsPage', () => {
         const link = screen.getByRole('link', { name: 'Nationwide Current' })
         expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?account_id=acc-001'))
     })
+
+    // =========================================================================
+    // Clickable rows
+    // =========================================================================
+
+    it('clicking an account card opens the edit form', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeAccount({ name: 'Click Test' })],
+        })
+
+        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+
+        await screen.findByText('Click Test')
+        // Click the card (has aria-label="Click to edit")
+        await userEvent.click(screen.getByLabelText('Click to edit'))
+
+        expect(screen.getByText('Edit Account')).toBeInTheDocument()
+    })
 })

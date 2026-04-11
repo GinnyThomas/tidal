@@ -353,10 +353,11 @@ describe('TransactionsPage', () => {
             .mockResolvedValueOnce({ data: [] })        // page: accounts
             .mockResolvedValueOnce({ data: [] })        // page: transactions
             .mockResolvedValueOnce({ data: [] })        // page: categories (mount-only effect)
-        // AddTransactionForm's own account/category fetch (the form fetches both)
+        // AddTransactionForm's own account/category/promotions fetch
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
             .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: [] })  // promotions
         // Post succeeds
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
         // Re-fetch after add: accounts + transactions only (categories NOT re-fetched)
