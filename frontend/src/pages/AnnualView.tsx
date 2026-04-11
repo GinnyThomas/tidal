@@ -95,13 +95,13 @@ function AnnualView() {
     const [annualPlan, setAnnualPlan] = useState<AnnualPlan | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    // Budget group filter — '' means no filter
+    const [filterGroup, setFilterGroup] = useState('')
 
-    // Re-runs whenever year changes (< Prev / Next > navigation).
-    // Checks the session cache first — if the year's plan is already cached,
-    // uses it immediately without making any API calls. The backend endpoint
-    // makes 12 internal calls (one per month), so caching saves significant time.
+    // Re-runs whenever year or group changes.
+    // Cache key includes group so different filters get separate cache entries.
     useEffect(() => {
-        const cacheKey = String(year)
+        const cacheKey = `${year}:${filterGroup}`
         const cached = annualPlanCache.get(cacheKey)
         if (cached) {
             setAnnualPlan(cached)
@@ -113,9 +113,12 @@ function AnnualView() {
         const token = localStorage.getItem('access_token')
         setLoading(true)
         setError(null)
+        const params: Record<string, string> = {}
+        if (filterGroup) params.group = filterGroup
         axios
             .get(`${getApiBaseUrl()}/api/v1/plan/${year}`, {
                 headers: { Authorization: `Bearer ${token}` },
+                params,
             })
             .then((res) => {
                 annualPlanCache.set(cacheKey, res.data)
@@ -128,7 +131,7 @@ function AnnualView() {
                 setLoading(false)
             })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [year])
+    }, [year, filterGroup])
 
     // --- Early returns ---
 
@@ -219,6 +222,23 @@ function AnnualView() {
                     >
                         {'Next >'}
                     </button>
+                </div>
+
+                {/* Budget group filter */}
+                <div className="flex justify-end mb-4">
+                    <div>
+                        <label htmlFor="filterGroup" className="label-base">Budget group</label>
+                        <select
+                            id="filterGroup"
+                            value={filterGroup}
+                            onChange={(e) => setFilterGroup(e.target.value)}
+                            className="input-base"
+                        >
+                            <option value="">All</option>
+                            <option value="UK">UK</option>
+                            <option value="España">España</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* Empty state — shown when no categories have any planned amounts */}

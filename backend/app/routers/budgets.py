@@ -129,6 +129,7 @@ def create_budget(
         year=data.year,
         default_amount=data.default_amount,
         currency=data.currency,
+        group=data.group,
     )
     db.add(budget)
     db.commit()
@@ -139,10 +140,11 @@ def create_budget(
 @router.get("", response_model=list[BudgetResponse])
 def list_budgets(
     year: Optional[int] = Query(default=None),
+    group: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[Budget]:
-    """List all budgets for the current user. Optional ?year= filter."""
+    """List all budgets for the current user. Optional ?year= and ?group= filters."""
     query = (
         db.query(Budget)
         .options(selectinload(Budget.overrides))
@@ -150,6 +152,8 @@ def list_budgets(
     )
     if year is not None:
         query = query.filter(Budget.year == year)
+    if group is not None:
+        query = query.filter(Budget.group == group)
     return query.order_by(Budget.year, Budget.created_at).all()
 
 

@@ -76,7 +76,8 @@ describe('AnnualView', () => {
     it('uses cached data and skips the API call when the year is already cached', async () => {
         // Pre-populate the cache with data for 2026
         const cachedPlan = makeAnnualPlan(2026, { 0: [makePlanRow({ category_name: 'Bills' })] })
-        annualPlanCache.set('2026', cachedPlan)
+        // Cache key format is "year:group" — empty group for default view
+        annualPlanCache.set('2026:', cachedPlan)
 
         // Fix the system clock so the component defaults to 2026
         vi.useFakeTimers({ toFake: ['Date'] })

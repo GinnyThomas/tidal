@@ -412,4 +412,74 @@ describe('TransactionsPage', () => {
         expect(screen.getByText('Edit Transaction')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /update transaction/i })).toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Sorting
+    // =========================================================================
+
+    it('sorts transactions by date descending by default (newest first)', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
+                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Older')
+
+        // Get the payee cells in order to verify sort
+        const rows = screen.getAllByRole('row')
+        // rows[0] is header, rows[1] is first data row, rows[2] is second
+        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
+        const secondPayee = rows[2].querySelectorAll('td')[1].textContent
+        // Descending by date: Newer (2026-04-15) first, Older (2026-01-01) second
+        expect(firstPayee).toBe('Newer')
+        expect(secondPayee).toBe('Older')
+    })
+
+    it('clicking Date header toggles sort direction', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
+                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Older')
+
+        // Click Date header — default is desc, clicking toggles to asc
+        await userEvent.click(screen.getByText(/^Date/))
+
+        const rows = screen.getAllByRole('row')
+        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
+        // Ascending by date: Older (2026-01-01) first
+        expect(firstPayee).toBe('Older')
+    })
+
+    it('clicking a different column sorts by that column ascending', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', payee: 'Zara', amount: '10.00' }),
+                makeTransaction({ id: 'tx-2', payee: 'Aldi', amount: '20.00' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Zara')
+
+        // Click Payee header — sorts alphabetically ascending
+        await userEvent.click(screen.getByText(/^Payee/))
+
+        const rows = screen.getAllByRole('row')
+        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
+        expect(firstPayee).toBe('Aldi')
+    })
 })

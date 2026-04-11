@@ -303,3 +303,68 @@ def test_plan_uses_override_amount_when_set(test_client) -> None:
     row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
     # Should use the override (400), not the default (100)
     assert row["planned"] == "400.00"
+
+
+def test_plan_filtered_by_budget_group(test_client) -> None:
+    """
+    GET /api/v1/plan/2026/1?group=UK should include planned amounts only from
+    budgets with group="UK". Budgets with a different group or no group should
+    not contribute to planned totals.
+    """
+    token, _, _ = _setup(test_client)
+
+    categories = test_client.get(
+        "/api/v1/categories",
+        headers=_auth_headers(token),
+    ).json()
+    cat_a = categories[0]["id"]
+    cat_b = categories[1]["id"]
+
+    # Budget A: group="UK"
+    _create_budget(test_client, token, cat_a, default_amount="200.00", group="UK")
+    # Budget B: group="España"
+    _create_budget(test_client, token, cat_b, default_amount="300.00", group="España")
+
+    # Without group filter — both appear
+    all_response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    all_rows = all_response.json()["rows"]
+    assert any(r["category_id"] == cat_a for r in all_rows)
+    assert any(r["category_id"] == cat_b for r in all_rows)
+
+    # With group=UK — only budget A contributes planned amounts
+    uk_response = test_client.get("/api/v1/plan/2026/1?group=UK", headers=_auth_headers(token))
+    uk_rows = uk_response.json()["rows"]
+    uk_a = next((r for r in uk_rows if r["category_id"] == cat_a), None)
+    uk_b = next((r for r in uk_rows if r["category_id"] == cat_b), None)
+    assert uk_a is not None
+    assert uk_a["planned"] == "200.00"
+    # cat_b has no schedule or transaction, so with group=UK filtering out
+    # its budget, it should not appear in rows at all
+    assert uk_b is None
+
+
+def test_list_budgets_filtered_by_group(test_client) -> None:
+    """
+    GET /api/v1/budgets?group=UK should return only budgets with group="UK".
+    """
+    token, _, _ = _setup(test_client)
+
+    categories = test_client.get(
+        "/api/v1/categories",
+        headers=_auth_headers(token),
+    ).json()
+    cat_a = categories[0]["id"]
+    cat_b = categories[1]["id"]
+
+    _create_budget(test_client, token, cat_a, group="UK")
+    _create_budget(test_client, token, cat_b, group="España")
+
+    response = test_client.get(
+        "/api/v1/budgets?group=UK",
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["group"] == "UK"
