@@ -344,7 +344,7 @@ describe('MonthlyPlanView', () => {
         expect(esCells[1].textContent).toBe('200.00')
     })
 
-    it('does not show group subtotals when a specific group is filtered', async () => {
+    it('does not show group headers when only one group exists', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
             data: {
                 ...emptyPlan,
@@ -360,7 +360,7 @@ describe('MonthlyPlanView', () => {
 
         // With only one group, no section headers or subtotals
         expect(screen.queryByText(/── UK Total/)).not.toBeInTheDocument()
-        expect(screen.queryByText(/─��� UK ──/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
     })
 
     // =========================================================================

@@ -24,6 +24,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -197,9 +198,10 @@ function MonthlyPlanView() {
     // --- Group sections (when no group filter is active) ---
     //
     // Each row uses its OWN group field (from its budget) first.
-    // A parent with no group inherits from its children only if ALL children
-    // share the same group. If children span multiple groups, the parent
-    // appears in each child's section with only the matching children.
+    // Children with group=null are treated as belonging to their parent's
+    // group section (not emitted under "General" separately).
+    // If a parent has no group but its children span multiple groups,
+    // the parent appears in each child-group section with matching children.
     //
     // The data structure is: { group, entries[] } where each entry is
     // { parent, children } — the children subset that belongs to this group.
@@ -209,7 +211,6 @@ function MonthlyPlanView() {
     type GroupEntry = { parent: PlanRow; children: PlanRow[] }
     type GroupSection = { group: string; entries: GroupEntry[] }
 
-    const GROUP_ORDER = ['UK', 'España', 'General']
     const groupedSections: GroupSection[] = []
 
     if (!filterGroup) {
@@ -267,7 +268,7 @@ function MonthlyPlanView() {
         }
         // Any groups not in GROUP_ORDER (defensive)
         for (const [g, entries] of byGroup) {
-            if (!GROUP_ORDER.includes(g) && entries.length > 0) {
+            if (!(GROUP_ORDER as readonly string[]).includes(g) && entries.length > 0) {
                 groupedSections.push({ group: g, entries })
             }
         }
