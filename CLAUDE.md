@@ -65,11 +65,11 @@ living spreadsheet. Solves real problems with existing apps like Spendee.
 2. Recurring merchants are repeatedly mis-categorised
 3. Budget and transaction views are separated — hard to see the full picture
 4. No structured way to track budget reallocation decisions
-5. Variable spending targets (groceries, eating out) can't be set without schedules
+5. Variable spending targets can't be set without creating fake schedules
 
 **The primary view** is a Monthly Plan View — a single screen showing every
-budget category with planned vs actual vs remaining. Transactions are
-accessible inline. Nothing important requires navigating away.
+budget category with planned vs actual vs remaining, grouped by budget group
+(UK / España / General). Transactions are accessible inline.
 
 **Key principle:** Plan first, track second. Schedules define fixed recurring
 transactions. Budgets define variable spending targets. Transactions confirm
@@ -104,43 +104,50 @@ reality. The gap between them is where insight lives.
 
 ## Current Phase
 
-**Phase 9 — Budgets (in progress)**
+**Phase 9 — Budgets (complete)**
 
-All previous phases complete:
+All phases complete:
 - ✅ Phase 0: Walking skeleton
-- ✅ Phase 1: Authentication (register, login, JWT, bcrypt, Alembic)
+- ✅ Phase 1: Authentication (register, login, JWT, bcrypt, change password)
 - ✅ Phase 2: Accounts (CRUD, soft delete, edit, drill-down to transactions)
 - ✅ Phase 3: Categories (hierarchical, system seeding, hide/unhide, edit, drill-down)
-- ✅ Phase 4: Transactions (expense/income/transfer/refund, edit, status toggle)
+- ✅ Phase 4: Transactions (expense/income/transfer/refund, edit, status toggle, sort)
 - ✅ Phase 5: Schedules (recurrence engine, edit, active toggle)
-- ✅ Phase 6: Monthly Plan View (plan service, schedule breakdown, expand/collapse)
+- ✅ Phase 6: Monthly Plan View (plan service, schedule breakdown, expand/collapse,
+               budget group sections with subtotals)
 - ✅ Phase 7: Reallocation (immutable audit trail, plan integration)
 - ✅ Phase 8: Styling & Polish (ocean theme, mobile responsive, demo account,
                annual view, category drill-down, multi-currency demo)
-- 🔄 Phase 9: Budgets (variable spending targets per category per month/year)
+- ✅ Phase 9: Budgets (annual budgets with monthly overrides, budget groups,
+               Budgets page, Annual view group sections)
+
+Next: Phase 10 features (see bottom of file)
 
 ---
 
 ## What's Built
 
-**Backend — 75 tests passing:**
-- `app/models/` — User, Account, Category, Transaction, Schedule, Reallocation
+**Backend — 88 tests passing:**
+- `app/models/` — User, Account, Category, Transaction, Schedule, Reallocation,
+                   Budget, BudgetOverride
 - `app/schemas/` — Pydantic v2 schemas for all entities
 - `app/services/auth.py` — bcrypt hashing, JWT creation, get_current_user
 - `app/services/categories.py` — seed_default_categories (35 categories, atomic)
-- `app/services/plan.py` — recurrence engine, plan assembly, reallocation adjustment
+- `app/services/plan.py` — recurrence engine, plan assembly, budget integration,
+                            reallocation adjustment, group field on PlanRow
 - `app/routers/auth.py` — register, login, change-password
 - `app/routers/accounts.py` — full CRUD, soft delete, user-scoped
 - `app/routers/categories.py` — full CRUD, toggle-visibility, system protection
-- `app/routers/transactions.py` — expense/income/transfer/refund, status/category filter
+- `app/routers/transactions.py` — expense/income/transfer/refund, category/status filter
 - `app/routers/schedules.py` — full CRUD, toggle-active, recurrence
 - `app/routers/reallocations.py` — POST/GET only, immutable, reason required
-- `app/routers/plan.py` — GET /api/v1/plan/{year}/{month} and GET /api/v1/plan/{year}
-- `migrations/` — 8 Alembic migrations applied to Supabase
-- `scripts/seed_demo.py` — rolling demo data, multi-currency, idempotent
+- `app/routers/plan.py` — GET /plan/{year}/{month}?group= and GET /plan/{year}?group=
+- `app/routers/budgets.py` — CRUD + override upsert/delete, group filter
+- `migrations/` — 10 Alembic migrations applied to Supabase
+- `scripts/seed_demo.py` — rolling demo data, multi-currency GBP+EUR, budget groups
 - `scripts/refresh_demo.sh` — convenience wrapper for production seeding
 
-**Frontend — 159 tests passing:**
+**Frontend — 183 tests passing:**
 - `LoginPage.tsx` — JWT auth, show/hide password, Try Demo button
 - `RegisterPage.tsx` — register + auto-login, password confirmation
 - `ProtectedRoute.tsx` — redirects to /login if no token
@@ -148,21 +155,25 @@ All previous phases complete:
 - `AddAccountForm.tsx` — create/edit account
 - `CategoriesPage.tsx` — two-column hierarchy, hide/unhide, edit, drill-down
 - `AddCategoryForm.tsx` — create/edit with colour picker and emoji icon grid
-- `TransactionsPage.tsx` — list, add, edit, status toggle, multi-filter, drill-down
+- `TransactionsPage.tsx` — list, add, edit, status toggle, multi-filter, sort by all columns
 - `AddTransactionForm.tsx` — create/edit expense/income/refund
 - `AddTransferForm.tsx` — create transfer between accounts
 - `SchedulesPage.tsx` — list, add, edit, active toggle, show inactive
 - `AddScheduleForm.tsx` — create/edit with frequency-conditional fields
-- `MonthlyPlanView.tsx` — primary dashboard, schedule breakdown, expand/collapse
-- `AnnualView.tsx` — 12-month spreadsheet, year navigation, session cache
+- `BudgetsPage.tsx` — annual budgets with group sections, overrides inline
+- `AddBudgetForm.tsx` — create/edit budget with group selector
+- `BudgetOverrideForm.tsx` — 12-month grid for month-specific overrides
+- `MonthlyPlanView.tsx` — primary dashboard, schedule breakdown, group sections + subtotals
+- `AnnualView.tsx` — 12-month spreadsheet, group sections + subtotals, session cache
 - `ChangePasswordPage.tsx` — change password with show/hide toggles
 - `DemoButton.tsx` — one-click demo login
 - `Layout.tsx` — responsive nav, hamburger menu, logout
 - `lib/axiosConfig.ts` — global 401 interceptor → auto-logout
-- `lib/annualPlanCache.ts` — session cache for annual plan (invalidated on mutations)
+- `lib/annualPlanCache.ts` — session cache invalidated on data mutations
 - `lib/api.ts` — getApiBaseUrl() helper
+- `lib/budgetGroups.ts` — shared GROUP_ORDER constant ['UK', 'España', 'General']
 - Routes: /login, /register, /dashboard, /plan, /transactions, /accounts,
-          /categories, /schedules, /annual, /change-password
+          /categories, /schedules, /budgets, /annual, /change-password
 
 ---
 
@@ -181,6 +192,10 @@ All previous phases complete:
 **Component classes (index.css):**
 `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.input-base`, `.label-base`,
 `.card`, `.card-hover`, `.badge`, `.badge-sky`, `.badge-teal`, `.page-container`
+
+**Budget group sections:**
+Shared constant in `lib/budgetGroups.ts`: `GROUP_ORDER = ['UK', 'España', 'General']`
+Used in MonthlyPlanView, AnnualView, BudgetsPage for consistent section ordering.
 
 ---
 
@@ -223,15 +238,16 @@ All previous phases complete:
 
 ---
 
-## Budget Rules (Phase 9)
+## Budget Rules
 
-- One budget per category per year (unique constraint)
+- One budget per category per year (unique constraint: user_id, category_id, year)
 - `default_amount` applies to all months unless overridden
-- `budget_overrides` table stores month-specific amounts
+- `budget_overrides` table stores month-specific amounts (upsert semantics)
 - Budget amounts and schedule amounts are additive per category
-  (schedules = fixed transactions, budgets = variable spending targets)
 - Budgets can be hard-deleted (unlike transactions which are soft-deleted)
-- Plan view: for each month, uses override amount if exists, else default_amount
+- Optional `group` field (max 50 chars) — e.g. "UK", "España"
+- Plan view: filter by group shows only that group's budget contributions
+- Group filter applies to budgets only — schedules and transactions are NOT filtered
 
 ---
 
@@ -244,16 +260,13 @@ For a given month, planned = schedule amounts + budget amounts per category:
 4. Actual: sum of cleared+reconciled transactions per category
 5. Pending: sum of pending transactions per category
 6. Remaining: planned - actual
+7. Group: from budget's group field (for section rendering in UI)
 
 Note: schedule breakdown rows show pre-reallocation amounts — their sum
 may differ from the final planned total when reallocations have been applied.
 
----
-
-## Authentication Strategy
-
-**Current:** Email/password only, JWT Bearer tokens.
-**Future (Phase 10):** Google OAuth via authlib. Do not add until requested.
+When group filter is active: only budgets matching that group contribute to
+planned totals. Schedules and transactions are always included regardless.
 
 ---
 
@@ -262,20 +275,24 @@ may differ from the final planned total when reallocations have been applied.
 - Email: demo@tidal.app / Password: TidalDemo2026!
 - 3 accounts: Nationwide Current (GBP), Nationwide Savings (GBP), Santander España (EUR)
 - 14 schedules: monthly GBP + EUR, annual (Claude.ai Pro, Christmas), quarterly (Massage)
+- 11 budgets: 8 UK/GBP group, 3 España/EUR group, with monthly overrides
 - Rolling transactions: always covers 3 months back + current month
+- Multi-currency: GBP transactions on Nationwide, EUR on Santander España
+- Region-specific categories: Groceries UK/España, Eating Out UK/España, Rent UK/España
 - To refresh: `./scripts/refresh_demo.sh` (reads DATABASE_URL from .env)
-- Multi-currency demo: Groceries, Eating Out, Rent/Mortgage appear in both GBP and EUR
 
 ---
 
 ## Known Issues / Tech Debt
 
 - O(n²) childrenOf() in CategoriesPage — fix with useMemo + Map
-- Annual view makes 12 separate plan API calls — optimise with single-pass service
+- Annual view makes 12 × N plan API calls — optimise with single-pass service (Phase 10)
 - React Query not wired up — using plain useEffect + useState
 - Schedule breakdown in plan view shows pre-reallocation amounts
 - No per-schedule actual spend tracking (transactions tagged to categories not schedules)
 - sessionStorage for annual cache (currently in-memory, clears on refresh)
+- Currency consolidation: EUR + GBP amounts are additive in plan view without conversion
+- Demo data has some duplicate generic categories alongside UK/España variants
 
 ---
 
@@ -291,7 +308,9 @@ may differ from the final planned total when reallocations have been applied.
 - Adding NOT NULL columns to existing tables requires server_default in migration
 - ALLOWED_ORIGINS in Railway must match Vercel URL exactly (no trailing slash)
 - Run migrations against Supabase direct URL (port 5432), not pooled (port 6543)
-- date field in schemas must use `date as date_` alias to avoid Pydantic v2 shadowing
+- `date` field in schemas must use `date as date_` alias to avoid Pydantic v2 shadowing
+- `group` is a reserved word in PostgreSQL — always quote it as `"group"` in raw SQL
+- GROUP_ORDER constant lives in `frontend/src/lib/budgetGroups.ts` — import from there
 
 ---
 
@@ -333,22 +352,25 @@ tidal/
 │   │   ├── main.py           FastAPI entry point, router registration
 │   │   ├── config.py         pydantic-settings, ALLOWED_ORIGINS
 │   │   ├── database.py       SQLAlchemy engine, SessionLocal, get_db
-│   │   ├── models/           SQLAlchemy ORM models
+│   │   ├── models/           User, Account, Category, Transaction, Schedule,
+│   │   │                     Reallocation, Budget, BudgetOverride
 │   │   ├── schemas/          Pydantic request/response shapes
-│   │   ├── routers/          API endpoint handlers
+│   │   ├── routers/          auth, accounts, categories, transactions, schedules,
+│   │   │                     reallocations, plan, budgets
 │   │   └── services/         auth, categories seeding, plan assembly
-│   ├── migrations/           Alembic migration files
+│   ├── migrations/           10 Alembic migration files
 │   ├── scripts/
 │   │   ├── seed_demo.py      idempotent demo data seeder
 │   │   └── refresh_demo.sh   convenience wrapper for production seeding
 │   ├── Procfile              Railway start command
 │   ├── runtime.txt           Python version for Railway
-│   └── tests/                pytest test suite
+│   └── tests/                pytest test suite (88 tests)
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/            full page components
+│   │   ├── pages/            all page components
 │   │   ├── components/       reusable UI components
-│   │   └── lib/              api.ts, axiosConfig.ts, annualPlanCache.ts
+│   │   └── lib/              api.ts, axiosConfig.ts, annualPlanCache.ts,
+│   │                         budgetGroups.ts
 │   ├── vercel.json           SPA rewrite for Vercel
 │   └── .env.example          VITE_API_URL template
 └── docs/
@@ -360,12 +382,12 @@ tidal/
 
 ---
 
-## Phase 10 — Planned Features (Post-MVP)
+## Phase 10 — Planned Features
 
-### Budgets UI (Phase 9 frontend — after backend complete)
-- Budget page: set default monthly amount per category for a year
-- Inline editing on Annual View — click a cell to set/override that month
-- Annual View becomes the primary planning spreadsheet
+### Currency Consolidation
+The `exchange_rate` column exists on every transaction — data model is ready.
+Needs: base currency per user, conversion logic in plan service, consolidated
+totals in plan/annual views. "Net worth in one currency" view.
 
 ### Interest Promotion Tracker
 Track 0% interest promotions (Paypal BNPL, credit card balance transfers).
@@ -373,10 +395,9 @@ Track 0% interest promotions (Paypal BNPL, credit card balance transfers).
 minimum_monthly_payment, is_active.
 Features: days remaining, required monthly payment, warning < 60 days.
 
-### Currency Consolidation
-The `exchange_rate` column exists on every transaction — the data model is ready.
-Needs: base currency per user, conversion logic in plan service, consolidated
-totals in plan/annual views. "Net worth in one currency" view.
+### Per-Schedule Actual Spend
+Link transactions to schedules via schedule_id (column exists, FK wired).
+Would enable "Netflix planned £15.99, actual £15.99" in plan view breakdown.
 
 ### Open Banking / Bank Sync
 TrueLayer or Plaid for automatic transaction import.
@@ -388,10 +409,9 @@ authlib integration. Users table gets optional google_id column.
 ### Tags
 Cross-cutting transaction labels via TagAssignment join table.
 
-### Per-Schedule Actual Spend
-Link transactions to schedules via schedule_id (column exists, FK not yet used).
-Would enable "Netflix planned £15.99, actual £15.99" in the plan view breakdown.
+### Annual View Performance
+Replace 12 × N plan API calls with single-pass annual service.
 
 ---
 
-*Last updated: Phase 9 starting — April 2026*
+*Last updated: Phase 9 complete — April 2026*
