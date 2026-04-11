@@ -117,6 +117,9 @@ function TransactionsPage() {
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
+    // Client-side sorting — applied to the fetched data
+    const [sortField, setSortField] = useState<'date' | 'payee' | 'amount' | 'status'>('date')
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
     // Main filter effect: fetches accounts and transactions.
     // Re-runs whenever any filter changes or after a form submission (refreshKey).
@@ -208,6 +211,36 @@ function TransactionsPage() {
             // Silent failure — a future improvement could show a toast here
         }
     }
+
+    // --- Client-side sorting ---
+
+    const handleSort = (field: 'date' | 'payee' | 'amount' | 'status') => {
+        if (sortField === field) {
+            // Same column — toggle direction
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+        } else {
+            // New column — default to ascending
+            setSortField(field)
+            setSortDirection('asc')
+        }
+    }
+
+    const sortIndicator = (field: string) =>
+        sortField === field ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ''
+
+    const sortedTransactions = [...transactions].sort((a, b) => {
+        let cmp = 0
+        if (sortField === 'date') {
+            cmp = a.date.localeCompare(b.date)
+        } else if (sortField === 'payee') {
+            cmp = (a.payee ?? '').localeCompare(b.payee ?? '')
+        } else if (sortField === 'amount') {
+            cmp = parseFloat(a.amount) - parseFloat(b.amount)
+        } else if (sortField === 'status') {
+            cmp = a.status.localeCompare(b.status)
+        }
+        return sortDirection === 'asc' ? cmp : -cmp
+    })
 
     // --- Early returns ---
 
@@ -364,18 +397,26 @@ function TransactionsPage() {
                         <table className="w-full text-sm min-w-[640px]">
                             <thead>
                                 <tr className="border-b border-ocean-700 bg-ocean-950">
-                                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Date</th>
-                                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Payee</th>
+                                    <th className="text-left px-4 py-3 font-medium" aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('date')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Date{sortIndicator('date')}</button>
+                                    </th>
+                                    <th className="text-left px-4 py-3 font-medium" aria-sort={sortField === 'payee' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('payee')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Payee{sortIndicator('payee')}</button>
+                                    </th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Account</th>
-                                    <th className="text-right px-4 py-3 text-sky-400 font-medium">Amount</th>
+                                    <th className="text-right px-4 py-3 font-medium" aria-sort={sortField === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('amount')} className="text-sky-400 hover:text-sky-300 transition-colors cursor-pointer select-none">Amount{sortIndicator('amount')}</button>
+                                    </th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Type</th>
-                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Status</th>
+                                    <th className="text-center px-4 py-3 font-medium" aria-sort={sortField === 'status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('status')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Status{sortIndicator('status')}</button>
+                                    </th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {transactions.map((tx) => (
+                                {sortedTransactions.map((tx) => (
                                     <tr
                                         key={tx.id}
                                         className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors"

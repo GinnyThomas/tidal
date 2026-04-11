@@ -85,6 +85,11 @@ class Budget(Base):
     # ISO 4217 currency code. Defaults to GBP.
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GBP")
 
+    # Optional grouping label for filtering budgets in the plan view.
+    # e.g. "UK", "España" — allows users to view planned spending for a
+    # specific context without seeing unrelated budgets.
+    group: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+
     # --- Timestamps ---
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

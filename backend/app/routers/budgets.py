@@ -129,6 +129,7 @@ def create_budget(
         year=data.year,
         default_amount=data.default_amount,
         currency=data.currency,
+        group=data.group,
     )
     db.add(budget)
     db.commit()
@@ -139,10 +140,11 @@ def create_budget(
 @router.get("", response_model=list[BudgetResponse])
 def list_budgets(
     year: Optional[int] = Query(default=None),
+    group: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[Budget]:
-    """List all budgets for the current user. Optional ?year= filter."""
+    """List all budgets for the current user. Optional ?year= and ?group= filters."""
     query = (
         db.query(Budget)
         .options(selectinload(Budget.overrides))
@@ -150,6 +152,8 @@ def list_budgets(
     )
     if year is not None:
         query = query.filter(Budget.year == year)
+    if group is not None:
+        query = query.filter(Budget.group == group)
     return query.order_by(Budget.year, Budget.created_at).all()
 
 
@@ -174,11 +178,13 @@ def update_budget(
     budget = _get_budget_or_404(budget_id, current_user.id, db)
 
     # exclude_unset=True means only fields the client actually sent are included.
-    # This distinguishes "not sent" from "sent as null" — both default_amount and
-    # currency must not be set to None (they are required fields on the model).
+    # This distinguishes "not sent" from "sent as null".
+    # default_amount and currency are NOT NULL in the DB — reject null for those.
+    # group IS nullable — sending null clears the group (allowed).
+    non_nullable_fields = {"default_amount", "currency"}
     updates = data.model_dump(exclude_unset=True)
     for field, value in updates.items():
-        if value is None:
+        if value is None and field in non_nullable_fields:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"{field} cannot be null",

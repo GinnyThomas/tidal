@@ -101,14 +101,19 @@ function MonthlyPlanView() {
     // Tracks which categories are expanded to show individual schedule rows.
     // Default: all categories with schedules are expanded (set on fetch).
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+    // Budget group filter — "All" means no filter, otherwise passes ?group= to API
+    const [filterGroup, setFilterGroup] = useState('')
 
-    const fetchPlan = async (y: number, m: number) => {
+    const fetchPlan = async (y: number, m: number, group: string = '') => {
         const token = localStorage.getItem('access_token')
         setLoading(true)
         setError(null)
         try {
+            const params: Record<string, string> = {}
+            if (group) params.group = group
             const response = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${y}/${m}`, {
                 headers: { Authorization: `Bearer ${token}` },
+                params,
             })
             setPlan(response.data)
             // Default: expand all categories that have schedules
@@ -126,7 +131,7 @@ function MonthlyPlanView() {
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchPlan(year, month) }, [year, month])
+    useEffect(() => { fetchPlan(year, month, filterGroup) }, [year, month, filterGroup])
 
     const handlePrev = () => {
         const prev = shiftMonth(year, month, -1)
@@ -231,6 +236,23 @@ function MonthlyPlanView() {
                     >
                         {'Next >'}
                     </button>
+                </div>
+
+                {/* Budget group filter */}
+                <div className="flex justify-end mb-4">
+                    <div>
+                        <label htmlFor="filterGroup" className="label-base">Budget group</label>
+                        <select
+                            id="filterGroup"
+                            value={filterGroup}
+                            onChange={(e) => setFilterGroup(e.target.value)}
+                            className="input-base"
+                        >
+                            <option value="">All</option>
+                            <option value="UK">UK</option>
+                            <option value="España">España</option>
+                        </select>
+                    </div>
                 </div>
 
                 {rows.length === 0 ? (

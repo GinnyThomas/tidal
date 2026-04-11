@@ -169,6 +169,35 @@ def seed_demo() -> None:
                 return fallback
             return result
 
+        # ── Step 3b: Custom categories for region-specific spending ────────
+        # These are user categories (not system) that split generic categories
+        # like "Groceries" into region-specific variants for multi-currency demo.
+        custom_categories = [
+            ("Groceries UK",       cat_map.get("Food & Drink")),
+            ("Groceries España",   cat_map.get("Food & Drink")),
+            ("Eating Out UK",      cat_map.get("Food & Drink")),
+            ("Eating Out España",  cat_map.get("Food & Drink")),
+            ("Rent UK",            cat_map.get("Household")),
+            ("Rent España",        cat_map.get("Household")),
+        ]
+
+        for cat_name, parent_id in custom_categories:
+            if cat_name not in cat_map:
+                new_cat = Category(
+                    user_id=user.id,
+                    name=cat_name,
+                    parent_category_id=parent_id,
+                    is_system=False,
+                )
+                db.add(new_cat)
+                db.flush()
+                cat_map[cat_name] = new_cat.id
+                print(f"✓ Created custom category: {cat_name}")
+            else:
+                print(f"  Custom category already exists: {cat_name}")
+
+        db.commit()
+
         # ── Step 4: Schedules ───────────────────────────────────────────────
         existing_schedules = (
             db.query(Schedule)
@@ -181,7 +210,7 @@ def seed_demo() -> None:
             # ── GBP monthly schedules ──────────────────────────────────────
             Schedule(
                 user_id=user.id, account_id=current_id,
-                category_id=cat("Rent/Mortgage"), name="Monthly Rent",
+                category_id=cat("Rent UK"), name="Monthly Rent",
                 payee="Landlord", amount=Decimal("950.00"), currency="GBP",
                 frequency="monthly", interval=1, day_of_month=1,
                 start_date=date(2026, 1, 1), auto_generate=True, active=True,
@@ -247,7 +276,7 @@ def seed_demo() -> None:
             ),
             Schedule(
                 user_id=user.id, account_id=santander_id,
-                category_id=cat("Rent/Mortgage"), name="Barcelona Rent",
+                category_id=cat("Rent España"), name="Barcelona Rent",
                 payee="Propietario", amount=Decimal("900.00"), currency="EUR",
                 frequency="monthly", interval=1, day_of_month=1,
                 start_date=date(2026, 1, 1), auto_generate=True, active=True,
@@ -328,9 +357,9 @@ def seed_demo() -> None:
             # GBP — Current Account
             tx_rows += [
                 (current_id,   "Salary",           _date_in_month(m, 28), Decimal("3200.00"), "GBP", "income",  "UK Employer"),
-                (current_id,   "Rent/Mortgage",    _date_in_month(m,  1), Decimal("1200.00"), "GBP", "expense", "Landlord"),
-                (current_id,   "Groceries",        _date_in_month(m,  6), Decimal("62.45"),   "GBP", "expense", "Tesco"),
-                (current_id,   "Eating Out",       _date_in_month(m, 13), Decimal("38.50"),   "GBP", "expense", "Wagamama"),
+                (current_id,   "Rent UK",          _date_in_month(m,  1), Decimal("1200.00"), "GBP", "expense", "Landlord"),
+                (current_id,   "Groceries UK",     _date_in_month(m,  6), Decimal("62.45"),   "GBP", "expense", "Tesco"),
+                (current_id,   "Eating Out UK",    _date_in_month(m, 13), Decimal("38.50"),   "GBP", "expense", "Wagamama"),
                 (current_id,   "Fuel",             _date_in_month(m, 18), Decimal("55.00"),   "GBP", "expense", "Shell"),
                 (current_id,   "Streaming",        _date_in_month(m,  8), Decimal("15.99"),   "GBP", "expense", "Netflix"),
                 (current_id,   "Fitness",          _date_in_month(m, 20), Decimal("25.00"),   "GBP", "expense", "Pure Gym"),
@@ -338,10 +367,10 @@ def seed_demo() -> None:
 
             # EUR — Santander España
             tx_rows += [
-                (santander_id, "Salary",           _date_in_month(m, 25), Decimal("1800.00"), "EUR", "income",  "Barcelona Client"),
-                (santander_id, "Rent/Mortgage",    _date_in_month(m,  1), Decimal("900.00"),  "EUR", "expense", "Propietario"),
-                (santander_id, "Groceries",        _date_in_month(m,  4), Decimal("48.20"),   "EUR", "expense", "Mercadona"),
-                (santander_id, "Eating Out",       _date_in_month(m, 10), Decimal("32.00"),   "EUR", "expense", "Bar Marsella"),
+                (santander_id, "Salary",              _date_in_month(m, 25), Decimal("1800.00"), "EUR", "income",  "Barcelona Client"),
+                (santander_id, "Rent España",         _date_in_month(m,  1), Decimal("900.00"),  "EUR", "expense", "Propietario"),
+                (santander_id, "Groceries España",    _date_in_month(m,  4), Decimal("48.20"),   "EUR", "expense", "Mercadona"),
+                (santander_id, "Eating Out España",   _date_in_month(m, 10), Decimal("32.00"),   "EUR", "expense", "Bar Marsella"),
                 (santander_id, "Phone & Internet", _date_in_month(m, 10), Decimal("25.00"),   "EUR", "expense", "Movistar"),
                 (santander_id, "Clothing",         _date_in_month(m, 22), Decimal("65.00"),   "EUR", "expense", "Zara Barcelona"),
             ]
@@ -396,29 +425,29 @@ def seed_demo() -> None:
         # Map category_id → Budget for override idempotency checks
         budget_by_cat = {str(b.category_id): b for b in existing_budgets}
 
-        # Each entry: (category_name, default_amount, currency, overrides_dict)
+        # Each entry: (category_name, default_amount, currency, overrides_dict, group)
         # overrides_dict maps month number → override amount
         budget_definitions = [
-            # ── GBP budgets (Current Account user's categories) ──
-            ("Groceries",            Decimal("300.00"), "GBP", {12: Decimal("350.00")}),
-            ("Eating Out",           Decimal("150.00"), "GBP", {}),
-            ("Clothing",             Decimal("100.00"), "GBP", {1: Decimal("200.00"), 12: Decimal("200.00")}),
-            ("Fuel",                 Decimal("80.00"),  "GBP", {}),
-            ("Medical",              Decimal("50.00"),  "GBP", {}),
-            ("Gifts & Celebrations", Decimal("50.00"),  "GBP", {12: Decimal("500.00")}),
-            ("Travel",               Decimal("100.00"), "GBP", {6: Decimal("500.00"), 8: Decimal("300.00")}),
-            ("Education",            Decimal("50.00"),  "GBP", {}),
+            # ── GBP budgets — group="UK" ─────────────────────────────────
+            ("Groceries UK",         Decimal("300.00"), "GBP", {12: Decimal("350.00")}, "UK"),
+            ("Eating Out UK",        Decimal("150.00"), "GBP", {},                      "UK"),
+            ("Clothing",             Decimal("100.00"), "GBP", {1: Decimal("200.00"), 12: Decimal("200.00")}, "UK"),
+            ("Fuel",                 Decimal("80.00"),  "GBP", {},                      "UK"),
+            ("Medical",              Decimal("50.00"),  "GBP", {},                      "UK"),
+            ("Gifts & Celebrations", Decimal("50.00"),  "GBP", {12: Decimal("500.00")}, "UK"),
+            ("Travel",               Decimal("100.00"), "GBP", {6: Decimal("500.00"), 8: Decimal("300.00")}, "UK"),
+            ("Education",            Decimal("50.00"),  "GBP", {},                      "UK"),
 
-            # ── EUR budgets ──
-            ("Groceries",            Decimal("200.00"), "EUR", {}),
-            ("Eating Out",           Decimal("100.00"), "EUR", {}),
-            ("Clothing",             Decimal("80.00"),  "EUR", {}),
+            # ── EUR budgets — group="España" ─────────────────────────────
+            ("Groceries España",     Decimal("200.00"), "EUR", {},                      "España"),
+            ("Eating Out España",    Decimal("100.00"), "EUR", {},                      "España"),
+            ("Rent España",          Decimal("900.00"), "EUR", {},                      "España"),
         ]
 
         budgets_created = 0
         overrides_created = 0
 
-        for cat_name, default_amount, currency, overrides in budget_definitions:
+        for cat_name, default_amount, currency, overrides, budget_group in budget_definitions:
             category_id = cat(cat_name)
             key = (str(category_id), BUDGET_YEAR)
 
@@ -449,6 +478,7 @@ def seed_demo() -> None:
                 year=BUDGET_YEAR,
                 default_amount=default_amount,
                 currency=currency,
+                group=budget_group,
             )
             db.add(budget_obj)
             db.flush()  # get the id for overrides

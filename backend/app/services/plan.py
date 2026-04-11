@@ -190,7 +190,13 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
 # =============================================================================
 
 
-def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> MonthlyPlan:
+def get_monthly_plan(
+    year: int,
+    month: int,
+    user_id: uuid.UUID,
+    db: Session,
+    group: str | None = None,
+) -> MonthlyPlan:
     """
     Assembles the full monthly plan for a given user and month.
 
@@ -264,14 +270,18 @@ def get_monthly_plan(year: int, month: int, user_id: uuid.UUID, db: Session) -> 
     # For each budget matching this year, get the effective amount:
     #   - If a BudgetOverride exists for this month, use override amount
     #   - Otherwise use default_amount
-    budgets = (
-        db.query(Budget)
-        .filter(
-            Budget.user_id == user_id,
-            Budget.year == year,
-        )
-        .all()
+    # Normalize empty string to None so "" is treated as "no filter"
+    group = group or None
+
+    budget_query = db.query(Budget).filter(
+        Budget.user_id == user_id,
+        Budget.year == year,
     )
+    # When a group filter is provided, only include budgets in that group.
+    # Schedules and transactions are NOT filtered — only budgets.
+    if group is not None:
+        budget_query = budget_query.filter(Budget.group == group)
+    budgets = budget_query.all()
 
     # Batch-fetch all overrides for this month in a single query (avoids N+1).
     # Build a dict keyed by budget_id for O(1) lookup per budget below.

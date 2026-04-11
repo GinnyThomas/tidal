@@ -56,6 +56,7 @@ class BudgetCreate(BaseModel):
     year: int
     default_amount: Decimal
     currency: str = Field(default="GBP", max_length=3)
+    group: Optional[str] = Field(default=None, max_length=50)
 
 
 class BudgetUpdate(BaseModel):
@@ -63,6 +64,7 @@ class BudgetUpdate(BaseModel):
 
     default_amount: Optional[Decimal] = None
     currency: Optional[str] = Field(default=None, max_length=3)
+    group: Optional[str] = Field(default=None, max_length=50)
 
 
 class BudgetResponse(BaseModel):
@@ -84,6 +86,7 @@ class BudgetResponse(BaseModel):
     year: int
     default_amount: Decimal
     currency: str
+    group: Optional[str]
     created_at: datetime
     updated_at: datetime
     overrides: list[BudgetOverrideResponse] = Field(default_factory=list)
