@@ -161,7 +161,9 @@ function AccountsPage() {
                         {accounts.map((account) => (
                             <li
                                 key={account.id}
-                                className="card-hover flex items-center justify-between"
+                                className="card-hover flex items-center justify-between cursor-pointer"
+                                onClick={() => handleEditAccount(account)}
+                                aria-label="Click to edit"
                             >
                                 <div>
                                     {/* Name is a link to the pre-filtered transactions view */}

@@ -84,6 +84,15 @@ class Transaction(Base):
         nullable=True,
     )
 
+    # --- Promotion link ---
+    # References a promotion this payment is against (e.g. BNPL instalment).
+    # Nullable — most transactions are not linked to a promotion.
+    promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("promotions.id"),
+        nullable=True,
+    )
+
     # --- Self-referential link ---
     # For transfers: credit.parent_transaction_id = debit.id
     # For refunds: refund.parent_transaction_id = original_expense.id

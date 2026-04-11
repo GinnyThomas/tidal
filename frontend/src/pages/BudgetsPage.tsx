@@ -118,7 +118,7 @@ function BudgetsPage() {
     const showGroupSections = !filterGroup && groupedBudgets.length > 1
 
     const renderBudgetRow = (budget: Budget) => (
-        <tr key={budget.id} className="border-b border-ocean-700/50">
+        <tr key={budget.id} className="border-b border-ocean-700/50 cursor-pointer hover:bg-ocean-700/30 transition-colors" onClick={() => handleEdit(budget)} aria-label="Click to edit">
             <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
                     <button

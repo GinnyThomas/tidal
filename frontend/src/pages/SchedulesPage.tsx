@@ -231,7 +231,9 @@ function SchedulesPage() {
                                 {schedules.map((s) => (
                                     <tr
                                         key={s.id}
-                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors"
+                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
+                                        onClick={() => handleEditSchedule(s)}
+                                        aria-label="Click to edit"
                                     >
                                         <td className="px-4 py-3 text-slate-100 font-medium">{s.name}</td>
                                         <td className="px-4 py-3 text-slate-300">{s.frequency}</td>
@@ -251,7 +253,7 @@ function SchedulesPage() {
                                         <td className="px-4 py-3 text-center">
                                             {/* Button enables keyboard access and the click-to-toggle behaviour */}
                                             <button
-                                                onClick={() => handleActiveToggle(s)}
+                                                onClick={(e) => { e.stopPropagation(); handleActiveToggle(s) }}
                                                 className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
                                                     s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
                                                 }`}
@@ -261,7 +263,7 @@ function SchedulesPage() {
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             <button
-                                                onClick={() => handleEditSchedule(s)}
+                                                onClick={(e) => { e.stopPropagation(); handleEditSchedule(s) }}
                                                 className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
                                             >
                                                 Edit

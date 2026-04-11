@@ -386,6 +386,12 @@ Larger tap target for mobile.
 ### Tags
 Cross-cutting transaction labels via TagAssignment join table.
 
+### Transaction splits
+transaction_splits:
+id, transaction_id (FK), category_id, amount, note
+The parent transaction keeps its total amount but category_id becomes nullable (null = split transaction). The splits define how the total is allocated.
+
+### reallocation
 ---
 
 *Last updated: Phase 9 complete — April 2026*
