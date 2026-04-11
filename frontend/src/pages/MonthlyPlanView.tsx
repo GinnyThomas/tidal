@@ -23,6 +23,8 @@ import type { CSSProperties } from 'react'
 import React from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
+import AddReallocationForm from '../components/AddReallocationForm'
+import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
@@ -105,6 +107,17 @@ function MonthlyPlanView() {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
     // Budget group filter — "All" means no filter, otherwise passes ?group= to API
     const [filterGroup, setFilterGroup] = useState('')
+    // Reallocation form — which category is being reallocated from (null = form closed)
+    const [reallocatingFrom, setReallocatingFrom] = useState<PlanRow | null>(null)
+    // Reallocation history for the current month
+    type Reallocation = {
+        id: string
+        from_category_id: string
+        to_category_id: string
+        amount: string
+        reason: string
+    }
+    const [reallocations, setReallocations] = useState<Reallocation[]>([])
 
     const fetchPlan = async (y: number, m: number, group: string = '') => {
         const token = localStorage.getItem('access_token')
@@ -134,6 +147,25 @@ function MonthlyPlanView() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchPlan(year, month, filterGroup) }, [year, month, filterGroup])
+
+    // Fetch reallocation history for the current month
+    const fetchReallocations = () => {
+        const token = localStorage.getItem('access_token')
+        setReallocations([])
+        axios.get(`${getApiBaseUrl()}/api/v1/reallocations`, {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { year, month },
+        }).then(res => setReallocations(res.data)).catch(() => setReallocations([]))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchReallocations() }, [year, month])
+
+    const handleReallocationAdded = () => {
+        setReallocatingFrom(null)
+        annualPlanCache.clear()
+        fetchPlan(year, month, filterGroup)
+        fetchReallocations()
+    }
 
     const handlePrev = () => {
         const prev = shiftMonth(year, month, -1)
@@ -312,16 +344,27 @@ function MonthlyPlanView() {
                 {/* Parent row */}
                 <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                     <td className="px-4 py-3 text-slate-100 font-medium">
-                        {hasSchedules && (
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center">
+                                {hasSchedules && (
+                                    <button
+                                        onClick={() => toggleExpand(parent.category_id)}
+                                        className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
+                                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${parent.category_name}`}
+                                    >
+                                        {isExpanded ? '▼' : '▶'}
+                                    </button>
+                                )}
+                                {parent.category_name}
+                            </div>
                             <button
-                                onClick={() => toggleExpand(parent.category_id)}
-                                className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${parent.category_name}`}
+                                onClick={() => setReallocatingFrom(parent)}
+                                className="text-xs px-1.5 py-0.5 rounded text-slate-500 hover:text-sky-400 hover:bg-ocean-700 transition-colors cursor-pointer"
+                                aria-label={`Reallocate from ${parent.category_name}`}
                             >
-                                {isExpanded ? '▼' : '▶'}
+                                Reallocate
                             </button>
-                        )}
-                        {parent.category_name}
+                        </div>
                     </td>
                     <td className="px-4 py-3 text-right text-sky-400">
                         {parseFloat(parent.planned) !== 0 ? (
@@ -358,16 +401,27 @@ function MonthlyPlanView() {
                                     className="px-4 py-2.5 text-slate-300 text-sm"
                                     style={{ paddingLeft: '2rem' }}
                                 >
-                                    {childHasSchedules && (
-                                        <button
-                                            onClick={() => toggleExpand(child.category_id)}
-                                            className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                                            aria-label={`${childIsExpanded ? 'Collapse' : 'Expand'} ${child.category_name}`}
-                                        >
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center">
+                                            {childHasSchedules && (
+                                                <button
+                                                    onClick={() => toggleExpand(child.category_id)}
+                                                    className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
+                                                    aria-label={`${childIsExpanded ? 'Collapse' : 'Expand'} ${child.category_name}`}
+                                                >
                                             {childIsExpanded ? '▼' : '▶'}
                                         </button>
-                                    )}
-                                    {child.category_name}
+                                            )}
+                                            {child.category_name}
+                                        </div>
+                                        <button
+                                            onClick={() => setReallocatingFrom(child)}
+                                            className="text-xs px-1.5 py-0.5 rounded text-slate-500 hover:text-sky-400 hover:bg-ocean-700 transition-colors cursor-pointer"
+                                            aria-label={`Reallocate from ${child.category_name}`}
+                                        >
+                                            Reallocate
+                                        </button>
+                                    </div>
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
                                     {parseFloat(child.planned) !== 0 ? (
@@ -436,6 +490,22 @@ function MonthlyPlanView() {
                         </select>
                     </div>
                 </div>
+
+                {/* Reallocation form — shown when a Reallocate button is clicked */}
+                {reallocatingFrom && (
+                    <div className="mb-6">
+                        <AddReallocationForm
+                            key={reallocatingFrom.category_id}
+                            fromCategoryId={reallocatingFrom.category_id}
+                            fromCategoryName={reallocatingFrom.category_name}
+                            year={year}
+                            month={month}
+                            maxAmount={reallocatingFrom.remaining}
+                            onReallocationAdded={handleReallocationAdded}
+                            onCancel={() => setReallocatingFrom(null)}
+                        />
+                    </div>
+                )}
 
                 {rows.length === 0 ? (
                     <div className="text-center py-20">
@@ -529,6 +599,38 @@ function MonthlyPlanView() {
                                 </tfoot>
                             )}
                         </table>
+                    </div>
+                )}
+
+                {/* Reallocation history for this month */}
+                {reallocations.length > 0 && (
+                    <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">
+                            Reallocations this month
+                        </h3>
+                        {/* Build name lookup once rather than calling rows.find() per entry */}
+                        {(() => {
+                            const catNameMap = new Map(rows.map(r => [r.category_id, r.category_name]))
+                            return (
+                        <ul className="space-y-2">
+                            {reallocations.map(r => {
+                                const fromName = catNameMap.get(r.from_category_id) ?? r.from_category_id
+                                const toName = catNameMap.get(r.to_category_id) ?? r.to_category_id
+                                return (
+                                    <li key={r.id} className="text-sm text-slate-300 bg-ocean-800 border border-ocean-700 rounded-lg px-4 py-2.5">
+                                        <span className="text-sky-400 font-medium">{r.amount}</span>
+                                        {' moved from '}
+                                        <span className="text-slate-100">{fromName}</span>
+                                        {' to '}
+                                        <span className="text-slate-100">{toName}</span>
+                                        {' — '}
+                                        <span className="text-slate-400 italic">{r.reason}</span>
+                                    </li>
+                                )
+                            })}
+                        </ul>
+                            )
+                        })()}
                     </div>
                 )}
             </div>

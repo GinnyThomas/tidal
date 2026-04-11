@@ -73,6 +73,10 @@ const emptyPlan = {
 describe('MonthlyPlanView', () => {
     beforeEach(() => {
         localStorage.setItem('access_token', 'fake-token')
+        // Default fallback: return empty array for any unmocked axios.get call.
+        // The reallocations useEffect fires after the plan fetch and consumes
+        // this default when no explicit mock is queued for it.
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
     })
 
     afterEach(() => {
@@ -364,11 +368,45 @@ describe('MonthlyPlanView', () => {
     })
 
     // =========================================================================
+    // Reallocations
+    // =========================================================================
+
+    it('shows a Reallocate button on category rows', async () => {
+        // Mock plan fetch + reallocations fetch (both fire on mount)
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: makePlan([{}]) })  // plan
+            .mockResolvedValueOnce({ data: [] })              // reallocations
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+        expect(screen.getByRole('button', { name: /reallocate from food/i })).toBeInTheDocument()
+    })
+
+    it('shows reallocation history when data exists', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: makePlan([
+                { category_id: 'cat-from', category_name: 'Food & Drink' },
+                { category_id: 'cat-to', category_name: 'Travel' },
+            ]) })
+            .mockResolvedValueOnce({ data: [
+                { id: 'r-1', from_category_id: 'cat-from', to_category_id: 'cat-to', amount: '75.00', reason: 'Holiday fund' },
+            ] })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        expect(await screen.findByText(/reallocations this month/i)).toBeInTheDocument()
+        expect(screen.getByText('75.00')).toBeInTheDocument()
+        expect(screen.getByText(/holiday fund/i)).toBeInTheDocument()
+    })
+
+    // =========================================================================
     // Month navigation
     // =========================================================================
 
     it('shows a Prev button and a Next button', async () => {
-        vi.mocked(axios.get).mockResolvedValue({ data: emptyPlan })
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: emptyPlan })
 
         render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
 
@@ -379,11 +417,12 @@ describe('MonthlyPlanView', () => {
     })
 
     it('navigates to the previous month when Prev is clicked', async () => {
-        // First call: the current month (whatever month the component defaults to)
-        // Second call: the previous month, triggered by the Prev click
+        // plan (initial) → reallocations (initial) → plan (after prev) → reallocations (after prev)
         vi.mocked(axios.get)
-            .mockResolvedValueOnce({ data: emptyPlan })
-            .mockResolvedValueOnce({ data: emptyPlan })
+            .mockResolvedValueOnce({ data: emptyPlan })   // plan
+            .mockResolvedValueOnce({ data: [] })           // reallocations
+            .mockResolvedValueOnce({ data: emptyPlan })   // plan after nav
+            .mockResolvedValueOnce({ data: [] })           // reallocations after nav
 
         render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
 
@@ -404,7 +443,9 @@ describe('MonthlyPlanView', () => {
     it('navigates to the next month when Next is clicked', async () => {
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: emptyPlan })
+            .mockResolvedValueOnce({ data: [] })           // reallocations
             .mockResolvedValueOnce({ data: emptyPlan })
+            .mockResolvedValueOnce({ data: [] })           // reallocations
 
         render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
 
@@ -421,8 +462,14 @@ describe('MonthlyPlanView', () => {
     })
 
     it('handles year boundary: navigating back from January goes to December', async () => {
-        vi.mocked(axios.get)
-            .mockResolvedValue({ data: emptyPlan })
+        // Use mockImplementation to return emptyPlan for plan calls and [] for reallocation calls.
+        // Plan URLs contain "/plan/", reallocation URLs contain "/reallocations".
+        vi.mocked(axios.get).mockImplementation((url: string) => {
+            if (String(url).includes('/reallocations')) {
+                return Promise.resolve({ data: [] }) as never
+            }
+            return Promise.resolve({ data: emptyPlan }) as never
+        })
 
         render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
 
