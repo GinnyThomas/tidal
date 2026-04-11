@@ -55,8 +55,7 @@ function AddReallocationForm({
             setCategories(filtered)
             if (filtered.length > 0) setToCategoryId(filtered[0].id)
         }).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [fromCategoryId])
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()

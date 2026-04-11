@@ -151,10 +151,11 @@ function MonthlyPlanView() {
     // Fetch reallocation history for the current month
     const fetchReallocations = () => {
         const token = localStorage.getItem('access_token')
+        setReallocations([])
         axios.get(`${getApiBaseUrl()}/api/v1/reallocations`, {
             headers: { Authorization: `Bearer ${token}` },
             params: { year, month },
-        }).then(res => setReallocations(res.data)).catch(() => {})
+        }).then(res => setReallocations(res.data)).catch(() => setReallocations([]))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchReallocations() }, [year, month])
@@ -358,9 +359,8 @@ function MonthlyPlanView() {
                             </div>
                             <button
                                 onClick={() => setReallocatingFrom(parent)}
-                                className="text-xs px-1.5 py-0.5 rounded text-slate-500 hover:text-sky-400 hover:bg-ocean-700 transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+                                className="text-xs px-1.5 py-0.5 rounded text-slate-500 hover:text-sky-400 hover:bg-ocean-700 transition-colors cursor-pointer"
                                 aria-label={`Reallocate from ${parent.category_name}`}
-                                style={{ opacity: 1 }}
                             >
                                 Reallocate
                             </button>
@@ -608,11 +608,14 @@ function MonthlyPlanView() {
                         <h3 className="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">
                             Reallocations this month
                         </h3>
+                        {/* Build name lookup once rather than calling rows.find() per entry */}
+                        {(() => {
+                            const catNameMap = new Map(rows.map(r => [r.category_id, r.category_name]))
+                            return (
                         <ul className="space-y-2">
                             {reallocations.map(r => {
-                                // Look up category names from the plan rows
-                                const fromName = rows.find(row => row.category_id === r.from_category_id)?.category_name ?? r.from_category_id
-                                const toName = rows.find(row => row.category_id === r.to_category_id)?.category_name ?? r.to_category_id
+                                const fromName = catNameMap.get(r.from_category_id) ?? r.from_category_id
+                                const toName = catNameMap.get(r.to_category_id) ?? r.to_category_id
                                 return (
                                     <li key={r.id} className="text-sm text-slate-300 bg-ocean-800 border border-ocean-700 rounded-lg px-4 py-2.5">
                                         <span className="text-sky-400 font-medium">{r.amount}</span>
@@ -626,6 +629,8 @@ function MonthlyPlanView() {
                                 )
                             })}
                         </ul>
+                            )
+                        })()}
                     </div>
                 )}
             </div>
