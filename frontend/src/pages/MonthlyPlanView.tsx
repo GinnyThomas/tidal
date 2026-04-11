@@ -460,19 +460,51 @@ function MonthlyPlanView() {
                                     are multiple distinct groups. A single group (e.g. only "General")
                                     doesn't benefit from section headers. */}
                                 {!filterGroup && groupedSections.length > 1 ? (
-                                    groupedSections.map(({ group: sectionGroup, entries }) => (
-                                        <React.Fragment key={sectionGroup}>
-                                            {/* Group section header */}
-                                            <tr className="bg-ocean-950/60">
-                                                <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
-                                                    ── {sectionGroup} ──
-                                                </td>
-                                            </tr>
-                                            {entries.map(({ parent, children }) =>
-                                                renderParentAndChildren(parent, children, sectionGroup)
-                                            )}
-                                        </React.Fragment>
-                                    ))
+                                    groupedSections.map(({ group: sectionGroup, entries }) => {
+                                        // Compute subtotals for all rows in this group section.
+                                        // Include both parent rows and their children.
+                                        const allSectionRows = entries.flatMap(({ parent, children }) => [parent, ...children])
+                                        const subPlanned = allSectionRows.reduce((s, r) => s + parseFloat(r.planned), 0)
+                                        const subActual = allSectionRows.reduce((s, r) => s + parseFloat(r.actual), 0)
+                                        const subRemaining = subPlanned - subActual
+                                        const subPending = allSectionRows.reduce((s, r) => s + parseFloat(r.pending), 0)
+                                        const fmt2 = (v: number) => v === 0 ? '—' : v.toFixed(2)
+
+                                        return (
+                                            <React.Fragment key={sectionGroup}>
+                                                {/* Group section header */}
+                                                <tr className="bg-ocean-950/60">
+                                                    <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                        ── {sectionGroup} ──
+                                                    </td>
+                                                </tr>
+                                                {entries.map(({ parent, children }) =>
+                                                    renderParentAndChildren(parent, children, sectionGroup)
+                                                )}
+                                                {/* Group subtotal row */}
+                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
+                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm">
+                                                        ── {sectionGroup} Total
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right text-sky-400 font-semibold text-sm">
+                                                        {fmt2(subPlanned)}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">
+                                                        {fmt2(subActual)}
+                                                    </td>
+                                                    <td
+                                                        className="px-4 py-2.5 text-right font-semibold text-sm"
+                                                        style={remainingStyle(subRemaining.toFixed(2))}
+                                                    >
+                                                        {fmt2(subRemaining)}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right font-semibold text-sm" style={{ color: '#f59e0b' }}>
+                                                        {fmt2(subPending)}
+                                                    </td>
+                                                </tr>
+                                            </React.Fragment>
+                                        )
+                                    })
                                 ) : (
                                     parentRows.map(parent => renderParentAndChildren(parent))
                                 )}

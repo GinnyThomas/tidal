@@ -307,6 +307,63 @@ describe('MonthlyPlanView', () => {
     })
 
     // =========================================================================
+    // Group sections and subtotals
+    // =========================================================================
+
+    it('shows group section headers and subtotals when multiple groups exist', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: {
+                ...emptyPlan,
+                rows: [
+                    makeRow({ category_id: 'cat-uk', category_name: 'Groceries UK', planned: '300.00', actual: '100.00', remaining: '200.00', group: 'UK' }),
+                    makeRow({ category_id: 'cat-es', category_name: 'Groceries España', planned: '200.00', actual: '50.00', remaining: '150.00', group: 'España' }),
+                ],
+            },
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        // Section headers should appear
+        expect(screen.getByText(/── UK ──/i)).toBeInTheDocument()
+        expect(screen.getByText(/── España ──/i)).toBeInTheDocument()
+
+        // Subtotal rows should appear
+        expect(screen.getByText('── UK Total')).toBeInTheDocument()
+        expect(screen.getByText('── España Total')).toBeInTheDocument()
+
+        // UK subtotal: planned=300.00
+        const ukSubtotalRow = screen.getByText('── UK Total').closest('tr')!
+        const ukCells = ukSubtotalRow.querySelectorAll('td')
+        expect(ukCells[1].textContent).toBe('300.00')
+
+        // España subtotal: planned=200.00
+        const esSubtotalRow = screen.getByText('── España Total').closest('tr')!
+        const esCells = esSubtotalRow.querySelectorAll('td')
+        expect(esCells[1].textContent).toBe('200.00')
+    })
+
+    it('does not show group subtotals when a specific group is filtered', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: {
+                ...emptyPlan,
+                rows: [
+                    makeRow({ category_id: 'cat-uk', category_name: 'Groceries UK', group: 'UK' }),
+                ],
+            },
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        // With only one group, no section headers or subtotals
+        expect(screen.queryByText(/── UK Total/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/─��� UK ──/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
     // Month navigation
     // =========================================================================
 
