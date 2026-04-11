@@ -397,13 +397,21 @@ function TransactionsPage() {
                         <table className="w-full text-sm min-w-[640px]">
                             <thead>
                                 <tr className="border-b border-ocean-700 bg-ocean-950">
-                                    <th className="text-left px-4 py-3 text-slate-400 font-medium cursor-pointer hover:text-sky-400 transition-colors select-none" onClick={() => handleSort('date')}>Date{sortIndicator('date')}</th>
-                                    <th className="text-left px-4 py-3 text-slate-400 font-medium cursor-pointer hover:text-sky-400 transition-colors select-none" onClick={() => handleSort('payee')}>Payee{sortIndicator('payee')}</th>
+                                    <th className="text-left px-4 py-3 font-medium" aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('date')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Date{sortIndicator('date')}</button>
+                                    </th>
+                                    <th className="text-left px-4 py-3 font-medium" aria-sort={sortField === 'payee' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('payee')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Payee{sortIndicator('payee')}</button>
+                                    </th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Account</th>
-                                    <th className="text-right px-4 py-3 text-sky-400 font-medium cursor-pointer hover:text-sky-300 transition-colors select-none" onClick={() => handleSort('amount')}>Amount{sortIndicator('amount')}</th>
+                                    <th className="text-right px-4 py-3 font-medium" aria-sort={sortField === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('amount')} className="text-sky-400 hover:text-sky-300 transition-colors cursor-pointer select-none">Amount{sortIndicator('amount')}</button>
+                                    </th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Type</th>
-                                    <th className="text-center px-4 py-3 text-slate-400 font-medium cursor-pointer hover:text-sky-400 transition-colors select-none" onClick={() => handleSort('status')}>Status{sortIndicator('status')}</th>
+                                    <th className="text-center px-4 py-3 font-medium" aria-sort={sortField === 'status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}>
+                                        <button onClick={() => handleSort('status')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Status{sortIndicator('status')}</button>
+                                    </th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                 </tr>
                             </thead>

@@ -270,6 +270,9 @@ def get_monthly_plan(
     # For each budget matching this year, get the effective amount:
     #   - If a BudgetOverride exists for this month, use override amount
     #   - Otherwise use default_amount
+    # Normalize empty string to None so "" is treated as "no filter"
+    group = group or None
+
     budget_query = db.query(Budget).filter(
         Budget.user_id == user_id,
         Budget.year == year,

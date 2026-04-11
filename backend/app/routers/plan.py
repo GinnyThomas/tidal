@@ -37,7 +37,7 @@ router = APIRouter(
 def get_plan(
     year: int,
     month: int,
-    group: Optional[str] = Query(default=None),
+    group: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MonthlyPlan:
@@ -64,7 +64,7 @@ def get_plan(
 )
 def get_annual_plan(
     year: int,
-    group: Optional[str] = Query(default=None),
+    group: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AnnualPlan:
