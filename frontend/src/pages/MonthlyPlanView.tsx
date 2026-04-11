@@ -43,6 +43,7 @@ type PlanRow = {
     remaining: string
     pending: string
     schedules: ScheduleRow[]
+    group: string | null
 }
 
 type MonthlyPlan = {
@@ -193,6 +194,43 @@ function MonthlyPlanView() {
         pending: plan.total_pending,
     } : null
 
+    // --- Group sections (when no group filter is active) ---
+    // Determine each parent row's effective group: use the parent's own group,
+    // or if null, check if any of its children have a group.
+    const getEffectiveGroup = (parent: PlanRow): string => {
+        if (parent.group) return parent.group
+        const children = childrenOf(parent.category_id)
+        for (const child of children) {
+            if (child.group) return child.group
+        }
+        return 'General'
+    }
+
+    // Build ordered list of groups with their parent rows.
+    // Only used when filterGroup is empty (showing all groups with headers).
+    const GROUP_ORDER = ['UK', 'España', 'General']
+    const groupedParents: { group: string; parents: PlanRow[] }[] = []
+    if (!filterGroup) {
+        const byGroup = new Map<string, PlanRow[]>()
+        for (const parent of parentRows) {
+            const g = getEffectiveGroup(parent)
+            if (!byGroup.has(g)) byGroup.set(g, [])
+            byGroup.get(g)!.push(parent)
+        }
+        for (const g of GROUP_ORDER) {
+            const parents = byGroup.get(g)
+            if (parents && parents.length > 0) {
+                groupedParents.push({ group: g, parents })
+            }
+        }
+        // Any groups not in GROUP_ORDER (defensive)
+        for (const [g, parents] of byGroup) {
+            if (!GROUP_ORDER.includes(g) && parents.length > 0) {
+                groupedParents.push({ group: g, parents })
+            }
+        }
+    }
+
     // Renders individual schedule rows beneath a category when expanded.
     // Each row shows the schedule name and its planned contribution.
     // Actual, remaining, and pending are shown as "—" since we don't track
@@ -213,6 +251,101 @@ function MonthlyPlanView() {
                 <td className="px-4 py-2 text-right text-slate-500 text-sm">—</td>
             </tr>
         ))
+    }
+
+    // Renders a parent category row with its schedule breakdown and child rows.
+    // Extracted as a function so it can be called from both the grouped and flat paths.
+    const renderParentAndChildren = (parent: PlanRow) => {
+        const hasSchedules = parent.schedules?.length > 0
+        const isExpanded = expandedCategories.has(parent.category_id)
+        return (
+            <React.Fragment key={parent.category_id}>
+                {/* Parent row */}
+                <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
+                    <td className="px-4 py-3 text-slate-100 font-medium">
+                        {hasSchedules && (
+                            <button
+                                onClick={() => toggleExpand(parent.category_id)}
+                                className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
+                                aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${parent.category_name}`}
+                            >
+                                {isExpanded ? '▼' : '▶'}
+                            </button>
+                        )}
+                        {parent.category_name}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sky-400">
+                        {parseFloat(parent.planned) !== 0 ? (
+                            <Link to="/schedules" className="hover:underline">{parent.planned}</Link>
+                        ) : parent.planned}
+                    </td>
+                    <td className="px-4 py-3 text-right text-teal-400">
+                        {parseFloat(parent.actual) !== 0 ? (
+                            <Link to={`/transactions?category_id=${parent.category_id}`} className="hover:underline">
+                                {parent.actual}
+                            </Link>
+                        ) : parent.actual}
+                    </td>
+                    <td
+                        className="px-4 py-3 text-right font-medium"
+                        style={remainingStyle(parent.remaining)}
+                    >
+                        {parent.remaining}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-400">{parent.pending}</td>
+                </tr>
+
+                {/* Schedule breakdown rows — shown when parent is expanded */}
+                {renderScheduleRows(parent, 'pl-6 pr-4')}
+
+                {/* Child rows — paddingLeft inline style MUST stay (test assertion) */}
+                {childrenOf(parent.category_id).map(child => {
+                    const childHasSchedules = child.schedules?.length > 0
+                    const childIsExpanded = expandedCategories.has(child.category_id)
+                    return (
+                        <React.Fragment key={child.category_id}>
+                            <tr className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
+                                <td
+                                    className="px-4 py-2.5 text-slate-300 text-sm"
+                                    style={{ paddingLeft: '2rem' }}
+                                >
+                                    {childHasSchedules && (
+                                        <button
+                                            onClick={() => toggleExpand(child.category_id)}
+                                            className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
+                                            aria-label={`${childIsExpanded ? 'Collapse' : 'Expand'} ${child.category_name}`}
+                                        >
+                                            {childIsExpanded ? '▼' : '▶'}
+                                        </button>
+                                    )}
+                                    {child.category_name}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
+                                    {parseFloat(child.planned) !== 0 ? (
+                                        <Link to="/schedules" className="hover:underline">{child.planned}</Link>
+                                    ) : child.planned}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
+                                    {parseFloat(child.actual) !== 0 ? (
+                                        <Link to={`/transactions?category_id=${child.category_id}`} className="hover:underline">
+                                            {child.actual}
+                                        </Link>
+                                    ) : child.actual}
+                                </td>
+                                <td
+                                    className="px-4 py-2.5 text-right text-sm"
+                                    style={remainingStyle(child.remaining)}
+                                >
+                                    {child.remaining}
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-slate-400 text-sm">{child.pending}</td>
+                            </tr>
+                            {renderScheduleRows(child, 'pl-10 pr-4')}
+                        </React.Fragment>
+                    )
+                })}
+            </React.Fragment>
+        )
     }
 
     return (
@@ -275,105 +408,24 @@ function MonthlyPlanView() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {parentRows.map(parent => {
-                                    const hasSchedules = parent.schedules?.length > 0
-                                    const isExpanded = expandedCategories.has(parent.category_id)
-                                    return (
-                                        <React.Fragment key={parent.category_id}>
-                                            {/* Parent row */}
-                                            <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
-                                                <td className="px-4 py-3 text-slate-100 font-medium">
-                                                    {hasSchedules && (
-                                                        <button
-                                                            onClick={() => toggleExpand(parent.category_id)}
-                                                            className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                                                            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${parent.category_name}`}
-                                                        >
-                                                            {isExpanded ? '▼' : '▶'}
-                                                        </button>
-                                                    )}
-                                                    {parent.category_name}
+                                {/* Render grouped sections only when "All" is selected AND there
+                                    are multiple distinct groups. A single group (e.g. only "General")
+                                    doesn't benefit from section headers. */}
+                                {!filterGroup && groupedParents.length > 1 ? (
+                                    groupedParents.map(({ group: sectionGroup, parents }) => (
+                                        <React.Fragment key={sectionGroup}>
+                                            {/* Group section header */}
+                                            <tr className="bg-ocean-950/60">
+                                                <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                    ── {sectionGroup} ──
                                                 </td>
-                                                {/* Non-zero planned amounts link to /schedules.
-                                                    TODO: link to /schedules?category_id=xxx once schedule filtering is added. */}
-                                                <td className="px-4 py-3 text-right text-sky-400">
-                                                    {parseFloat(parent.planned) !== 0 ? (
-                                                        <Link to="/schedules" className="hover:underline">{parent.planned}</Link>
-                                                    ) : parent.planned}
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-teal-400">
-                                                    {/* Non-zero actual links to transactions filtered by this category */}
-                                                    {parseFloat(parent.actual) !== 0 ? (
-                                                        <Link to={`/transactions?category_id=${parent.category_id}`} className="hover:underline">
-                                                            {parent.actual}
-                                                        </Link>
-                                                    ) : parent.actual}
-                                                </td>
-                                                <td
-                                                    className="px-4 py-3 text-right font-medium"
-                                                    style={remainingStyle(parent.remaining)}
-                                                >
-                                                    {parent.remaining}
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-slate-400">{parent.pending}</td>
                                             </tr>
-
-                                            {/* Schedule breakdown rows — shown when parent is expanded */}
-                                            {renderScheduleRows(parent, 'pl-6 pr-4')}
-
-                                            {/* Child rows — paddingLeft inline style MUST stay (test assertion) */}
-                                            {childrenOf(parent.category_id).map(child => {
-                                                const childHasSchedules = child.schedules?.length > 0
-                                                const childIsExpanded = expandedCategories.has(child.category_id)
-                                                return (
-                                                    <React.Fragment key={child.category_id}>
-                                                        <tr
-                                                            className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors"
-                                                        >
-                                                            <td
-                                                                className="px-4 py-2.5 text-slate-300 text-sm"
-                                                                style={{ paddingLeft: '2rem' }}
-                                                            >
-                                                                {childHasSchedules && (
-                                                                    <button
-                                                                        onClick={() => toggleExpand(child.category_id)}
-                                                                        className="mr-2 text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                                                                        aria-label={`${childIsExpanded ? 'Collapse' : 'Expand'} ${child.category_name}`}
-                                                                    >
-                                                                        {childIsExpanded ? '▼' : '▶'}
-                                                                    </button>
-                                                                )}
-                                                                {child.category_name}
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
-                                                                {parseFloat(child.planned) !== 0 ? (
-                                                                    <Link to="/schedules" className="hover:underline">{child.planned}</Link>
-                                                                ) : child.planned}
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
-                                                                {parseFloat(child.actual) !== 0 ? (
-                                                                    <Link to={`/transactions?category_id=${child.category_id}`} className="hover:underline">
-                                                                        {child.actual}
-                                                                    </Link>
-                                                                ) : child.actual}
-                                                            </td>
-                                                            <td
-                                                                className="px-4 py-2.5 text-right text-sm"
-                                                                style={remainingStyle(child.remaining)}
-                                                            >
-                                                                {child.remaining}
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-right text-slate-400 text-sm">{child.pending}</td>
-                                                        </tr>
-
-                                                        {/* Schedule breakdown rows for child category */}
-                                                        {renderScheduleRows(child, 'pl-10 pr-4')}
-                                                    </React.Fragment>
-                                                )
-                                            })}
+                                            {parents.map(parent => renderParentAndChildren(parent))}
                                         </React.Fragment>
-                                    )
-                                })}
+                                    ))
+                                ) : (
+                                    parentRows.map(parent => renderParentAndChildren(parent))
+                                )}
                             </tbody>
 
                             {/* Totals footer */}

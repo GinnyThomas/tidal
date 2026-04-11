@@ -305,6 +305,50 @@ def test_plan_uses_override_amount_when_set(test_client) -> None:
     assert row["planned"] == "400.00"
 
 
+def test_plan_row_includes_budget_group(test_client) -> None:
+    """
+    PlanRow should include the budget's group field so the frontend can
+    display group section headers (e.g. "UK", "España", "General").
+    """
+    token, _, category_id = _setup(test_client)
+
+    _create_budget(test_client, token, category_id, group="UK")
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
+    assert row["group"] == "UK"
+
+
+def test_plan_row_group_is_null_without_budget(test_client) -> None:
+    """
+    Categories that only have transactions (no budget) should have group=null
+    in the PlanRow.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    # Create a transaction but no budget
+    test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "category_id": category_id,
+            "date": "2026-01-15",
+            "amount": "50.00",
+            "transaction_type": "expense",
+            "status": "cleared",
+        },
+        headers=_auth_headers(token),
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
+    assert row["group"] is None
+
+
 def test_plan_filtered_by_budget_group(test_client) -> None:
     """
     GET /api/v1/plan/2026/1?group=UK should include planned amounts only from

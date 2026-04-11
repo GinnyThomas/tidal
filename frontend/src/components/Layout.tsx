@@ -85,6 +85,7 @@ function Layout({ children }: Props) {
                         <Link to="/accounts"     className={navClass('/accounts')}>Accounts</Link>
                         <Link to="/categories"   className={navClass('/categories')}>Categories</Link>
                         <Link to="/schedules"    className={navClass('/schedules')}>Schedules</Link>
+                        <Link to="/budgets"      className={navClass('/budgets')}>Budgets</Link>
                         <Link to="/annual"       className={navClass('/annual')}>Annual</Link>
                     </div>
 
@@ -129,6 +130,7 @@ function Layout({ children }: Props) {
                         <Link to="/accounts"     className={navClass('/accounts')}              onClick={() => setMenuOpen(false)}>Accounts</Link>
                         <Link to="/categories"   className={navClass('/categories')}            onClick={() => setMenuOpen(false)}>Categories</Link>
                         <Link to="/schedules"    className={navClass('/schedules')}             onClick={() => setMenuOpen(false)}>Schedules</Link>
+                        <Link to="/budgets"      className={navClass('/budgets')}              onClick={() => setMenuOpen(false)}>Budgets</Link>
                         <Link to="/annual"       className={navClass('/annual')}                onClick={() => setMenuOpen(false)}>Annual</Link>
 
                         {/* Divider + user identity + account actions */}

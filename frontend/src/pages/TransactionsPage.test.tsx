@@ -482,4 +482,50 @@ describe('TransactionsPage', () => {
         const firstPayee = rows[1].querySelectorAll('td')[1].textContent
         expect(firstPayee).toBe('Aldi')
     })
+
+    it('sorts by category name when Category header is clicked', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', payee: 'A', category_name: 'Utilities' }),
+                makeTransaction({ id: 'tx-2', payee: 'B', category_name: 'Bills' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Utilities')
+        await userEvent.click(screen.getByText(/^Category/))
+
+        const rows = screen.getAllByRole('row')
+        // Ascending: Bills before Utilities
+        expect(rows[1].querySelectorAll('td')[2].textContent).toBe('Bills')
+        expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Utilities')
+    })
+
+    it('sorts by account name when Account header is clicked', async () => {
+        mockFetch(
+            [
+                makeAccount({ id: 'acc-a', name: 'Santander' }),
+                makeAccount({ id: 'acc-b', name: 'Nationwide' }),
+            ],
+            [
+                makeTransaction({ id: 'tx-1', account_id: 'acc-a', payee: 'X' }),
+                makeTransaction({ id: 'tx-2', account_id: 'acc-b', payee: 'Y' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        // Wait for the table to render — use payee as the anchor since
+        // account names also appear in the filter dropdown options
+        await screen.findByText('X')
+        // "Account" button is inside the table header — use getByRole to target the sort button
+        const accountSortBtn = screen.getByRole('button', { name: /^Account/ })
+        await userEvent.click(accountSortBtn)
+
+        const rows = screen.getAllByRole('row')
+        // Ascending: Nationwide before Santander
+        expect(rows[1].querySelectorAll('td')[3].textContent).toBe('Nationwide')
+    })
 })
