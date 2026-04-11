@@ -31,6 +31,7 @@ const makePlanRow = (overrides: object = {}) => ({
     actual: '0.00',
     remaining: '100.00',
     pending: '0.00',
+    group: null,
     ...overrides,
 })
 
@@ -241,5 +242,47 @@ describe('AnnualView', () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+
+    // =========================================================================
+    // Group sections
+    // =========================================================================
+
+    it('shows group section headers and subtotals when rows span multiple groups', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, {
+                0: [
+                    makePlanRow({ category_id: 'cat-uk', category_name: 'Groceries UK', planned: '300.00', group: 'UK' }),
+                    makePlanRow({ category_id: 'cat-es', category_name: 'Groceries España', planned: '200.00', group: 'España' }),
+                ],
+            }),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        // Section headers
+        expect(screen.getByText(/── UK ──/i)).toBeInTheDocument()
+        expect(screen.getByText(/── España ──/i)).toBeInTheDocument()
+
+        // Subtotal rows
+        expect(screen.getByText('── UK Total')).toBeInTheDocument()
+        expect(screen.getByText('── España Total')).toBeInTheDocument()
+    })
+
+    it('does not show group sections when only one group exists', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, {
+                0: [makePlanRow({ group: 'UK' })],
+            }),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Bills')
+
+        expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/── UK Total/)).not.toBeInTheDocument()
     })
 })

@@ -46,6 +46,7 @@ type PlanRow = {
     actual: string
     remaining: string
     pending: string
+    group: string | null
 }
 
 type MonthlyPlan = {
@@ -161,7 +162,7 @@ function AnnualView() {
     // We only show "planned" — the annual view is forward-looking budget planning.
     // Actual and pending data is available on the monthly view.
 
-    type CatData = { name: string; parentId: string | null; amounts: string[] }
+    type CatData = { name: string; parentId: string | null; amounts: string[]; group: string | null }
     const catMap = new Map<string, CatData>()
 
     annualPlan?.months.forEach((monthPlan, monthIdx) => {
@@ -171,10 +172,15 @@ function AnnualView() {
                     name: row.category_name,
                     parentId: row.parent_category_id,
                     amounts: Array(12).fill('0.00'),
+                    group: row.group ?? null,
                 })
             }
             // Overwrite the placeholder with the actual planned amount.
             catMap.get(row.category_id)!.amounts[monthIdx] = row.planned
+            // Update group if not yet set (first non-null group from any month wins)
+            if (row.group && !catMap.get(row.category_id)!.group) {
+                catMap.get(row.category_id)!.group = row.group
+            }
         })
     })
 
@@ -193,6 +199,59 @@ function AnnualView() {
     )
     const childrenOf = (parentId: string) =>
         activeCats.filter(([, d]) => d.parentId === parentId)
+
+    // --- Group sections for "All" filter ---
+    type AnnualEntry = [string, CatData]
+    type AnnualGroupSection = { group: string; entries: { parent: AnnualEntry; children: AnnualEntry[] }[] }
+
+    const GROUP_ORDER = ['UK', 'España', 'General']
+    const annualGroupSections: AnnualGroupSection[] = []
+
+    if (!filterGroup) {
+        const byGroup = new Map<string, { parent: AnnualEntry; children: AnnualEntry[] }[]>()
+        for (const entry of parentCats) {
+            const [parentId, parentData] = entry
+            const children = childrenOf(parentId)
+
+            if (children.length === 0) {
+                const g = parentData.group ?? 'General'
+                if (!byGroup.has(g)) byGroup.set(g, [])
+                byGroup.get(g)!.push({ parent: entry, children: [] })
+            } else {
+                const childrenByGroup = new Map<string, AnnualEntry[]>()
+                for (const child of children) {
+                    const cg = child[1].group ?? 'General'
+                    if (!childrenByGroup.has(cg)) childrenByGroup.set(cg, [])
+                    childrenByGroup.get(cg)!.push(child)
+                }
+                if (parentData.group) {
+                    const matching = childrenByGroup.get(parentData.group) ?? []
+                    const general = parentData.group !== 'General' ? (childrenByGroup.get('General') ?? []) : []
+                    if (!byGroup.has(parentData.group)) byGroup.set(parentData.group, [])
+                    byGroup.get(parentData.group)!.push({ parent: entry, children: [...matching, ...general] })
+                    for (const [cg, cgChildren] of childrenByGroup) {
+                        if (cg !== parentData.group && cg !== 'General') {
+                            if (!byGroup.has(cg)) byGroup.set(cg, [])
+                            byGroup.get(cg)!.push({ parent: entry, children: cgChildren })
+                        }
+                    }
+                } else {
+                    for (const [cg, cgChildren] of childrenByGroup) {
+                        if (!byGroup.has(cg)) byGroup.set(cg, [])
+                        byGroup.get(cg)!.push({ parent: entry, children: cgChildren })
+                    }
+                }
+            }
+        }
+        for (const g of GROUP_ORDER) {
+            const entries = byGroup.get(g)
+            if (entries && entries.length > 0) annualGroupSections.push({ group: g, entries })
+        }
+        for (const [g, entries] of byGroup) {
+            if (!GROUP_ORDER.includes(g) && entries.length > 0) annualGroupSections.push({ group: g, entries })
+        }
+    }
+    const showAnnualGroupSections = !filterGroup && annualGroupSections.length > 1
 
     // --- Monthly totals: sum all active categories for each month column ---
     const monthTotals = Array.from({ length: 12 }, (_, i) =>
@@ -265,53 +324,89 @@ function AnnualView() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {parentCats.map(([parentId, parentData]) => {
-                                    const children = childrenOf(parentId)
-                                    const parentTotal = sumAmounts(parentData.amounts)
-                                    return (
-                                        // React.Fragment with key — lets us return sibling rows
-                                        // (parent + children) from a single map iteration.
-                                        <React.Fragment key={parentId}>
-                                            {/* Parent row */}
-                                            <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
-                                                <td className="px-4 py-3 text-slate-100 font-medium">
-                                                    {parentData.name}
-                                                </td>
-                                                {parentData.amounts.map((a, i) => (
-                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">
-                                                        {fmtPlanned(a)}
-                                                    </td>
-                                                ))}
-                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">
-                                                    {fmtPlanned(parentTotal)}
-                                                </td>
-                                            </tr>
+                                {showAnnualGroupSections ? (
+                                    annualGroupSections.map(({ group: sectionGroup, entries }) => {
+                                        // Compute section subtotals across all entries
+                                        const allRows = entries.flatMap(({ parent, children }) => [parent, ...children])
+                                        const sectionMonthTotals = Array.from({ length: 12 }, (_, i) =>
+                                            allRows.reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0).toFixed(2)
+                                        )
+                                        const sectionTotal = sumAmounts(sectionMonthTotals)
 
-                                            {/* Child rows — pl-8 indent + teal left border */}
-                                            {children.map(([childId, childData]) => {
-                                                const childTotal = sumAmounts(childData.amounts)
-                                                return (
-                                                    <tr
-                                                        key={childId}
-                                                        className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors"
-                                                    >
-                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">
-                                                            {childData.name}
-                                                        </td>
-                                                        {childData.amounts.map((a, i) => (
-                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">
-                                                                {fmtPlanned(a)}
-                                                            </td>
-                                                        ))}
-                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
-                                                            {fmtPlanned(childTotal)}
-                                                        </td>
-                                                    </tr>
-                                                )
-                                            })}
-                                        </React.Fragment>
-                                    )
-                                })}
+                                        return (
+                                            <React.Fragment key={sectionGroup}>
+                                                {/* Group header */}
+                                                <tr className="bg-ocean-950/60">
+                                                    <td colSpan={14} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                        ── {sectionGroup} ──
+                                                    </td>
+                                                </tr>
+                                                {entries.map(({ parent: [parentId, parentData], children }) => {
+                                                    const parentTotal = sumAmounts(parentData.amounts)
+                                                    return (
+                                                        <React.Fragment key={`${parentId}-${sectionGroup}`}>
+                                                            <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
+                                                                <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
+                                                                {parentData.amounts.map((a, i) => (
+                                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                                ))}
+                                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                            </tr>
+                                                            {children.map(([childId, childData]) => {
+                                                                const childTotal = sumAmounts(childData.amounts)
+                                                                return (
+                                                                    <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
+                                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
+                                                                        {childData.amounts.map((a, i) => (
+                                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                                        ))}
+                                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                                    </tr>
+                                                                )
+                                                            })}
+                                                        </React.Fragment>
+                                                    )
+                                                })}
+                                                {/* Group subtotal row */}
+                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
+                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm">── {sectionGroup} Total</td>
+                                                    {sectionMonthTotals.map((t, i) => (
+                                                        <td key={i} className="px-3 py-2.5 text-right text-sky-400 font-semibold text-sm">{fmt(t)}</td>
+                                                    ))}
+                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">{fmt(sectionTotal)}</td>
+                                                </tr>
+                                            </React.Fragment>
+                                        )
+                                    })
+                                ) : (
+                                    parentCats.map(([parentId, parentData]) => {
+                                        const children = childrenOf(parentId)
+                                        const parentTotal = sumAmounts(parentData.amounts)
+                                        return (
+                                            <React.Fragment key={parentId}>
+                                                <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
+                                                    <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
+                                                    {parentData.amounts.map((a, i) => (
+                                                        <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                    ))}
+                                                    <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                </tr>
+                                                {children.map(([childId, childData]) => {
+                                                    const childTotal = sumAmounts(childData.amounts)
+                                                    return (
+                                                        <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
+                                                            <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
+                                                            {childData.amounts.map((a, i) => (
+                                                                <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                            ))}
+                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                        </tr>
+                                                    )
+                                                })}
+                                            </React.Fragment>
+                                        )
+                                    })
+                                )}
                             </tbody>
 
                             {/* Monthly totals footer — sums all categories per column */}

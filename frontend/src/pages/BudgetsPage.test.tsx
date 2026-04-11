@@ -180,4 +180,41 @@ describe('BudgetsPage', () => {
         // The override amount for December should be visible
         expect(screen.getByText('350.00')).toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Group sections
+    // =========================================================================
+
+    it('shows group section headers when budgets span multiple groups', async () => {
+        mockFetch(
+            [
+                makeBudget({ id: 'bud-uk', category_id: 'cat-001', group: 'UK' }),
+                makeBudget({ id: 'bud-es', category_id: 'cat-002', group: 'España', default_amount: '200.00' }),
+            ],
+            [
+                makeCategory({ id: 'cat-001', name: 'Groceries UK' }),
+                makeCategory({ id: 'cat-002', name: 'Groceries España' }),
+            ],
+        )
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        expect(screen.getByText(/── UK ──/i)).toBeInTheDocument()
+        expect(screen.getByText(/── España ──/i)).toBeInTheDocument()
+    })
+
+    it('does not show group headers when only one group exists', async () => {
+        mockFetch(
+            [makeBudget({ group: 'UK' })],
+            [makeCategory()],
+        )
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
+    })
 })

@@ -197,9 +197,10 @@ function MonthlyPlanView() {
     // --- Group sections (when no group filter is active) ---
     //
     // Each row uses its OWN group field (from its budget) first.
-    // A parent with no group inherits from its children only if ALL children
-    // share the same group. If children span multiple groups, the parent
-    // appears in each child's section with only the matching children.
+    // Children with group=null are treated as belonging to their parent's
+    // group section (not emitted under "General" separately).
+    // If a parent has no group but its children span multiple groups,
+    // the parent appears in each child-group section with matching children.
     //
     // The data structure is: { group, entries[] } where each entry is
     // { parent, children } — the children subset that belongs to this group.

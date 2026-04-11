@@ -14,7 +14,7 @@
 //   - Overrides expand button shows BudgetOverrideForm inline
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
 import AddBudgetForm from '../components/AddBudgetForm'
 import BudgetOverrideForm from '../components/BudgetOverrideForm'
@@ -96,6 +96,85 @@ function BudgetsPage() {
 
     // Build category name lookup
     const categoryById = new Map(categories.map(c => [c.id, c.name]))
+
+    // --- Group sections (when no group filter is active) ---
+    const GROUP_ORDER = ['UK', 'España', 'General']
+    const groupedBudgets: { group: string; items: Budget[] }[] = []
+    if (!filterGroup && budgets.length > 0) {
+        const byGroup = new Map<string, Budget[]>()
+        for (const b of budgets) {
+            const g = b.group ?? 'General'
+            if (!byGroup.has(g)) byGroup.set(g, [])
+            byGroup.get(g)!.push(b)
+        }
+        for (const g of GROUP_ORDER) {
+            const items = byGroup.get(g)
+            if (items && items.length > 0) groupedBudgets.push({ group: g, items })
+        }
+        for (const [g, items] of byGroup) {
+            if (!GROUP_ORDER.includes(g) && items.length > 0) groupedBudgets.push({ group: g, items })
+        }
+    }
+    const showGroupSections = !filterGroup && groupedBudgets.length > 1
+
+    const renderBudgetRow = (budget: Budget) => (
+        <tr key={budget.id} className="border-b border-ocean-700/50">
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => toggleOverrides(budget.id)}
+                        className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
+                        aria-label={`${expandedOverrides.has(budget.id) ? 'Collapse' : 'Expand'} overrides for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
+                    >
+                        {expandedOverrides.has(budget.id) ? '▼' : '▶'}
+                    </button>
+                    <span className="text-slate-100">
+                        {categoryById.get(budget.category_id) ?? budget.category_id}
+                    </span>
+                </div>
+                {expandedOverrides.has(budget.id) && (
+                    <div className="mt-2">
+                        <BudgetOverrideForm
+                            budgetId={budget.id}
+                            overrides={budget.overrides}
+                            defaultAmount={budget.default_amount}
+                            onChanged={() => {
+                                annualPlanCache.clear()
+                                setRefreshKey(k => k + 1)
+                            }}
+                        />
+                    </div>
+                )}
+            </td>
+            <td className="px-4 py-3 text-right text-sky-400 font-medium">
+                {budget.default_amount}
+            </td>
+            <td className="px-4 py-3 text-center text-slate-300">
+                {budget.currency}
+            </td>
+            <td className="px-4 py-3 text-center text-slate-400">
+                {budget.group ?? '—'}
+            </td>
+            <td className="px-4 py-3 text-center">
+                <div className="flex items-center justify-center gap-2">
+                    <button
+                        onClick={() => handleEdit(budget)}
+                        aria-label={`Edit budget for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
+                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                    >
+                        Edit
+                    </button>
+                    <button
+                        onClick={() => handleDelete(budget.id)}
+                        aria-label={`Delete budget for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
+                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-coral-400 hover:border-coral-500 transition-colors cursor-pointer"
+                    >
+                        Delete
+                    </button>
+                </div>
+            </td>
+        </tr>
+    )
 
     const handleBudgetSaved = () => {
         setShowForm(false)
@@ -245,66 +324,20 @@ function BudgetsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {budgets.map(budget => (
-                                    <tr key={budget.id} className="border-b border-ocean-700/50">
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => toggleOverrides(budget.id)}
-                                                    className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                                                    aria-label={`${expandedOverrides.has(budget.id) ? 'Collapse' : 'Expand'} overrides for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
-                                                >
-                                                    {expandedOverrides.has(budget.id) ? '▼' : '▶'}
-                                                </button>
-                                                <span className="text-slate-100">
-                                                    {categoryById.get(budget.category_id) ?? budget.category_id}
-                                                </span>
-                                            </div>
-                                            {/* Inline override form when expanded */}
-                                            {expandedOverrides.has(budget.id) && (
-                                                <div className="mt-2">
-                                                    <BudgetOverrideForm
-                                                        budgetId={budget.id}
-                                                        overrides={budget.overrides}
-                                                        defaultAmount={budget.default_amount}
-                                                        onChanged={() => {
-                                                            annualPlanCache.clear()
-                                                            setRefreshKey(k => k + 1)
-                                                        }
-                                                        }
-                                                    />
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-sky-400 font-medium">
-                                            {budget.default_amount}
-                                        </td>
-                                        <td className="px-4 py-3 text-center text-slate-300">
-                                            {budget.currency}
-                                        </td>
-                                        <td className="px-4 py-3 text-center text-slate-400">
-                                            {budget.group ?? '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(budget)}
-                                                    aria-label={`Edit budget for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
-                                                    className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(budget.id)}
-                                                    aria-label={`Delete budget for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
-                                                    className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-coral-400 hover:border-coral-500 transition-colors cursor-pointer"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {showGroupSections ? (
+                                    groupedBudgets.map(({ group: sectionGroup, items }) => (
+                                        <React.Fragment key={sectionGroup}>
+                                            <tr className="bg-ocean-950/60">
+                                                <td colSpan={5} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                    ── {sectionGroup} ──
+                                                </td>
+                                            </tr>
+                                            {items.map(budget => renderBudgetRow(budget))}
+                                        </React.Fragment>
+                                    ))
+                                ) : (
+                                    budgets.map(budget => renderBudgetRow(budget))
+                                )}
                             </tbody>
                         </table>
                     </div>
