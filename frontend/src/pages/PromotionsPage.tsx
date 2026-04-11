@@ -86,10 +86,16 @@ function PromotionsPage() {
     const handleDelete = async (id: string) => {
         if (!window.confirm('Delete this promotion? This cannot be undone.')) return
         const token = localStorage.getItem('access_token')
-        await axios.delete(`${getApiBaseUrl()}/api/v1/promotions/${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {})
-        setRefreshKey(k => k + 1)
+        try {
+            await axios.delete(`${getApiBaseUrl()}/api/v1/promotions/${id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            setRefreshKey(k => k + 1)
+        } catch (err: unknown) {
+            const message = (err as { response?: { data?: { detail?: string } } })
+                ?.response?.data?.detail ?? 'Could not delete promotion.'
+            window.alert(message)
+        }
     }
 
     if (loading) return <Layout><p className="text-slate-400 text-center py-20 text-lg">Loading...</p></Layout>

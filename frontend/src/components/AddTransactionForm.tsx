@@ -82,7 +82,9 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
-            axios.get(`${getApiBaseUrl()}/api/v1/promotions?active_only=true`, { headers }),
+            // In edit mode, fetch all promotions (not just active) so the currently
+            // linked promotion is visible even if it has been deactivated.
+            axios.get(`${getApiBaseUrl()}/api/v1/promotions${isEditMode ? '' : '?active_only=true'}`, { headers }),
         ]).then(([accountsRes, catsRes, promosRes]) => {
             setAccounts(accountsRes.data)
             setCategories(catsRes.data)

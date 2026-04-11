@@ -65,6 +65,7 @@ def _compute_fields(promotion: Promotion, db: Session) -> dict:
         db.query(Transaction)
         .filter(
             Transaction.promotion_id == promotion.id,
+            Transaction.user_id == promotion.user_id,
             Transaction.deleted_at.is_(None),
             Transaction.status.in_(["cleared", "reconciled"]),
         )
@@ -198,5 +199,21 @@ def delete_promotion(
     current_user: User = Depends(get_current_user),
 ) -> None:
     promotion = _get_promotion_or_404(promotion_id, current_user.id, db)
+
+    # Block delete if any transactions reference this promotion
+    linked_count = (
+        db.query(Transaction)
+        .filter(
+            Transaction.promotion_id == promotion.id,
+            Transaction.deleted_at.is_(None),
+        )
+        .count()
+    )
+    if linked_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete promotion with linked transactions. Remove the links first.",
+        )
+
     db.delete(promotion)
     db.commit()

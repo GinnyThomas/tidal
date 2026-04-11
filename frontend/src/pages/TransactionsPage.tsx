@@ -455,7 +455,7 @@ function TransactionsPage() {
                                         <td className="px-4 py-3 text-center">
                                             {/* Button enables keyboard access and the click-to-cycle behaviour */}
                                             <button
-                                                onClick={() => handleStatusToggle(tx)}
+                                                onClick={(e) => { e.stopPropagation(); handleStatusToggle(tx) }}
                                                 className={`badge cursor-pointer hover:opacity-80 transition-opacity ${STATUS_BADGE[tx.status] ?? 'bg-ocean-700 text-slate-400'}`}
                                             >
                                                 {tx.status}
@@ -465,7 +465,7 @@ function TransactionsPage() {
                                             {/* Transfers are two linked rows — editing one side
                                                 without the other would break the pair. */}
                                             <button
-                                                onClick={() => handleEditTransaction(tx)}
+                                                onClick={(e) => { e.stopPropagation(); handleEditTransaction(tx) }}
                                                 disabled={tx.transaction_type === 'transfer'}
                                                 aria-label={`Edit transaction ${tx.payee ?? tx.id}`}
                                                 className={`text-xs px-2.5 py-1 rounded border transition-colors ${

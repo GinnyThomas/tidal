@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.account import Account
 from app.models.category import Category
+from app.models.promotion import Promotion
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.transaction import (
@@ -98,6 +99,25 @@ def _get_transaction_or_404(
             detail="Transaction not found.",
         )
     return transaction
+
+
+def _get_promotion_or_404(
+    promotion_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Promotion:
+    """Validate that a promotion exists and belongs to the user."""
+    promotion = (
+        db.query(Promotion)
+        .filter(Promotion.id == promotion_id, Promotion.user_id == user_id)
+        .first()
+    )
+    if promotion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Promotion not found.",
+        )
+    return promotion
 
 
 def _get_account_or_404(
@@ -318,9 +338,13 @@ def create_transaction(
             detail="Refund transactions must include parent_transaction_id.",
         )
 
-    # Fix 3: if a parent is provided, validate it exists and belongs to user
+    # If a parent is provided, validate it exists and belongs to user
     if transaction_in.parent_transaction_id is not None:
         _get_transaction_or_404(transaction_in.parent_transaction_id, current_user.id, db)
+
+    # Validate promotion ownership if provided
+    if transaction_in.promotion_id is not None:
+        _get_promotion_or_404(transaction_in.promotion_id, current_user.id, db)
 
     transaction = Transaction(
         user_id=current_user.id,
@@ -459,6 +483,9 @@ def update_transaction(
 
     if "parent_transaction_id" in update_data and update_data["parent_transaction_id"] is not None:
         _get_transaction_or_404(update_data["parent_transaction_id"], current_user.id, db)
+
+    if "promotion_id" in update_data and update_data["promotion_id"] is not None:
+        _get_promotion_or_404(update_data["promotion_id"], current_user.id, db)
 
     # Enum fields need .value to store the plain string in the database
     for field, value in update_data.items():
