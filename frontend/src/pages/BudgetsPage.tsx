@@ -20,6 +20,7 @@ import AddBudgetForm from '../components/AddBudgetForm'
 import BudgetOverrideForm from '../components/BudgetOverrideForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 // --- TypeScript types ---
 
@@ -98,7 +99,6 @@ function BudgetsPage() {
     const categoryById = new Map(categories.map(c => [c.id, c.name]))
 
     // --- Group sections (when no group filter is active) ---
-    const GROUP_ORDER = ['UK', 'España', 'General']
     const groupedBudgets: { group: string; items: Budget[] }[] = []
     if (!filterGroup && budgets.length > 0) {
         const byGroup = new Map<string, Budget[]>()
@@ -112,7 +112,7 @@ function BudgetsPage() {
             if (items && items.length > 0) groupedBudgets.push({ group: g, items })
         }
         for (const [g, items] of byGroup) {
-            if (!GROUP_ORDER.includes(g) && items.length > 0) groupedBudgets.push({ group: g, items })
+            if (!(GROUP_ORDER as readonly string[]).includes(g) && items.length > 0) groupedBudgets.push({ group: g, items })
         }
     }
     const showGroupSections = !filterGroup && groupedBudgets.length > 1

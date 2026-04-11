@@ -269,6 +269,18 @@ describe('AnnualView', () => {
         // Subtotal rows
         expect(screen.getByText('── UK Total')).toBeInTheDocument()
         expect(screen.getByText('── España Total')).toBeInTheDocument()
+
+        // Verify UK subtotal Jan column shows 300.00
+        // Subtotal row: cells[0]=label, cells[1]=Jan, ... cells[12]=Dec, cells[13]=Total
+        const ukSubtotalRow = screen.getByText('── UK Total').closest('tr')!
+        const ukCells = ukSubtotalRow.querySelectorAll('td')
+        expect(ukCells[1].textContent).toBe('300.00') // Jan
+        expect(ukCells[13].textContent).toBe('300.00') // Annual total
+
+        // España subtotal: 200.00 in Jan only
+        const esSubtotalRow = screen.getByText('── España Total').closest('tr')!
+        const esCells = esSubtotalRow.querySelectorAll('td')
+        expect(esCells[1].textContent).toBe('200.00')
     })
 
     it('does not show group sections when only one group exists', async () => {

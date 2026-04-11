@@ -24,6 +24,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -210,7 +211,6 @@ function MonthlyPlanView() {
     type GroupEntry = { parent: PlanRow; children: PlanRow[] }
     type GroupSection = { group: string; entries: GroupEntry[] }
 
-    const GROUP_ORDER = ['UK', 'España', 'General']
     const groupedSections: GroupSection[] = []
 
     if (!filterGroup) {
@@ -268,7 +268,7 @@ function MonthlyPlanView() {
         }
         // Any groups not in GROUP_ORDER (defensive)
         for (const [g, entries] of byGroup) {
-            if (!GROUP_ORDER.includes(g) && entries.length > 0) {
+            if (!(GROUP_ORDER as readonly string[]).includes(g) && entries.length > 0) {
                 groupedSections.push({ group: g, entries })
             }
         }

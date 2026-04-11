@@ -34,6 +34,7 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { annualPlanCache } from '../lib/annualPlanCache'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
@@ -204,7 +205,6 @@ function AnnualView() {
     type AnnualEntry = [string, CatData]
     type AnnualGroupSection = { group: string; entries: { parent: AnnualEntry; children: AnnualEntry[] }[] }
 
-    const GROUP_ORDER = ['UK', 'España', 'General']
     const annualGroupSections: AnnualGroupSection[] = []
 
     if (!filterGroup) {
@@ -248,7 +248,7 @@ function AnnualView() {
             if (entries && entries.length > 0) annualGroupSections.push({ group: g, entries })
         }
         for (const [g, entries] of byGroup) {
-            if (!GROUP_ORDER.includes(g) && entries.length > 0) annualGroupSections.push({ group: g, entries })
+            if (!(GROUP_ORDER as readonly string[]).includes(g) && entries.length > 0) annualGroupSections.push({ group: g, entries })
         }
     }
     const showAnnualGroupSections = !filterGroup && annualGroupSections.length > 1
