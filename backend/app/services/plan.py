@@ -298,12 +298,20 @@ def get_monthly_plan(
         )
         overrides_by_budget = {o.budget_id: o.amount for o in overrides}
 
+    # Track which budget group applies to each category.
+    # Used to populate PlanRow.group so the frontend can display section headers.
+    # If a category has a budget, use that budget's group; otherwise None.
+    group_by_category: dict[uuid.UUID, str | None] = {}
+
     for budget in budgets:
         budget_amount = overrides_by_budget.get(budget.id, budget.default_amount)
         cat_id = budget.category_id
         planned_by_category[cat_id] = (
             planned_by_category.get(cat_id, Decimal("0")) + budget_amount
         )
+        # First budget's group wins (shouldn't have multiple per category+year)
+        if cat_id not in group_by_category:
+            group_by_category[cat_id] = budget.group
 
     # --- Step 3: Apply reallocations to planned amounts ---
     #
@@ -420,6 +428,7 @@ def get_monthly_plan(
                 remaining=remaining,
                 pending=pending,
                 schedules=schedules_by_category.get(cat_id, []),
+                group=group_by_category.get(cat_id),
             )
         )
 

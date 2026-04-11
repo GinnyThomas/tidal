@@ -267,7 +267,11 @@ function BudgetsPage() {
                                                         budgetId={budget.id}
                                                         overrides={budget.overrides}
                                                         defaultAmount={budget.default_amount}
-                                                        onChanged={() => setRefreshKey(k => k + 1)}
+                                                        onChanged={() => {
+                                                            annualPlanCache.clear()
+                                                            setRefreshKey(k => k + 1)
+                                                        }
+                                                        }
                                                     />
                                                 </div>
                                             )}

@@ -69,6 +69,10 @@ class PlanRow(BaseModel):
     remaining: Decimal
     pending: Decimal
     schedules: list[ScheduleRow] = Field(default_factory=list)
+    # Budget group for this category (e.g. "UK", "España").
+    # None if the category has no budget or the budget has no group.
+    # Used by the frontend to display group section headers.
+    group: Optional[str] = None
 
     @field_serializer("planned", "actual", "remaining", "pending")
     def serialize_amount(self, value: Decimal) -> str:

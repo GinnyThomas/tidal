@@ -83,6 +83,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                 <input
                                     type="number"
                                     step="0.01"
+                                    min="0"
                                     value={editValue}
                                     onChange={(e) => setEditValue(e.target.value)}
                                     onKeyDown={(e) => {
