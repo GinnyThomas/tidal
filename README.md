@@ -1,243 +1,193 @@
-# Tidal
+# Tidal 🌊
 
-A multi-currency personal budget and finance tracker built with Python, FastAPI, PostgreSQL and React.
+A multi-currency personal finance tracker that works like a living spreadsheet.
 
-
-## Live Demo
-
-- **App:** https://tidal-vert.vercel.app
-- **API:** https://tidal-production.up.railway.app
-- **API Docs:** https://tidal-production.up.railway.app/docs
-
-
-## Structure
-
-```
-tidal/
-├── backend/     Python + FastAPI REST API
-├── frontend/    React + TypeScript application
-└── docs/        PRD, TDD, and project plan
-```
-
-## Status
-
-- ✅ Phase 0: Walking skeleton (health endpoint, React frontend connected)
-- ✅ Phase 1: Authentication (register, login, JWT, ProtectedRoute, Alembic)
-- ✅ Phase 2: Accounts (CRUD, soft delete, frontend with add form)
-- ✅ Phase 3: Categories (hierarchical, system seeding, hide/unhide, frontend)
-- ✅ Phase 4: Transactions (expense/income/transfer/refund, pending/cleared/reconciled)
-- ✅ Phase 5: Schedules (recurrence engine, auto-generate pending transactions)
-- ✅ Phase 6: Monthly Plan View (primary dashboard, plan vs actual)
-- ✅ Phase 7: Reallocation (budget adjustments, permanent audit trail)
-- ✅ Phase 8: Deploy (Railway + Vercel + Supabase, demo account)
+**Live demo:** [tidal-vert.vercel.app](https://tidal-vert.vercel.app) — click **Try Demo 🌊** (no signup needed)
 
 ---
 
-## Getting Started on a New Machine
+## The Problem
 
-### Prerequisites
+Every finance app I tried had the same issue: pending transactions corrupt your budget view. You think you have £500 left for groceries, but half of it is already spent — it just hasn't cleared yet.
 
-You will need:
-- Python 3.13
-- Node.js 20+ (react-router-dom v7 requires Node 20 minimum; `frontend/.nvmrc` pins v24 for development — run `nvm use` inside `frontend/` to switch automatically)
-- PostgreSQL 16 or 17
+Tidal solves this by separating **planned** (what you expect to spend), **actual** (cleared/reconciled transactions), and **pending** (transactions that haven't cleared) — all visible in one screen.
 
-On Ubuntu/Debian, install PostgreSQL with:
+---
+
+## Screenshots
+
+### Dashboard — Monthly Plan View
+Budget groups (UK / España / General) with planned vs actual vs pending, group subtotals, and schedule breakdowns.
+
+![Dashboard](docs/screenshots/screenshot-dashboard.png)
+
+### Annual View
+12-month spreadsheet replacing a budget spreadsheet. Group sections with monthly subtotals.
+
+![Annual View](docs/screenshots/screenshot-annual.png)
+
+### Budgets
+Set monthly spending targets per category with annual defaults and month-specific overrides.
+
+![Budgets](docs/screenshots/screenshot-budgets.png)
+
+### Schedules
+Fixed recurring transactions — monthly, quarterly, annual — in GBP and EUR.
+
+![Schedules](docs/screenshots/screenshot-schedules.png)
+
+### Categories
+Two-column hierarchy with regional variants (Groceries UK / Groceries España).
+
+![Categories](docs/screenshots/screenshot-categories.png)
+
+### Transactions
+Multi-currency transactions with filters, sorting, and inline status toggle.
+
+![Transactions](docs/screenshots/screenshot-transactions.png)
+
+---
+
+## Features
+
+**Plan View**
+- Monthly plan view: planned vs actual vs pending per category
+- Annual view: 12-month spreadsheet with group sections and subtotals
+- Budget groups (UK / España) for multi-currency household management
+- Schedule breakdown: expand categories to see individual recurring items
+- Reallocation tracking with immutable audit trail
+
+**Budgets**
+- Annual budgets with monthly defaults per category
+- Month-specific overrides (e.g. £500 for groceries in December)
+- Budget groups for UK/España/General separation
+- Additive with schedules — both contribute to planned totals
+
+**Transactions**
+- Expense, income, transfer, refund types
+- Pending / cleared / reconciled status with inline toggle
+- Multi-currency (GBP, EUR) with per-transaction exchange rate
+- Filter by account, category, status
+- Sort by date, payee, category, account, amount, status
+- Category drill-down from plan view
+
+**Schedules**
+- Monthly, quarterly, annual recurrence
+- GBP and EUR schedules
+- Active/inactive toggle
+- Schedule amounts appear in plan view automatically
+
+**Categories**
+- Two-level hierarchy (parent + children)
+- 35 system categories seeded on registration
+- Custom categories (e.g. Groceries UK, Groceries España)
+- Hide/unhide without deletion
+- Drill-down to filtered transactions
+
+**Accounts**
+- Multiple accounts in multiple currencies
+- Edit account details
+- Drill-down to filtered transactions
+
+**Auth**
+- JWT authentication
+- Register, login, change password
+- One-click demo account
+
+---
+
+## Tech Stack
+
+**Backend**
+- Python 3.13 · FastAPI · PostgreSQL 16
+- SQLAlchemy 2.x · Alembic · Pydantic v2
+- pytest — 88 tests
+
+**Frontend**
+- React 19 · TypeScript · Vite
+- React Router v7 · Tailwind CSS v4
+- Vitest + React Testing Library — 183 tests
+
+**Infrastructure**
+- Backend: [Railway](https://railway.app)
+- Frontend: [Vercel](https://vercel.com)
+- Database: [Supabase](https://supabase.com) (PostgreSQL)
+
+---
+
+## Running Locally
+
 ```bash
-sudo apt install postgresql postgresql-client
-```
-
-### 1. Clone the repo
-
-```bash
-git clone <repo-url>
+# Clone
+git clone https://github.com/GinnyThomas/tidal.git
 cd tidal
-```
 
-### 2. Set up the backend
-
-```bash
+# Backend
 cd backend
-```
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # add your DATABASE_URL
+alembic upgrade head
+uvicorn app.main:app --reload
+# http://localhost:8000
 
-**Create a virtual environment.**
-If `python3 -m venv .venv` fails (missing `ensurepip`), use `virtualenv` instead:
-```bash
-# Install pip first if needed (no pip on system)
-wget https://bootstrap.pypa.io/get-pip.py -O /tmp/get-pip.py
-python3 /tmp/get-pip.py --user --break-system-packages
-
-# Then install virtualenv and create the venv
-~/.local/bin/pip install virtualenv --break-system-packages
-~/.local/bin/virtualenv .venv
-```
-
-Or if `python3 -m venv .venv` works normally:
-```bash
-python3 -m venv .venv
-```
-
-**Install dependencies:**
-```bash
-.venv/bin/pip install -r requirements.txt
-```
-
-**Create your `.env` file:**
-```bash
-cp .env.example .env
-# Edit .env — at minimum set DATABASE_URL and generate a SECRET_KEY:
-# python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-**Run database migrations:**
-```bash
-.venv/bin/alembic upgrade head
-```
-
-### 3. Create the PostgreSQL databases
-
-PostgreSQL uses peer authentication by default — you need to run setup commands as the `postgres` system user:
-
-```bash
-sudo -u postgres psql -c "CREATE USER tidal_user WITH PASSWORD 'tidal_password';"
-sudo -u postgres psql -c "CREATE DATABASE tidal OWNER tidal_user;"
-sudo -u postgres psql -c "CREATE DATABASE tidal_test OWNER tidal_user;"
-```
-
-Then update your `backend/.env` to use TCP (not a socket) so password auth works:
-```
-DATABASE_URL=postgresql://tidal_user:tidal_password@127.0.0.1:5432/tidal
-```
-
-Note: use `127.0.0.1` not `localhost` — this forces TCP and allows password authentication.
-
-### 4. Set up the frontend
-
-```bash
+# Frontend (new terminal)
 cd frontend
 npm install
+cp .env.example .env  # set VITE_API_URL=http://localhost:8000
+npm run dev
+# http://localhost:5173
 ```
 
-**Create your `.env` file:**
-```bash
-cp .env.example .env
-# The default value (http://localhost:8000) is correct for local development.
-# No edits needed unless your backend runs on a different port.
-```
+---
 
-### 5. Run the tests
+## Running Tests
 
 ```bash
 # Backend
-cd backend
-.venv/bin/python -m pytest tests/ -v
+cd backend && python -m pytest tests/ -v
 
 # Frontend
-cd frontend
-npm run test:run
+cd frontend && npm run test:run
 ```
-
-Both suites should pass before you start the servers.
-
-### 6. Start the development servers
-
-In two separate terminals:
-
-```bash
-# Terminal 1 — backend
-cd backend
-.venv/bin/uvicorn app.main:app --reload
-
-# Terminal 2 — frontend
-cd frontend
-npm run dev
-```
-
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API docs (Swagger): http://localhost:8000/docs
-- Health check: http://localhost:8000/api/v1/health
 
 ---
 
-## Deploying to Production
+## Demo Account
 
-Tidal uses three services for production:
+The live demo is pre-loaded with realistic data:
+- **3 accounts**: Nationwide Current (GBP), Nationwide Savings (GBP), Santander España (EUR)
+- **14 schedules**: monthly GBP + EUR, annual (Claude.ai Pro, Christmas), quarterly (Massage)
+- **11 budgets**: UK group (GBP) and España group (EUR) with monthly overrides
+- **Rolling transactions**: always covers the last 3 months + current month
 
-| Service | Purpose |
-|---------|---------|
-| [Supabase](https://supabase.com) | PostgreSQL database (hosted) |
-| [Railway](https://railway.app) | Backend (FastAPI + Uvicorn) |
-| [Vercel](https://vercel.com) | Frontend (React + Vite) |
+To refresh demo data:
+```bash
+cd backend
+./scripts/refresh_demo.sh
+```
 
-### Supabase (database)
+---
 
-1. Create a free account at [supabase.com](https://supabase.com).
-2. Click **New project** and fill in a project name, database password, and region.
-3. Once the project is ready, go to **Project Settings → Database**.
-4. Find the **Connection string** section. Copy the **URI** under **Connection pooling** (uses PgBouncer — better for serverless environments):
-   ```
-   postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
-   ```
-5. You will paste this into Railway as `DATABASE_URL` (see below).
+## Architecture
 
-> If you need direct connections (e.g. for running Alembic migrations), use the direct URI from the same page (port 5432, no `?pgbouncer=true`). Run migrations locally or via a Railway one-off job, then switch back to the pooling URL for the live app.
+![Architecture](docs/architecture.png)
 
-### Railway (backend)
+---
 
-1. Create a free account at [railway.app](https://railway.app).
-2. Click **New project → Deploy from GitHub repo** and select this repository.
-3. Railway detects the `Procfile` in `backend/` and sets the start command automatically:
-   ```
-   web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-   ```
-4. In the Railway project, go to your service → **Variables** and add the following environment variables:
+## Project Background
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `DATABASE_URL` | Your Supabase connection string | See Supabase section above |
-| `SECRET_KEY` | A long random string | Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `ALLOWED_ORIGINS` | `https://your-app.vercel.app` | Your Vercel frontend URL — set after deploying Vercel |
-| `ALGORITHM` | `HS256` | JWT signing algorithm — no need to change |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | How long JWTs stay valid |
+Built as a portfolio project to demonstrate full-stack engineering with Python and React, using TDD throughout and AI-assisted development (Claude as pair programmer, Copilot on every PR).
 
-5. Railway will redeploy automatically when you push to the connected branch.
-6. Your backend will be available at a URL like `https://your-app.railway.app`. You will need this URL when setting up the Vercel frontend.
+**271 tests · 9 phases · deployed to production**
 
-> **Run migrations in production:** After deploying, run migrations against the Supabase database using the direct connection URL locally:
-> ```bash
-> cd backend
-> DATABASE_URL="postgresql://..." .venv/bin/alembic upgrade head
-> ```
+The app solves a real problem I had — pending transactions corrupting budget views — and is now my actual personal finance tracker as I relocate from the UK to Barcelona in June 2026.
 
-### Vercel (frontend)
+---
 
-1. Create a free account at [vercel.com](https://vercel.com).
-2. Click **Add New → Project** and import this repository.
-3. Set the **Root Directory** to `frontend` (Vercel needs to know where to find `package.json`).
-4. Vercel detects Vite automatically and sets the correct build command (`npm run build`) and output directory (`dist`).
-5. Under **Environment Variables**, add:
+## Author
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `VITE_API_URL` | `https://your-app.railway.app` | Your Railway backend URL — no trailing slash |
-
-6. Click **Deploy**. Vercel will build and host the frontend.
-7. The `vercel.json` at the root of `frontend/` configures a catch-all rewrite so React Router handles all paths:
-   ```json
-   { "rewrites": [{ "source": "/(.*)", "destination": "/" }] }
-   ```
-   Without this, navigating directly to `/dashboard` or `/categories` would return a 404 from Vercel.
-
-> **Update Railway after Vercel deploys:** Once you have your Vercel URL, go back to Railway and update `ALLOWED_ORIGINS` to match it. This is required for CORS — the browser will block API requests from the frontend until this is set correctly.
-
-### Linking it all together
-
-The order matters:
-
-1. **Supabase first** — get the `DATABASE_URL`.
-2. **Railway second** — deploy backend, set `DATABASE_URL` + `SECRET_KEY`. Note your Railway URL.
-3. **Vercel third** — deploy frontend, set `VITE_API_URL` to your Railway URL. Note your Vercel URL.
-4. **Back to Railway** — update `ALLOWED_ORIGINS` to your Vercel URL.
-
-After all four steps, the full stack is live and connected.
+**Ginny Thomas** — Full Stack Engineer  
+[github.com/GinnyThomas](https://github.com/GinnyThomas)  
+Open to full-stack roles in Barcelona or remote from June 2026.
