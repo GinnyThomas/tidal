@@ -217,9 +217,9 @@ describe('MonthlyPlanView', () => {
 
         await screen.findByText('Food & Drink')
 
-        // The actual amount in the data row should be a clickable link
+        // The actual amount in the data row should be a clickable link filtered to cleared
         const link = screen.getByRole('link', { name: '150.00' })
-        expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-1'))
+        expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-1&status=cleared'))
     })
 
     it('renders zero actual amounts as plain text with no link', async () => {
@@ -238,6 +238,35 @@ describe('MonthlyPlanView', () => {
         expect(actualCell).toHaveTextContent('0.00')
         // No <a> element inside the cell — zero amount does not drill down
         expect(actualCell.querySelector('a')).toBeNull()
+    })
+
+    it('renders non-zero pending amounts as links filtered to pending status', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_id: 'cat-1', pending: '75.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        const link = screen.getByRole('link', { name: '75.00' })
+        expect(link).toHaveAttribute('href', expect.stringContaining('/transactions?category_id=cat-1&status=pending'))
+    })
+
+    it('renders zero pending amounts as plain text with no link', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_id: 'cat-1', pending: '0.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Food & Drink')
+
+        // pending column is cells[4] (0=name, 1=planned, 2=actual, 3=remaining, 4=pending)
+        const rows = screen.getAllByRole('row')
+        const pendingCell = rows[1].querySelectorAll('td')[4]
+        expect(pendingCell).toHaveTextContent('0.00')
+        expect(pendingCell.querySelector('a')).toBeNull()
     })
 
     // =========================================================================
