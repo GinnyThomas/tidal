@@ -48,6 +48,7 @@ const makeTransaction = (overrides = {}) => ({
     category_name: 'Groceries',
     category_icon: null,
     parent_transaction_id: null,
+    promotion_id: null,
     schedule_id: null,
     date: '2026-04-01',
     payee: 'Tesco',
@@ -293,6 +294,20 @@ describe('TransactionsPage', () => {
         expect(screen.getByLabelText(/filter by category/i)).toHaveValue('cat-001')
         // The "Filtered by:" badge should be visible with the resolved category name
         expect(screen.getByText('Filtered by:')).toBeInTheDocument()
+    })
+
+    it('pre-selects the status filter when ?status=pending is in the URL', async () => {
+        mockFetch()
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?status=pending']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText(/no transactions/i)
+
+        expect(screen.getByLabelText(/filter by status/i)).toHaveValue('pending')
     })
 
     // =========================================================================

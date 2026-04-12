@@ -44,6 +44,7 @@ type Schedule = {
     next_occurrence: string | null
     auto_generate: boolean
     active: boolean
+    group: string | null
     payee: string | null
     note: string | null
 }
@@ -223,6 +224,7 @@ function SchedulesPage() {
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Next</th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Account</th>
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
+                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Group</th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Status</th>
                                     <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                 </tr>
@@ -249,6 +251,9 @@ function SchedulesPage() {
                                         <td className="px-4 py-3 text-slate-300">
                                             {s.category_icon && <span className="mr-1">{s.category_icon}</span>}
                                             {s.category_name || '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-center text-slate-400">
+                                            {s.group ?? '—'}
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             {/* Button enables keyboard access and the click-to-toggle behaviour */}

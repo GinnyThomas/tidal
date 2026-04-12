@@ -28,6 +28,7 @@ const makeAccount = (overrides = {}) => ({
     account_type: 'checking',
     currency: 'GBP',
     current_balance: '1500.00',
+    calculated_balance: '1500.00',
     institution: 'Nationwide',
     note: null,
     is_active: true,

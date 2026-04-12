@@ -293,3 +293,84 @@ def test_deleted_account_does_not_appear_in_list(test_client) -> None:
     body = response.json()
     assert len(body) == 1
     assert body[0]["name"] == "Keep Me"
+
+
+# =============================================================================
+# Calculated balance
+# =============================================================================
+
+
+def test_account_balance_reflects_transactions(test_client) -> None:
+    """
+    The calculated_balance should reflect the opening balance plus income
+    minus expenses from cleared/reconciled transactions.
+    """
+    token = _register_and_login(test_client)
+
+    # Create account with £1000 opening balance
+    acct_resp = test_client.post(
+        "/api/v1/accounts",
+        json={"name": "Balance Test", "account_type": "checking", "current_balance": "1000.00"},
+        headers=_auth_headers(token),
+    )
+    account_id = acct_resp.json()["id"]
+    assert acct_resp.json()["calculated_balance"] == "1000.00"  # no transactions yet
+
+    # Get a category for transactions
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    category_id = cats[0]["id"]
+
+    # Add income +500
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-15", "amount": "500.00",
+        "transaction_type": "income", "status": "cleared",
+    }, headers=_auth_headers(token))
+
+    # Add expense -200
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-16", "amount": "200.00",
+        "transaction_type": "expense", "status": "cleared",
+    }, headers=_auth_headers(token))
+
+    # Pending expense — should NOT affect calculated_balance
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-17", "amount": "999.00",
+        "transaction_type": "expense", "status": "pending",
+    }, headers=_auth_headers(token))
+
+    resp = test_client.get(f"/api/v1/accounts/{account_id}", headers=_auth_headers(token))
+    assert resp.json()["calculated_balance"] == "1300.00"  # 1000 + 500 - 200
+    assert resp.json()["current_balance"] == "1000.00"     # opening balance unchanged
+
+
+def test_transfer_updates_both_account_balances(test_client) -> None:
+    """
+    A transfer should reduce the source account's calculated_balance and
+    increase the destination account's calculated_balance.
+    """
+    token = _register_and_login(test_client)
+
+    from_resp = test_client.post("/api/v1/accounts", json={
+        "name": "From Acct", "account_type": "checking", "current_balance": "2000.00",
+    }, headers=_auth_headers(token))
+    from_id = from_resp.json()["id"]
+
+    to_resp = test_client.post("/api/v1/accounts", json={
+        "name": "To Acct", "account_type": "savings", "current_balance": "500.00",
+    }, headers=_auth_headers(token))
+    to_id = to_resp.json()["id"]
+
+    # Transfer £300 from → to
+    test_client.post("/api/v1/transactions/transfer", json={
+        "from_account_id": from_id, "to_account_id": to_id,
+        "date": "2026-01-15", "amount": "300.00",
+    }, headers=_auth_headers(token))
+
+    from_acct = test_client.get(f"/api/v1/accounts/{from_id}", headers=_auth_headers(token)).json()
+    to_acct = test_client.get(f"/api/v1/accounts/{to_id}", headers=_auth_headers(token)).json()
+
+    assert from_acct["calculated_balance"] == "1700.00"  # 2000 - 300
+    assert to_acct["calculated_balance"] == "800.00"     # 500 + 300

@@ -154,6 +154,7 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "end_date": sched.end_date,
         "auto_generate": sched.auto_generate,
         "active": sched.active,
+        "group": sched.group,
         "note": sched.note,
         "created_at": sched.created_at,
         "category_name": category.name,
@@ -201,6 +202,7 @@ def create_schedule(
         end_date=schedule_in.end_date,
         auto_generate=schedule_in.auto_generate,
         active=schedule_in.active,
+        group=schedule_in.group,
         note=schedule_in.note,
     )
     db.add(schedule)

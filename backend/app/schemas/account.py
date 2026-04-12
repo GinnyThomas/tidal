@@ -81,13 +81,14 @@ class AccountResponse(BaseModel):
     account_type: str
     currency: str
     current_balance: Decimal
+    calculated_balance: Decimal = Decimal("0")
     is_manual: bool
     institution: Optional[str]
     is_active: bool
     note: Optional[str]
     created_at: datetime
 
-    @field_serializer("current_balance")
+    @field_serializer("current_balance", "calculated_balance")
     def serialize_balance(self, value: Decimal) -> str:
         """Return balance as a string with exactly 2 decimal places."""
         scaled = value.quantize(Decimal("0.01"))

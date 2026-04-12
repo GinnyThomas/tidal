@@ -28,8 +28,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from decimal import Decimal
+
 from app.database import get_db
 from app.models.account import Account
+from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.account import AccountCreate, AccountResponse, AccountUpdate
 from app.services.auth import get_current_user
@@ -77,6 +80,71 @@ def _get_account_or_404(
     return account
 
 
+def _calculate_balance(account_id: uuid.UUID, user_id: uuid.UUID, db: Session) -> Decimal:
+    """
+    Compute the current balance for an account based on its transactions.
+
+    Balance = opening_balance (current_balance)
+              + sum(income/cleared+reconciled for this account)
+              - sum(expense/cleared+reconciled for this account)
+
+    Transfers: the "from" leg is an expense on the source account (reduces),
+    and the "to" leg is treated as income on the destination (increases).
+    Transfer type rows are handled by checking if the transaction's account
+    matches — debit reduces, credit increases. Since both legs have
+    transaction_type='transfer', we use parent_transaction_id to distinguish:
+    the parent (debit/from) reduces balance, the child (credit/to) increases.
+    """
+    transactions = (
+        db.query(Transaction)
+        .filter(
+            Transaction.account_id == account_id,
+            Transaction.user_id == user_id,
+            Transaction.deleted_at.is_(None),
+            Transaction.status.in_(["cleared", "reconciled"]),
+        )
+        .all()
+    )
+
+    total = Decimal("0")
+    for tx in transactions:
+        if tx.transaction_type == "income":
+            total += tx.amount
+        elif tx.transaction_type == "expense":
+            total -= tx.amount
+        elif tx.transaction_type == "transfer":
+            # Parent leg (debit/from) has parent_transaction_id = None
+            # Child leg (credit/to) has parent_transaction_id set
+            if tx.parent_transaction_id is None:
+                total -= tx.amount  # money left this account
+            else:
+                total += tx.amount  # money arrived at this account
+        elif tx.transaction_type == "refund":
+            total += tx.amount  # refund returns money
+
+    return total
+
+
+def _to_response(account: Account, db: Session) -> dict:
+    """Build account response dict with computed calculated_balance."""
+    opening = account.current_balance
+    tx_balance = _calculate_balance(account.id, account.user_id, db)
+    return {
+        "id": account.id,
+        "user_id": account.user_id,
+        "name": account.name,
+        "account_type": account.account_type,
+        "currency": account.currency,
+        "current_balance": opening,
+        "calculated_balance": opening + tx_balance,
+        "is_manual": account.is_manual,
+        "institution": account.institution,
+        "is_active": account.is_active,
+        "note": account.note,
+        "created_at": account.created_at,
+    }
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -91,7 +159,7 @@ def create_account(
     account_in: AccountCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Account:
+) -> dict:
     """
     Creates a new account owned by the authenticated user.
 
@@ -114,7 +182,7 @@ def create_account(
     db.add(account)
     db.commit()
     db.refresh(account)
-    return account
+    return _to_response(account, db)
 
 
 @router.get(
@@ -124,7 +192,7 @@ def create_account(
 def list_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[Account]:
+) -> list[dict]:
     """
     Returns all active (non-deleted) accounts belonging to the current user.
 
@@ -132,7 +200,7 @@ def list_accounts(
     are excluded), and deleted_at IS NULL (soft delete).
     Soft-deleted and archived accounts are permanently excluded from this view.
     """
-    return (
+    accounts = (
         db.query(Account)
         .filter(
             Account.user_id == current_user.id,
@@ -141,6 +209,7 @@ def list_accounts(
         )
         .all()
     )
+    return [_to_response(a, db) for a in accounts]
 
 
 @router.get(
@@ -151,15 +220,12 @@ def get_account(
     account_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Account:
+) -> dict:
     """
-    Returns a single account by ID.
-
-    Returns 404 if the account doesn't exist, has been soft-deleted,
-    or belongs to another user. The caller cannot distinguish between
-    these cases — all look like "not found" to prevent information leakage.
+    Returns a single account by ID with computed calculated_balance.
     """
-    return _get_account_or_404(account_id, current_user.id, db)
+    account = _get_account_or_404(account_id, current_user.id, db)
+    return _to_response(account, db)
 
 
 @router.put(
@@ -171,7 +237,7 @@ def update_account(
     account_in: AccountUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Account:
+) -> dict:
     """
     Updates an account with the provided fields.
 
@@ -202,7 +268,7 @@ def update_account(
 
     db.commit()
     db.refresh(account)
-    return account
+    return _to_response(account, db)
 
 
 @router.delete(

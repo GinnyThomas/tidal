@@ -373,7 +373,7 @@ function MonthlyPlanView() {
                     </td>
                     <td className="px-4 py-3 text-right text-teal-400">
                         {parseFloat(parent.actual) !== 0 ? (
-                            <Link to={`/transactions?category_id=${parent.category_id}`} className="hover:underline">
+                            <Link to={`/transactions?category_id=${parent.category_id}&status=cleared`} className="hover:underline">
                                 {parent.actual}
                             </Link>
                         ) : parent.actual}
@@ -384,7 +384,13 @@ function MonthlyPlanView() {
                     >
                         {parent.remaining}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-400">{parent.pending}</td>
+                    <td className="px-4 py-3 text-right text-slate-400">
+                        {parseFloat(parent.pending) !== 0 ? (
+                            <Link to={`/transactions?category_id=${parent.category_id}&status=pending`} className="hover:underline cursor-pointer">
+                                {parent.pending}
+                            </Link>
+                        ) : parent.pending}
+                    </td>
                 </tr>
 
                 {/* Schedule breakdown rows — shown when parent is expanded */}
@@ -430,7 +436,7 @@ function MonthlyPlanView() {
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
                                     {parseFloat(child.actual) !== 0 ? (
-                                        <Link to={`/transactions?category_id=${child.category_id}`} className="hover:underline">
+                                        <Link to={`/transactions?category_id=${child.category_id}&status=cleared`} className="hover:underline">
                                             {child.actual}
                                         </Link>
                                     ) : child.actual}
@@ -441,7 +447,13 @@ function MonthlyPlanView() {
                                 >
                                     {child.remaining}
                                 </td>
-                                <td className="px-4 py-2.5 text-right text-slate-400 text-sm">{child.pending}</td>
+                                <td className="px-4 py-2.5 text-right text-slate-400 text-sm">
+                                    {parseFloat(child.pending) !== 0 ? (
+                                        <Link to={`/transactions?category_id=${child.category_id}&status=pending`} className="hover:underline cursor-pointer">
+                                            {child.pending}
+                                        </Link>
+                                    ) : child.pending}
+                                </td>
                             </tr>
                             {renderScheduleRows(child, 'pl-10 pr-4')}
                         </React.Fragment>

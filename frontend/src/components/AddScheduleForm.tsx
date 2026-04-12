@@ -30,6 +30,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 type Account = { id: string; name: string }
 type Category = { id: string; name: string }
@@ -47,6 +48,7 @@ type EditingSchedule = {
     start_date: string
     end_date: string | null
     auto_generate: boolean
+    group: string | null
     payee: string | null
     note: string | null
 }
@@ -83,6 +85,7 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
     )
     const [endDate, setEndDate] = useState(editingSchedule?.end_date ?? '')
     const [autoGenerate, setAutoGenerate] = useState(editingSchedule?.auto_generate ?? true)
+    const [group, setGroup] = useState(editingSchedule?.group ?? '')
     const [payee, setPayee] = useState(editingSchedule?.payee ?? '')
     const [note, setNote] = useState(editingSchedule?.note ?? '')
     const [error, setError] = useState<string | null>(null)
@@ -129,6 +132,7 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
             start_date: startDate,
             end_date: endDate || null,
             auto_generate: autoGenerate,
+            group: group || null,
             payee: payee || null,
             note: note || null,
         }
@@ -324,6 +328,21 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                         onChange={(e) => setPayee(e.target.value)}
                         className="input-base"
                     />
+                </div>
+
+                <div>
+                    <label htmlFor="schedGroup" className="label-base">Group</label>
+                    <select
+                        id="schedGroup"
+                        value={group}
+                        onChange={(e) => setGroup(e.target.value)}
+                        className="input-base"
+                    >
+                        <option value="">None</option>
+                        {(GROUP_ORDER as readonly string[]).filter(g => g !== 'General').map(g => (
+                            <option key={g} value={g}>{g}</option>
+                        ))}
+                    </select>
                 </div>
 
                 <div>

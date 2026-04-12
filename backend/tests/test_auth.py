@@ -315,3 +315,42 @@ def test_duplicate_email_check_is_case_insensitive(test_client) -> None:
     )
 
     assert response.status_code == 400
+
+
+# =============================================================================
+# Token refresh
+# =============================================================================
+
+
+def test_refresh_token_returns_new_token(test_client) -> None:
+    """
+    POST /api/v1/auth/refresh with a valid Bearer token should return a new
+    access_token with a fresh expiry.
+    """
+    test_client.post(
+        "/api/v1/auth/register",
+        json={"email": "refresh@example.com", "password": "securepassword"},
+    )
+    login_response = test_client.post(
+        "/api/v1/auth/login",
+        json={"email": "refresh@example.com", "password": "securepassword"},
+    )
+    old_token = login_response.json()["access_token"]
+
+    refresh_response = test_client.post(
+        "/api/v1/auth/refresh",
+        headers={"Authorization": f"Bearer {old_token}"},
+    )
+
+    assert refresh_response.status_code == 200
+    body = refresh_response.json()
+    assert "access_token" in body
+    assert body["token_type"] == "bearer"
+
+    # Verify the new token works by using it to access a protected endpoint
+    new_token = body["access_token"]
+    accounts_response = test_client.get(
+        "/api/v1/accounts",
+        headers={"Authorization": f"Bearer {new_token}"},
+    )
+    assert accounts_response.status_code == 200

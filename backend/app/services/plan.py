@@ -243,6 +243,9 @@ def get_monthly_plan(
     # row's final planned total when reallocations have been applied.
     planned_by_category: dict[uuid.UUID, Decimal] = {}
     schedules_by_category: dict[uuid.UUID, list[ScheduleRow]] = {}
+    # Track schedule groups per category as a fallback for PlanRow.group
+    # when no budget group exists for the category.
+    schedule_group_by_category: dict[uuid.UUID, str | None] = {}
     for schedule in schedules:
         count = _count_occurrences_in_month(schedule, year, month)
         if count > 0:
@@ -260,6 +263,9 @@ def get_monthly_plan(
                     planned=schedule_planned,
                 )
             )
+            # First schedule's group wins per category
+            if cat_id not in schedule_group_by_category:
+                schedule_group_by_category[cat_id] = schedule.group
 
     # --- Step 2b: Budget amounts by category ---
     #
@@ -428,7 +434,8 @@ def get_monthly_plan(
                 remaining=remaining,
                 pending=pending,
                 schedules=schedules_by_category.get(cat_id, []),
-                group=group_by_category.get(cat_id),
+                # Budget group takes precedence; fall back to schedule group
+                group=group_by_category.get(cat_id) or schedule_group_by_category.get(cat_id),
             )
         )
 

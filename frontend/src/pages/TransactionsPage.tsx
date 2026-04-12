@@ -112,10 +112,14 @@ function TransactionsPage() {
     const [filterCategoryId, setFilterCategoryId] = useState(
         () => searchParams.get('category_id') ?? ''
     )
-    const [filterStatus, setFilterStatus] = useState('')
+    // Initialise from URL — '' means no filter
+    const [filterStatus, setFilterStatus] = useState(
+        () => searchParams.get('status') ?? ''
+    )
     const [showAddForm, setShowAddForm] = useState(false)
     const [showTransferForm, setShowTransferForm] = useState(false)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+    const [editingTransfer, setEditingTransfer] = useState<Transaction | null>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
     // Client-side sorting — applied to the fetched data
@@ -176,19 +180,26 @@ function TransactionsPage() {
         setShowAddForm(false)
         setShowTransferForm(false)
         setEditingTransaction(null)
+        setEditingTransfer(null)
         setRefreshKey(k => k + 1)
-        // Transaction changes may affect budget actuals — invalidate annual plan cache
         annualPlanCache.clear()
     }
 
     const handleEditTransaction = (tx: Transaction) => {
-        setEditingTransaction(tx)
+        if (tx.transaction_type === 'transfer') {
+            setEditingTransfer(tx)
+            setEditingTransaction(null)
+        } else {
+            setEditingTransaction(tx)
+            setEditingTransfer(null)
+        }
         setShowAddForm(false)
         setShowTransferForm(false)
     }
 
     const handleTransactionUpdated = () => {
         setEditingTransaction(null)
+        setEditingTransfer(null)
         setRefreshKey(k => k + 1)
         annualPlanCache.clear()
     }
@@ -279,6 +290,7 @@ function TransactionsPage() {
                                 setShowTransferForm((prev) => !prev)
                                 setShowAddForm(false)
                                 setEditingTransaction(null)
+                                setEditingTransfer(null)
                             }}
                             className="btn-secondary cursor-pointer"
                         >
@@ -289,6 +301,7 @@ function TransactionsPage() {
                                 setShowAddForm((prev) => !prev)
                                 setShowTransferForm(false)
                                 setEditingTransaction(null)
+                                setEditingTransfer(null)
                             }}
                             className="btn-primary cursor-pointer"
                         >
@@ -318,6 +331,18 @@ function TransactionsPage() {
                             onTransactionAdded={() => {}}
                             editingTransaction={editingTransaction}
                             onTransactionUpdated={handleTransactionUpdated}
+                        />
+                    </div>
+                )}
+
+                {/* Edit transfer form — opens when a transfer row is clicked */}
+                {editingTransfer && (
+                    <div className="mb-6">
+                        <AddTransferForm
+                            key={editingTransfer.id}
+                            onTransactionAdded={() => {}}
+                            editingTransfer={editingTransfer}
+                            onTransferUpdated={handleTransactionUpdated}
                         />
                     </div>
                 )}
@@ -357,7 +382,14 @@ function TransactionsPage() {
                         <select
                             id="filterStatus"
                             value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
+                            onChange={(e) => {
+                                setFilterStatus(e.target.value)
+                                // Sync URL
+                                const next = new URLSearchParams(searchParams)
+                                if (e.target.value) next.set('status', e.target.value)
+                                else next.delete('status')
+                                setSearchParams(next)
+                            }}
                             className="input-base"
                         >
                             <option value="">All statuses</option>
@@ -379,8 +411,10 @@ function TransactionsPage() {
                         <button
                             onClick={() => {
                                 setFilterCategoryId('')
-                                // Sync the URL so the back button / share URL reflects cleared state
-                                setSearchParams({})
+                                // Remove category_id from URL, keep status if set
+                                const next = new URLSearchParams(searchParams)
+                                next.delete('category_id')
+                                setSearchParams(next)
                             }}
                             className="text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
                             aria-label="Clear category filter"
@@ -429,9 +463,11 @@ function TransactionsPage() {
                                 {sortedTransactions.map((tx) => (
                                     <tr
                                         key={tx.id}
-                                        className={`border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors ${tx.transaction_type !== 'transfer' ? 'cursor-pointer' : ''}`}
-                                        onClick={() => { if (tx.transaction_type !== 'transfer') handleEditTransaction(tx) }}
-                                        aria-label={tx.transaction_type !== 'transfer' ? 'Click to edit' : undefined}
+                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
+                                        onClick={() => handleEditTransaction(tx)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditTransaction(tx) } }}
+                                        tabIndex={0}
+                                        aria-label="Click to edit"
                                     >
                                         <td className="px-4 py-3 text-slate-300">{tx.date}</td>
                                         <td className="px-4 py-3 text-slate-100">
@@ -462,17 +498,10 @@ function TransactionsPage() {
                                             </button>
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                            {/* Transfers are two linked rows — editing one side
-                                                without the other would break the pair. */}
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleEditTransaction(tx) }}
-                                                disabled={tx.transaction_type === 'transfer'}
                                                 aria-label={`Edit transaction ${tx.payee ?? tx.id}`}
-                                                className={`text-xs px-2.5 py-1 rounded border transition-colors ${
-                                                    tx.transaction_type === 'transfer'
-                                                        ? 'border-ocean-700 text-slate-600 cursor-not-allowed'
-                                                        : 'border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 cursor-pointer'
-                                                }`}
+                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
                                             >
                                                 Edit
                                             </button>

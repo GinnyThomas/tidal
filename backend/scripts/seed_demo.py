@@ -317,10 +317,20 @@ def seed_demo() -> None:
         ]
 
         for sched in new_schedules:
+            # Set group based on currency — UK for GBP, España for EUR
+            if sched.group is None:
+                sched.group = "UK" if sched.currency == "GBP" else "España"
             if sched.name not in existing_schedule_names:
                 db.add(sched)
-                print(f"✓ Created schedule: {sched.name} ({sched.currency})")
+                print(f"✓ Created schedule: {sched.name} ({sched.currency}, group={sched.group})")
             else:
+                # Update group on existing schedules if not set
+                existing_sched = next(
+                    (s for s in existing_schedules if s.name == sched.name), None
+                )
+                if existing_sched and not existing_sched.group:
+                    existing_sched.group = sched.group
+                    db.add(existing_sched)
                 print(f"  Schedule already exists: {sched.name}")
 
         db.commit()
