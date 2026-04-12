@@ -296,6 +296,20 @@ describe('TransactionsPage', () => {
         expect(screen.getByText('Filtered by:')).toBeInTheDocument()
     })
 
+    it('pre-selects the status filter when ?status=pending is in the URL', async () => {
+        mockFetch()
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?status=pending']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText(/no transactions/i)
+
+        expect(screen.getByLabelText(/filter by status/i)).toHaveValue('pending')
+    })
+
     // =========================================================================
     // Add Transaction / Add Transfer buttons
     // =========================================================================

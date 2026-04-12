@@ -325,6 +325,11 @@ def create_transaction(
     # Capture the category so we can include its name/icon in the response.
     _get_account_or_404(transaction_in.account_id, current_user.id, db)
     # Category is optional for transfers but required for other types
+    if transaction_in.category_id is None and transaction_in.transaction_type != "transfer":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="category_id is required for expense, income, and refund transactions.",
+        )
     category = None
     if transaction_in.category_id is not None:
         category = _get_category_or_404(transaction_in.category_id, current_user.id, db)
@@ -378,6 +383,7 @@ def list_transactions(
     account_id: Optional[uuid.UUID] = Query(default=None),
     category_id: Optional[uuid.UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
+    parent_transaction_id: Optional[uuid.UUID] = Query(default=None),
 ) -> list[dict]:
     """
     Returns all non-deleted transactions for the current user.
@@ -404,10 +410,11 @@ def list_transactions(
         query = query.filter(Transaction.category_id == category_id)
 
     if status is not None:
-        # Split on commas to support multi-value filter: "cleared,reconciled"
-        # strip() handles any accidental whitespace around the comma.
         status_list = [s.strip() for s in status.split(",") if s.strip()]
         query = query.filter(Transaction.status.in_(status_list))
+
+    if parent_transaction_id is not None:
+        query = query.filter(Transaction.parent_transaction_id == parent_transaction_id)
 
     transactions = query.all()
 
@@ -483,6 +490,18 @@ def update_transaction(
 
     if "category_id" in update_data and update_data["category_id"] is not None:
         _get_category_or_404(update_data["category_id"], current_user.id, db)
+
+    # Reject nulling category_id on non-transfer transactions
+    if "category_id" in update_data and update_data["category_id"] is None:
+        effective_type = update_data.get("transaction_type", transaction.transaction_type)
+        # Handle enum values
+        if hasattr(effective_type, 'value'):
+            effective_type = effective_type.value
+        if effective_type != "transfer":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="category_id is required for expense, income, and refund transactions.",
+            )
 
     if "parent_transaction_id" in update_data and update_data["parent_transaction_id"] is not None:
         _get_transaction_or_404(update_data["parent_transaction_id"], current_user.id, db)

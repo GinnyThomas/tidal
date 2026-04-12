@@ -54,33 +54,34 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                 if (res.data.length > 0) setFromAccountId(res.data[0].id)
                 if (res.data.length > 1) setToAccountId(res.data[1].id)
             }
-            // In edit mode, find the linked "to" account from the other leg
+            // In edit mode, find the linked leg via targeted query
             if (isEditMode && editingTransfer) {
-                const token2 = localStorage.getItem('access_token')
-                // The linked leg: if this is the parent (debit), child has parent_transaction_id = this.id
-                // If this is the child (credit), it has parent_transaction_id pointing to the parent
-                axios.get(`${getApiBaseUrl()}/api/v1/transactions`, {
-                    headers: { Authorization: `Bearer ${token2}` },
-                }).then(txRes => {
-                    const allTx = txRes.data
-                    let linked = null
-                    if (editingTransfer.parent_transaction_id === null) {
-                        // This is the parent (debit/from) — find child where parent_transaction_id = this.id
-                        linked = allTx.find((t: { parent_transaction_id: string | null }) =>
-                            t.parent_transaction_id === editingTransfer.id
-                        )
-                    } else {
-                        // This is the child (credit/to) — find parent by id
-                        linked = allTx.find((t: { id: string }) =>
-                            t.id === editingTransfer.parent_transaction_id
-                        )
-                    }
+                const headers2 = { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+                let linkedPromise: Promise<{ data: { account_id: string } | { account_id: string }[] }>
+
+                if (editingTransfer.parent_transaction_id === null) {
+                    // This is the parent (debit/from) — find child by parent_transaction_id
+                    linkedPromise = axios.get(
+                        `${getApiBaseUrl()}/api/v1/transactions?parent_transaction_id=${editingTransfer.id}`,
+                        { headers: headers2 },
+                    )
+                } else {
+                    // This is the child (credit/to) — fetch parent directly
+                    linkedPromise = axios.get(
+                        `${getApiBaseUrl()}/api/v1/transactions/${editingTransfer.parent_transaction_id}`,
+                        { headers: headers2 },
+                    )
+                }
+
+                linkedPromise.then(linkedRes => {
+                    // List endpoint returns array, get endpoint returns object
+                    const linked = Array.isArray(linkedRes.data)
+                        ? linkedRes.data[0]
+                        : linkedRes.data
                     if (linked) {
-                        // The "to" account is the other leg's account
                         if (editingTransfer.parent_transaction_id === null) {
                             setToAccountId(linked.account_id)
                         } else {
-                            // We're the credit leg — swap: from=linked, to=us
                             setFromAccountId(linked.account_id)
                             setToAccountId(editingTransfer.account_id)
                         }
@@ -100,21 +101,17 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                 // Update both legs of the transfer
                 const payload = { date, amount, currency, note: note || null }
 
-                // Determine which leg is which
+                // Determine which leg is which using targeted queries
                 let fromLegId = editingTransfer.id
                 let toLegId: string | null = null
 
-                const txRes = await axios.get(`${getApiBaseUrl()}/api/v1/transactions`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                const allTx = txRes.data
-
                 if (editingTransfer.parent_transaction_id === null) {
-                    // Editing the parent (from) leg
-                    const child = allTx.find((t: { parent_transaction_id: string | null }) =>
-                        t.parent_transaction_id === editingTransfer.id
+                    // Editing the parent (from) leg — find child
+                    const childRes = await axios.get(
+                        `${getApiBaseUrl()}/api/v1/transactions?parent_transaction_id=${editingTransfer.id}`,
+                        { headers: { Authorization: `Bearer ${token}` } },
                     )
-                    toLegId = child?.id ?? null
+                    toLegId = childRes.data[0]?.id ?? null
                 } else {
                     // Editing the child (to) leg — swap
                     fromLegId = editingTransfer.parent_transaction_id

@@ -2,17 +2,8 @@
 //
 // Purpose: Global axios interceptors for token expiry and silent refresh.
 //
-// Two interceptors:
-//   1. Response success: checks if JWT is nearing expiry (< 15 min),
-//      silently refreshes via POST /api/v1/auth/refresh.
-//   2. Response error: on 401, redirects to /login.
-//
-// Guards:
-//   - isRefreshing flag prevents multiple simultaneous refresh calls
-//   - Auth endpoints excluded to avoid infinite loops
-//
 // Initialisation:
-//   Import this file once in main.tsx — the import itself registers interceptors.
+//   Import this file once in main.tsx — the import registers interceptors.
 
 import axios from 'axios'
 import { getApiBaseUrl } from './api'
@@ -21,7 +12,6 @@ let isRefreshing = false
 
 /**
  * Decode a JWT payload without verifying the signature.
- * Returns null if the token is malformed.
  */
 export function decodeJwtPayload(token: string): { exp?: number } | null {
     try {
@@ -50,38 +40,38 @@ export function checkAndRefreshToken(): void {
         }).then(res => {
             const newToken = res.data?.access_token
             if (newToken) localStorage.setItem('access_token', newToken)
-        }).catch(() => {
-            // Silent — the 401 handler catches expired tokens
-        }).finally(() => {
+        }).catch(() => {}).finally(() => {
             isRefreshing = false
         })
     }
 }
 
-// --- Register interceptors ---
+// --- Register interceptors (side effect on import) ---
+// Only register if not in a test environment — interceptors on the global
+// axios instance interfere with vi.mock('axios') in other test files.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!(import.meta as any).env?.VITEST) {
+    // Success: trigger silent refresh on non-auth responses
+    axios.interceptors.response.use(
+        (response) => {
+            const url: string = response.config?.url ?? ''
+            if (!url.includes('/auth/')) checkAndRefreshToken()
+            return response
+        },
+        // Error: redirect on 401
+        (error) => {
+            const url: string = error.config?.url ?? ''
+            const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
+            const hasToken =
+                error.config?.headers?.Authorization ||
+                localStorage.getItem('access_token')
 
-// Success: trigger silent refresh on non-auth responses
-axios.interceptors.response.use(
-    (response) => {
-        const url: string = response.config?.url ?? ''
-        if (!url.includes('/auth/')) {
-            checkAndRefreshToken()
+            if (error.response?.status === 401 && !isAuthEndpoint && hasToken) {
+                localStorage.removeItem('access_token')
+                localStorage.removeItem('user_email')
+                window.location.href = '/login'
+            }
+            return Promise.reject(error)
         }
-        return response
-    },
-    // Error: redirect on 401
-    (error) => {
-        const url: string = error.config?.url ?? ''
-        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register')
-        const hasToken =
-            error.config?.headers?.Authorization ||
-            localStorage.getItem('access_token')
-
-        if (error.response?.status === 401 && !isAuthEndpoint && hasToken) {
-            localStorage.removeItem('access_token')
-            localStorage.removeItem('user_email')
-            window.location.href = '/login'
-        }
-        return Promise.reject(error)
-    }
-)
+    )
+}

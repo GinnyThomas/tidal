@@ -163,7 +163,7 @@ class TransferCreate(BaseModel):
     The router creates two Transaction rows:
       - Debit: from_account_id, transaction_type=transfer (money leaves)
       - Credit: to_account_id, transaction_type=transfer (money arrives)
-    Both rows share the same category, date, amount, and currency.
+    Both rows share the same date, amount, and currency. No category is assigned.
     The credit row links to the debit via parent_transaction_id.
     """
 

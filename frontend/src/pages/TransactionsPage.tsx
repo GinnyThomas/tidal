@@ -382,7 +382,14 @@ function TransactionsPage() {
                         <select
                             id="filterStatus"
                             value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
+                            onChange={(e) => {
+                                setFilterStatus(e.target.value)
+                                // Sync URL
+                                const next = new URLSearchParams(searchParams)
+                                if (e.target.value) next.set('status', e.target.value)
+                                else next.delete('status')
+                                setSearchParams(next)
+                            }}
                             className="input-base"
                         >
                             <option value="">All statuses</option>
@@ -404,8 +411,10 @@ function TransactionsPage() {
                         <button
                             onClick={() => {
                                 setFilterCategoryId('')
-                                // Sync the URL so the back button / share URL reflects cleared state
-                                setSearchParams({})
+                                // Remove category_id from URL, keep status if set
+                                const next = new URLSearchParams(searchParams)
+                                next.delete('category_id')
+                                setSearchParams(next)
                             }}
                             className="text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
                             aria-label="Clear category filter"
@@ -456,6 +465,8 @@ function TransactionsPage() {
                                         key={tx.id}
                                         className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
                                         onClick={() => handleEditTransaction(tx)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditTransaction(tx) } }}
+                                        tabIndex={0}
                                         aria-label="Click to edit"
                                     >
                                         <td className="px-4 py-3 text-slate-300">{tx.date}</td>
