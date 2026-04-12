@@ -103,10 +103,12 @@ class Transaction(Base):
     )
 
     # --- Category link ---
-    category_id: Mapped[uuid.UUID] = mapped_column(
+    # Nullable for transfers — transfers move money between accounts without
+    # needing a budget category. All other types require a category.
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("categories.id"),
-        nullable=False,
+        nullable=True,
     )
 
     # --- Core fields ---

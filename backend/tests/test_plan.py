@@ -379,6 +379,26 @@ def test_plan_row_includes_schedule_names(test_client) -> None:
     assert sched["planned"] == "950.00"
 
 
+def test_schedule_group_appears_in_plan_row(test_client) -> None:
+    """
+    When a schedule has a group field and no budget exists for that category,
+    the PlanRow should use the schedule's group as a fallback.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    _create_schedule(
+        test_client, token, account_id, category_id,
+        name="UK Rent", amount="950.00", frequency="monthly",
+        start_date="2026-01-01", group="UK",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == category_id)
+    assert row["group"] == "UK"
+
+
 def test_plan_schedule_excluded_after_end_date(test_client) -> None:
     """
     A schedule whose end_date falls before the first day of the target month

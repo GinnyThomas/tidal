@@ -48,6 +48,7 @@ const makeTransaction = (overrides = {}) => ({
     category_name: 'Groceries',
     category_icon: null,
     parent_transaction_id: null,
+    promotion_id: null,
     schedule_id: null,
     date: '2026-04-01',
     payee: 'Tesco',

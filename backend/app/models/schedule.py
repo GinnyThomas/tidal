@@ -128,6 +128,10 @@ class Schedule(Base):
     # not a deletion.
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # --- Optional group ---
+    # Grouping label for filtering in the plan view (e.g. "UK", "España").
+    group: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+
     # --- Optional note ---
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 

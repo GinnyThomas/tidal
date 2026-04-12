@@ -68,7 +68,7 @@ class TransactionCreate(BaseModel):
     """
 
     account_id: uuid.UUID
-    category_id: uuid.UUID
+    category_id: Optional[uuid.UUID] = None
     date: date_
     amount: Decimal = Field(...)
     transaction_type: TransactionType
@@ -102,7 +102,7 @@ class TransactionResponse(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     account_id: uuid.UUID
-    category_id: uuid.UUID
+    category_id: Optional[uuid.UUID]
     schedule_id: Optional[uuid.UUID]
     promotion_id: Optional[uuid.UUID]
     parent_transaction_id: Optional[uuid.UUID]
@@ -116,7 +116,8 @@ class TransactionResponse(BaseModel):
     note: Optional[str]
     created_at: datetime
     # Denormalised from Category — populated by the router helper
-    category_name: str
+    # Nullable for transfers which don't require a category
+    category_name: Optional[str]
     category_icon: Optional[str]
 
     @field_serializer("amount")
@@ -168,7 +169,6 @@ class TransferCreate(BaseModel):
 
     from_account_id: uuid.UUID
     to_account_id: uuid.UUID
-    category_id: uuid.UUID
     date: date_
     amount: Decimal = Field(...)
     currency: str = Field(default="GBP", max_length=3)

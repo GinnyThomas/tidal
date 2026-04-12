@@ -172,7 +172,7 @@ def _get_category_or_404(
     return category
 
 
-def _build_tx_response(tx: Transaction, category: Category) -> dict:
+def _build_tx_response(tx: Transaction, category: Category | None) -> dict:
     """
     Build a dict matching TransactionResponse, adding category_name and
     category_icon from the related Category row.
@@ -204,8 +204,8 @@ def _build_tx_response(tx: Transaction, category: Category) -> dict:
         "status": tx.status,
         "note": tx.note,
         "created_at": tx.created_at,
-        "category_name": category.name,
-        "category_icon": category.icon,
+        "category_name": category.name if category else None,
+        "category_icon": category.icon if category else None,
     }
 
 
@@ -243,11 +243,9 @@ def create_transfer(
             detail="Transfer source and destination accounts must be different.",
         )
 
-    # Fix 5: validate accounts and category all belong to the current user.
-    # Capture the category so we can include its name/icon in the response.
+    # Validate both accounts belong to the current user
     _get_account_or_404(transfer_in.from_account_id, current_user.id, db)
     _get_account_or_404(transfer_in.to_account_id, current_user.id, db)
-    category = _get_category_or_404(transfer_in.category_id, current_user.id, db)
 
     # Generate the debit's UUID in Python so we can pass it to the credit leg
     # as parent_transaction_id WITHOUT needing a DB flush first.
@@ -264,7 +262,7 @@ def create_transfer(
         id=debit_id,
         user_id=current_user.id,
         account_id=transfer_in.from_account_id,
-        category_id=transfer_in.category_id,
+        category_id=None,
         date=transfer_in.date,
         amount=transfer_in.amount,
         currency=transfer_in.currency,
@@ -277,7 +275,7 @@ def create_transfer(
     credit = Transaction(
         user_id=current_user.id,
         account_id=transfer_in.to_account_id,
-        category_id=transfer_in.category_id,
+        category_id=None,
         date=transfer_in.date,
         amount=transfer_in.amount,
         currency=transfer_in.currency,
@@ -291,7 +289,7 @@ def create_transfer(
     db.commit()
     db.refresh(debit)
     db.refresh(credit)
-    return [_build_tx_response(debit, category), _build_tx_response(credit, category)]
+    return [_build_tx_response(debit, None), _build_tx_response(credit, None)]
 
 
 @router.post(
@@ -326,7 +324,10 @@ def create_transaction(
     # Fix 1: validate account and category ownership.
     # Capture the category so we can include its name/icon in the response.
     _get_account_or_404(transaction_in.account_id, current_user.id, db)
-    category = _get_category_or_404(transaction_in.category_id, current_user.id, db)
+    # Category is optional for transfers but required for other types
+    category = None
+    if transaction_in.category_id is not None:
+        category = _get_category_or_404(transaction_in.category_id, current_user.id, db)
 
     # Fix 3: refunds must reference a parent transaction
     if (
@@ -412,15 +413,17 @@ def list_transactions(
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
     # {tx.category_id for tx in transactions} collects the unique IDs.
-    category_ids = {tx.category_id for tx in transactions}
-    cat_list = (
-        db.query(Category)
-        .filter(Category.id.in_(category_ids))
-        .all()
-    )
-    cat_map = {c.id: c for c in cat_list}
+    category_ids = {tx.category_id for tx in transactions if tx.category_id is not None}
+    cat_map: dict = {}
+    if category_ids:
+        cat_list = (
+            db.query(Category)
+            .filter(Category.id.in_(category_ids))
+            .all()
+        )
+        cat_map = {c.id: c for c in cat_list}
 
-    return [_build_tx_response(tx, cat_map[tx.category_id]) for tx in transactions]
+    return [_build_tx_response(tx, cat_map.get(tx.category_id)) for tx in transactions]
 
 
 @router.get(
@@ -438,7 +441,7 @@ def get_transaction(
     Returns 404 if not found, soft-deleted, or belongs to another user.
     """
     tx = _get_transaction_or_404(transaction_id, current_user.id, db)
-    category = db.query(Category).filter(Category.id == tx.category_id).first()
+    category = db.query(Category).filter(Category.id == tx.category_id).first() if tx.category_id else None
     return _build_tx_response(tx, category)
 
 
@@ -466,7 +469,7 @@ def update_transaction(
     # exclude_unset=True already omits fields the client didn't send, but a
     # client can still send {"amount": null} — reject that here before writing.
     NON_NULLABLE = {"date", "amount", "currency", "status", "transaction_type",
-                    "account_id", "category_id"}
+                    "account_id"}
     for field in NON_NULLABLE:
         if field in update_data and update_data[field] is None:
             raise HTTPException(
@@ -496,7 +499,7 @@ def update_transaction(
     db.commit()
     db.refresh(transaction)
     # Look up the (potentially updated) category for the response
-    category = db.query(Category).filter(Category.id == transaction.category_id).first()
+    category = db.query(Category).filter(Category.id == transaction.category_id).first() if transaction.category_id else None
     return _build_tx_response(transaction, category)
 
 

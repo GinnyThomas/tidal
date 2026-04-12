@@ -59,6 +59,7 @@ class ScheduleCreate(BaseModel):
     end_date: Optional[date] = None
     auto_generate: bool = True
     active: bool = True
+    group: Optional[str] = Field(default=None, max_length=50)
     note: Optional[str] = None
 
 
@@ -93,6 +94,7 @@ class ScheduleResponse(BaseModel):
     end_date: Optional[date]
     auto_generate: bool
     active: bool
+    group: Optional[str]
     note: Optional[str]
     created_at: datetime
     # Denormalised from Category — populated by the router helper
@@ -126,4 +128,5 @@ class ScheduleUpdate(BaseModel):
     end_date: Optional[date] = None
     auto_generate: Optional[bool] = None
     active: Optional[bool] = None
+    group: Optional[str] = Field(default=None, max_length=50)
     note: Optional[str] = None

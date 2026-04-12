@@ -33,6 +33,7 @@ type Account = {
     account_type: string
     currency: string
     current_balance: string
+    calculated_balance: string
     institution: string | null
     note: string | null
     is_active: boolean
@@ -185,7 +186,10 @@ function AccountsPage() {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="text-right">
-                                        <span className="text-xl font-bold text-slate-100">{account.current_balance}</span>
+                                        <div>
+                                            <span className="text-xs text-slate-500 block">Balance</span>
+                                            <span className="text-xl font-bold text-slate-100">{account.calculated_balance}</span>
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => handleEditAccount(account)}
