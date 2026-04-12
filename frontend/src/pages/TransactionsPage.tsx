@@ -112,7 +112,10 @@ function TransactionsPage() {
     const [filterCategoryId, setFilterCategoryId] = useState(
         () => searchParams.get('category_id') ?? ''
     )
-    const [filterStatus, setFilterStatus] = useState('')
+    // Initialise from URL — '' means no filter
+    const [filterStatus, setFilterStatus] = useState(
+        () => searchParams.get('status') ?? ''
+    )
     const [showAddForm, setShowAddForm] = useState(false)
     const [showTransferForm, setShowTransferForm] = useState(false)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)

@@ -196,3 +196,21 @@ def change_password(
         )
     current_user.password_hash = hash_password(body.new_password)
     db.commit()
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Returns a fresh JWT with a new expiry for the authenticated user.
+
+    The caller must provide a valid (non-expired) Bearer token. The response
+    is a new token with the same user but a fresh expiry, extending the
+    session without requiring the user to re-enter credentials.
+
+    Used by the frontend's silent refresh interceptor to keep active users
+    logged in indefinitely.
+    """
+    token = create_access_token(data={"sub": str(current_user.id)})
+    return {"access_token": token, "token_type": "bearer"}
