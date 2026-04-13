@@ -30,6 +30,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { CURRENCIES } from '../lib/currencies'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
 type Account = { id: string; name: string }
@@ -103,10 +104,11 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
             axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
         ]).then(([accountsRes, catsRes]) => {
             setAccounts(accountsRes.data)
-            setCategories(catsRes.data)
+            const sorted = [...catsRes.data].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            setCategories(sorted)
             // Only auto-select in create mode — preserves pre-populated IDs in edit mode
             if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
-            if (!isEditMode && catsRes.data.length > 0) setCategoryId(catsRes.data[0].id)
+            if (!isEditMode && sorted.length > 0) setCategoryId(sorted[0].id)
         }).catch(() => {
             // Best-effort — silently leave dropdowns empty
         })
@@ -228,14 +230,14 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
 
                 <div>
                     <label htmlFor="schedCurrency" className="label-base">Currency</label>
-                    <input
+                    <select
                         id="schedCurrency"
-                        type="text"
                         value={currency}
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
-                        maxLength={3}
-                    />
+                    >
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 </div>
 
                 <div>

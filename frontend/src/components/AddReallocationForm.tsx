@@ -53,8 +53,9 @@ function AddReallocationForm({
         }).then(res => {
             // Exclude the "from" category from the dropdown
             const filtered = res.data.filter((c: Category) => c.id !== fromCategoryId)
-            setCategories(filtered)
-            if (filtered.length > 0) setToCategoryId(filtered[0].id)
+            const sorted = [...filtered].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            setCategories(sorted)
+            if (sorted.length > 0) setToCategoryId(sorted[0].id)
         }).catch(() => {})
     }, [fromCategoryId])
 

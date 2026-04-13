@@ -23,6 +23,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { CURRENCIES } from '../lib/currencies'
 
 type Account = { id: string; name: string }
 type Category = { id: string; name: string }
@@ -88,12 +89,13 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             axios.get(`${getApiBaseUrl()}/api/v1/promotions${isEditMode ? '' : '?active_only=true'}`, { headers }),
         ]).then(([accountsRes, catsRes, promosRes]) => {
             setAccounts(accountsRes.data)
-            setCategories(catsRes.data)
+            const sorted = [...catsRes.data].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            setCategories(sorted)
             if (promosRes) setPromotions(promosRes.data)
             // Only auto-select the first option in create mode — in edit mode the
             // values are already set from the editingTransaction prop.
             if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
-            if (!isEditMode && catsRes.data.length > 0) setCategoryId(catsRes.data[0].id)
+            if (!isEditMode && sorted.length > 0) setCategoryId(sorted[0].id)
         }).catch(() => {
             // Best-effort — silently leave dropdowns empty
         })
@@ -239,14 +241,14 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
 
                 <div>
                     <label htmlFor="txCurrency" className="label-base">Currency</label>
-                    <input
+                    <select
                         id="txCurrency"
-                        type="text"
                         value={currency}
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
-                        maxLength={3}
-                    />
+                    >
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 </div>
 
                 <div>

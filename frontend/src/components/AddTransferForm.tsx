@@ -13,6 +13,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { CURRENCIES } from '../lib/currencies'
 
 type Account = { id: string; name: string }
 
@@ -226,14 +227,14 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
 
                 <div>
                     <label htmlFor="transferCurrency" className="label-base">Currency</label>
-                    <input
+                    <select
                         id="transferCurrency"
-                        type="text"
                         value={currency}
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
-                        maxLength={3}
-                    />
+                    >
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 </div>
 
                 <div>
