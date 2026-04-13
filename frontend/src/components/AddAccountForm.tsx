@@ -131,6 +131,9 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
                     >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
                         {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>

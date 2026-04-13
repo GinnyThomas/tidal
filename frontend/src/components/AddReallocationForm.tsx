@@ -16,6 +16,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { sortCategoriesByName } from '../lib/categories'
 
 type Category = { id: string; name: string }
 
@@ -53,7 +54,7 @@ function AddReallocationForm({
         }).then(res => {
             // Exclude the "from" category from the dropdown
             const filtered = res.data.filter((c: Category) => c.id !== fromCategoryId)
-            const sorted = [...filtered].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            const sorted = sortCategoriesByName(filtered as Category[])
             setCategories(sorted)
             if (sorted.length > 0) setToCategoryId(sorted[0].id)
         }).catch(() => {})

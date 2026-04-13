@@ -22,6 +22,7 @@
 import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
+import { sortCategoriesByName } from '../lib/categories'
 import { getApiBaseUrl } from '../lib/api'
 import { CURRENCIES } from '../lib/currencies'
 
@@ -89,7 +90,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             axios.get(`${getApiBaseUrl()}/api/v1/promotions${isEditMode ? '' : '?active_only=true'}`, { headers }),
         ]).then(([accountsRes, catsRes, promosRes]) => {
             setAccounts(accountsRes.data)
-            const sorted = [...catsRes.data].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            const sorted = sortCategoriesByName(catsRes.data as Category[])
             setCategories(sorted)
             if (promosRes) setPromotions(promosRes.data)
             // Only auto-select the first option in create mode — in edit mode the
@@ -247,6 +248,9 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
                     >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
                         {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>

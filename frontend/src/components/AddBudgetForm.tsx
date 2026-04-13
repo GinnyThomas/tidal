@@ -12,6 +12,7 @@
 //   defaultYear     — the year to default to when creating (from parent's year selector)
 
 import axios from 'axios'
+import { sortCategoriesByName } from '../lib/categories'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
@@ -51,7 +52,7 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
         axios.get(`${getApiBaseUrl()}/api/v1/categories`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(res => {
-            const sorted = [...res.data].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            const sorted = sortCategoriesByName(res.data as Category[])
             setCategories(sorted)
             if (!isEditMode && sorted.length > 0 && !categoryId) {
                 setCategoryId(sorted[0].id)
@@ -156,6 +157,9 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
                     >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
                         {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>

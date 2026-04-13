@@ -30,6 +30,7 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { sortCategoriesByName } from '../lib/categories'
 import { CURRENCIES } from '../lib/currencies'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
@@ -104,7 +105,7 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
             axios.get(`${getApiBaseUrl()}/api/v1/categories`, { headers }),
         ]).then(([accountsRes, catsRes]) => {
             setAccounts(accountsRes.data)
-            const sorted = [...catsRes.data].sort((a: Category, b: Category) => a.name.localeCompare(b.name))
+            const sorted = sortCategoriesByName(catsRes.data as Category[])
             setCategories(sorted)
             // Only auto-select in create mode — preserves pre-populated IDs in edit mode
             if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
@@ -236,6 +237,9 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
                     >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
                         {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
