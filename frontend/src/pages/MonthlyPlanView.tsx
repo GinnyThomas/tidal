@@ -26,6 +26,7 @@ import Layout from '../components/Layout'
 import AddReallocationForm from '../components/AddReallocationForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
+import { fmtCurrency } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
 
@@ -83,11 +84,10 @@ function formatMonth(year: number, month: number): string {
 // toHaveStyle({ color: 'rgb(0, 128, 0)' }) etc. Tailwind classes are not
 // evaluated by jsdom's style engine.
 
-// Format numbers with thousand separators (en-GB locale).
+// Format amounts with thousand separators. Zero shows "0.00" not "—"
+// (MonthlyPlanView shows explicit zeros unlike AnnualView).
 function fmtAmount(amount: string): string {
-    const n = parseFloat(amount)
-    if (n === 0) return '0.00'
-    return n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    return fmtCurrency(parseFloat(amount))
 }
 
 function remainingStyle(remaining: string): CSSProperties {
@@ -559,7 +559,7 @@ function MonthlyPlanView() {
                                         const subActual = allSectionRows.reduce((s, r) => s + parseFloat(r.actual), 0)
                                         const subRemaining = subPlanned - subActual
                                         const subPending = allSectionRows.reduce((s, r) => s + parseFloat(r.pending), 0)
-                                        const fmt2 = (v: number) => v === 0 ? '—' : v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        const fmt2 = (v: number) => v === 0 ? '—' : fmtCurrency(v)
 
                                         return (
                                             <React.Fragment key={sectionGroup}>
