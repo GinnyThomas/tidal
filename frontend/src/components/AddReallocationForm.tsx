@@ -43,6 +43,7 @@ function AddReallocationForm({
     const [amount, setAmount] = useState('')
     const [reason, setReason] = useState('')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     // Fetch categories for the "To" dropdown
     useEffect(() => {
@@ -59,24 +60,30 @@ function AddReallocationForm({
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         try {
-            await axios.post(
-                `${getApiBaseUrl()}/api/v1/reallocations`,
-                {
-                    from_category_id: fromCategoryId,
-                    to_category_id: toCategoryId,
-                    amount,
-                    reason,
-                    year,
-                    month,
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
-            )
-            onReallocationAdded()
-        } catch {
-            setError('Could not create reallocation. Please try again.')
+            try {
+                await axios.post(
+                    `${getApiBaseUrl()}/api/v1/reallocations`,
+                    {
+                        from_category_id: fromCategoryId,
+                        to_category_id: toCategoryId,
+                        amount,
+                        reason,
+                        year,
+                        month,
+                    },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                )
+                onReallocationAdded()
+            } catch {
+                setError('Could not create reallocation. Please try again.')
+            }
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -150,7 +157,7 @@ function AddReallocationForm({
                 )}
 
                 <div className="flex gap-3">
-                    <button type="submit" className="btn-primary flex-1 cursor-pointer">
+                    <button type="submit" disabled={isSubmitting} className="btn-primary flex-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                         Reallocate
                     </button>
                     <button

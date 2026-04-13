@@ -69,12 +69,13 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
     const [icon, setIcon] = useState(editingCategory?.icon ?? '')
     const [error, setError] = useState<string | null>(null)
     // Tracks in-flight submission — disables the button to prevent double-submit.
-    const [submitting, setSubmitting] = useState(false)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
-        setSubmitting(true)
         const token = localStorage.getItem('access_token')
         const body = {
             name,
@@ -103,7 +104,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                     : 'Could not create category. Please try again.'
             )
         } finally {
-            setSubmitting(false)
+            setIsSubmitting(false)
         }
     }
 
@@ -200,10 +201,10 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
 
                 <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={isSubmitting}
                     className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {submitting ? 'Saving...' : (isEditMode ? 'Update Category' : 'Save Category')}
+                    {isSubmitting ? 'Saving...' : (isEditMode ? 'Update Category' : 'Save Category')}
                 </button>
             </form>
         </div>

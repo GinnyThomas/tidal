@@ -97,6 +97,8 @@ class ScheduleResponse(BaseModel):
     group: Optional[str]
     note: Optional[str]
     created_at: datetime
+    # Computed by the router from the recurrence engine
+    next_occurrence: Optional[date] = None
     # Denormalised from Category — populated by the router helper
     category_name: str
     category_icon: Optional[str]

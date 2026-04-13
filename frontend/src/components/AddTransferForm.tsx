@@ -43,6 +43,7 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
     const [currency, setCurrency] = useState(editingTransfer?.currency ?? 'GBP')
     const [note, setNote] = useState(editingTransfer?.note ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     useEffect(() => {
         const token = localStorage.getItem('access_token')
@@ -94,63 +95,69 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         try {
-            if (isEditMode && editingTransfer) {
-                // Update both legs of the transfer
-                const payload = { date, amount, currency, note: note || null }
+            try {
+                if (isEditMode && editingTransfer) {
+                    // Update both legs of the transfer
+                    const payload = { date, amount, currency, note: note || null }
 
-                // Determine which leg is which using targeted queries
-                let fromLegId = editingTransfer.id
-                let toLegId: string | null = null
+                    // Determine which leg is which using targeted queries
+                    let fromLegId = editingTransfer.id
+                    let toLegId: string | null = null
 
-                if (editingTransfer.parent_transaction_id === null) {
-                    // Editing the parent (from) leg — find child
-                    const childRes = await axios.get(
-                        `${getApiBaseUrl()}/api/v1/transactions?parent_transaction_id=${editingTransfer.id}`,
-                        { headers: { Authorization: `Bearer ${token}` } },
-                    )
-                    toLegId = childRes.data[0]?.id ?? null
-                } else {
-                    // Editing the child (to) leg — swap
-                    fromLegId = editingTransfer.parent_transaction_id
-                    toLegId = editingTransfer.id
-                }
+                    if (editingTransfer.parent_transaction_id === null) {
+                        // Editing the parent (from) leg — find child
+                        const childRes = await axios.get(
+                            `${getApiBaseUrl()}/api/v1/transactions?parent_transaction_id=${editingTransfer.id}`,
+                            { headers: { Authorization: `Bearer ${token}` } },
+                        )
+                        toLegId = childRes.data[0]?.id ?? null
+                    } else {
+                        // Editing the child (to) leg — swap
+                        fromLegId = editingTransfer.parent_transaction_id
+                        toLegId = editingTransfer.id
+                    }
 
-                // Update from leg
-                await axios.put(
-                    `${getApiBaseUrl()}/api/v1/transactions/${fromLegId}`,
-                    { ...payload, account_id: fromAccountId },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                // Update to leg
-                if (toLegId) {
+                    // Update from leg
                     await axios.put(
-                        `${getApiBaseUrl()}/api/v1/transactions/${toLegId}`,
-                        { ...payload, account_id: toAccountId },
+                        `${getApiBaseUrl()}/api/v1/transactions/${fromLegId}`,
+                        { ...payload, account_id: fromAccountId },
                         { headers: { Authorization: `Bearer ${token}` } }
                     )
-                }
+                    // Update to leg
+                    if (toLegId) {
+                        await axios.put(
+                            `${getApiBaseUrl()}/api/v1/transactions/${toLegId}`,
+                            { ...payload, account_id: toAccountId },
+                            { headers: { Authorization: `Bearer ${token}` } }
+                        )
+                    }
 
-                onTransferUpdated?.()
-            } else {
-                await axios.post(
-                    `${getApiBaseUrl()}/api/v1/transactions/transfer`,
-                    {
-                        from_account_id: fromAccountId,
-                        to_account_id: toAccountId,
-                        date,
-                        amount,
-                        currency,
-                        note: note || null,
-                    },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                onTransactionAdded()
+                    onTransferUpdated?.()
+                } else {
+                    await axios.post(
+                        `${getApiBaseUrl()}/api/v1/transactions/transfer`,
+                        {
+                            from_account_id: fromAccountId,
+                            to_account_id: toAccountId,
+                            date,
+                            amount,
+                            currency,
+                            note: note || null,
+                        },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                    onTransactionAdded()
+                }
+            } catch {
+                setError(`Could not ${isEditMode ? 'update' : 'create'} transfer. Please try again.`)
             }
-        } catch {
-            setError(`Could not ${isEditMode ? 'update' : 'create'} transfer. Please try again.`)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -246,7 +253,7 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                     </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full cursor-pointer">
+                <button type="submit" disabled={isSubmitting} className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {isEditMode ? 'Update Transfer' : 'Save Transfer'}
                 </button>
             </form>
