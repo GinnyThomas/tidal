@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.opening_balance import GroupOpeningBalance
 from app.models.user import User
 from app.schemas.plan import AnnualPlan, MonthlyPlan
 from app.services.auth import get_current_user
@@ -79,4 +80,13 @@ def get_annual_plan(
         )
         for m in range(1, 13)
     ]
-    return AnnualPlan(year=year, months=months)
+    # Fetch opening balances for the cash flow view
+    balances_query = db.query(GroupOpeningBalance).filter(
+        GroupOpeningBalance.user_id == current_user.id,
+        GroupOpeningBalance.year == year,
+    )
+    if group is not None:
+        balances_query = balances_query.filter(GroupOpeningBalance.group == group)
+    balances = balances_query.all()
+
+    return AnnualPlan(year=year, months=months, opening_balances=balances)

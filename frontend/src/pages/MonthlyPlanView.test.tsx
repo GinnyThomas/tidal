@@ -46,6 +46,7 @@ const makeRow = (overrides: Record<string, unknown> = {}) => ({
     pending: '0.00',
     schedules: [],
     group: null,
+    is_income: false,
     ...overrides,
 })
 

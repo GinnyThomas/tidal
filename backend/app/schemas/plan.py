@@ -24,6 +24,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
+from app.schemas.opening_balance import OpeningBalanceResponse
+
 
 class ScheduleRow(BaseModel):
     """
@@ -73,6 +75,8 @@ class PlanRow(BaseModel):
     # None if the category has no budget or the budget has no group.
     # Used by the frontend to display group section headers.
     group: Optional[str] = None
+    # True if the category represents income (salary, freelance, etc.)
+    is_income: bool = False
 
     @field_serializer("planned", "actual", "remaining", "pending")
     def serialize_amount(self, value: Decimal) -> str:
@@ -110,9 +114,11 @@ class AnnualPlan(BaseModel):
     """
     Full response from GET /api/v1/plan/{year}.
 
-    year   — the calendar year.
-    months — one MonthlyPlan per month, in order January (1) through December (12).
+    year              — the calendar year.
+    months            — one MonthlyPlan per month, January through December.
+    opening_balances  — group opening balances for the year (for cash flow view).
     """
 
     year: int
     months: list[MonthlyPlan]
+    opening_balances: list[OpeningBalanceResponse] = Field(default_factory=list)

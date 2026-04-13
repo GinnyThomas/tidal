@@ -32,6 +32,7 @@ const makePlanRow = (overrides: object = {}) => ({
     remaining: '100.00',
     pending: '0.00',
     group: null,
+    is_income: false,
     ...overrides,
 })
 
@@ -41,6 +42,7 @@ const makePlanRow = (overrides: object = {}) => ({
 function makeAnnualPlan(
     year = 2026,
     rowsByMonth: Record<number, ReturnType<typeof makePlanRow>[]> = {},
+    openingBalances: object[] = [],
 ) {
     return {
         year,
@@ -55,6 +57,7 @@ function makeAnnualPlan(
             total_remaining: '0.00',
             total_pending: '0.00',
         })),
+        opening_balances: openingBalances,
     }
 }
 
@@ -296,5 +299,38 @@ describe('AnnualView', () => {
 
         expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/── UK Total/)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Cash flow
+    // =========================================================================
+
+    it('shows cash flow rows when "Show cash flow" is toggled on', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, {
+                0: [
+                    makePlanRow({ category_id: 'cat-uk', category_name: 'Groceries UK', planned: '300.00', group: 'UK' }),
+                    makePlanRow({ category_id: 'cat-es', category_name: 'Groceries España', planned: '200.00', group: 'España' }),
+                ],
+            }, [
+                { id: 'ob-1', user_id: 'u-1', group: 'UK', year: 2026, opening_balance: '5000.00', currency: 'GBP', created_at: '', updated_at: '' },
+            ]),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        // Cash flow rows NOT visible by default
+        expect(screen.queryByText('Opening Balance')).not.toBeInTheDocument()
+
+        // Toggle on
+        await userEvent.click(screen.getByLabelText(/show cash flow/i))
+
+        // Opening and Closing Balance rows should appear (one per group section)
+        expect(screen.getAllByText('Opening Balance').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getAllByText('Closing Balance').length).toBeGreaterThanOrEqual(1)
+        // UK opening balance value visible
+        expect(screen.getByText('5000.00')).toBeInTheDocument()
     })
 })
