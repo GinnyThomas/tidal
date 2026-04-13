@@ -329,3 +329,41 @@ def test_inactive_schedules_excluded_from_default_list(test_client) -> None:
     assert all_response.status_code == 200
     all_body = all_response.json()
     assert len(all_body) == 2
+
+
+# =============================================================================
+# Next occurrence
+# =============================================================================
+
+
+def test_schedule_next_date_is_future(test_client) -> None:
+    """
+    A monthly schedule starting in the past should have next_occurrence
+    set to a future date (>= today).
+    """
+    from datetime import date
+
+    token = _register_and_login(test_client)
+    account_id = _create_account(test_client, token)
+    category_id = _get_category_id(test_client, token)
+
+    response = test_client.post(
+        "/api/v1/schedules",
+        json={
+            "name": "Monthly Test",
+            "amount": "100.00",
+            "frequency": "monthly",
+            "start_date": "2026-01-01",
+            "day_of_month": 15,
+            "account_id": account_id,
+            "category_id": category_id,
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["next_occurrence"] is not None
+
+    next_date = date.fromisoformat(body["next_occurrence"])
+    assert next_date >= date.today()

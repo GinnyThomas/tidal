@@ -41,6 +41,7 @@ from app.schemas.schedule import (
     ScheduleUpdate,
 )
 from app.services.auth import get_current_user
+from app.services.plan import get_next_occurrence
 
 
 router = APIRouter(
@@ -157,6 +158,7 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "group": sched.group,
         "note": sched.note,
         "created_at": sched.created_at,
+        "next_occurrence": get_next_occurrence(sched),
         "category_name": category.name,
         "category_icon": category.icon,
     }

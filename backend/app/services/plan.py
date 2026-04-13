@@ -185,6 +185,83 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
     return 0
 
 
+def get_next_occurrence(schedule: Schedule) -> date | None:
+    """
+    Returns the next future occurrence date for a schedule, or None if the
+    schedule has ended or the frequency is unknown.
+
+    Used by the schedule router to populate next_occurrence in the response.
+    """
+    today = date.today()
+    freq = schedule.frequency
+    interval = schedule.interval or 1
+
+    # Schedule ended
+    if schedule.end_date is not None and schedule.end_date < today:
+        return None
+
+    # --- Monthly-pattern frequencies (monthly, quarterly, annually) ---
+    if freq in ("monthly", "quarterly", "annually"):
+        if freq == "annually":
+            step_months = 12
+        elif freq == "quarterly":
+            step_months = 3
+        else:
+            step_months = interval
+
+        fire_day = schedule.day_of_month or schedule.start_date.day
+
+        # Start from the schedule's start month and step forward
+        y, m = schedule.start_date.year, schedule.start_date.month
+
+        # Jump close to today to avoid looping from ancient start dates
+        if date(y, m, 1) < today:
+            total_months_since = (today.year - y) * 12 + (today.month - m)
+            steps_to_skip = total_months_since // step_months
+            m += steps_to_skip * step_months
+            y += m // 12
+            m = m % 12 or 12
+            if m > 12:
+                y += (m - 1) // 12
+                m = (m - 1) % 12 + 1
+
+        # Check a few months from the jump point
+        for _ in range(step_months + 2):
+            clamped_day = min(fire_day, calendar.monthrange(y, m)[1])
+            candidate = date(y, m, clamped_day)
+            if candidate >= today and candidate >= schedule.start_date:
+                if schedule.end_date is None or candidate <= schedule.end_date:
+                    return candidate
+            m += step_months
+            if m > 12:
+                y += (m - 1) // 12
+                m = (m - 1) % 12 + 1
+
+        return None
+
+    # --- Step-based frequencies (daily, weekly, every_n_days) ---
+    if freq in ("daily", "weekly", "every_n_days"):
+        if freq == "weekly":
+            step = 7 * interval
+        elif freq == "every_n_days":
+            step = interval
+        else:
+            step = 1
+
+        if schedule.start_date >= today:
+            candidate = schedule.start_date
+        else:
+            days_since_start = (today - schedule.start_date).days
+            steps_needed = (days_since_start + step - 1) // step
+            candidate = schedule.start_date + timedelta(days=steps_needed * step)
+
+        if schedule.end_date is not None and candidate > schedule.end_date:
+            return None
+        return candidate
+
+    return None
+
+
 # =============================================================================
 # Main plan assembly function
 # =============================================================================
