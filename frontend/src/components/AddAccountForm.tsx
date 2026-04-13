@@ -45,9 +45,12 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
     const [institution, setInstitution] = useState(editingAccount?.institution ?? '')
     const [note, setNote] = useState(editingAccount?.note ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         const payload = {
@@ -59,23 +62,27 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
             note: note || null,
         }
         try {
-            if (isEditMode) {
-                await axios.put(
-                    `${getApiBaseUrl()}/api/v1/accounts/${editingAccount.id}`,
-                    payload,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                onAccountUpdated?.()
-            } else {
-                await axios.post(
-                    `${getApiBaseUrl()}/api/v1/accounts`,
-                    payload,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                onAccountAdded()
+            try {
+                if (isEditMode) {
+                    await axios.put(
+                        `${getApiBaseUrl()}/api/v1/accounts/${editingAccount.id}`,
+                        payload,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                    onAccountUpdated?.()
+                } else {
+                    await axios.post(
+                        `${getApiBaseUrl()}/api/v1/accounts`,
+                        payload,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                    onAccountAdded()
+                }
+            } catch {
+                setError(`Could not ${isEditMode ? 'update' : 'create'} account. Please try again.`)
             }
-        } catch {
-            setError(`Could not ${isEditMode ? 'update' : 'create'} account. Please try again.`)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -168,7 +175,8 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
 
                 <button
                     type="submit"
-                    className="btn-primary w-full cursor-pointer"
+                    disabled={isSubmitting}
+                    className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isEditMode ? 'Update Account' : 'Save Account'}
                 </button>

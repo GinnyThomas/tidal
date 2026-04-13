@@ -43,6 +43,7 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
     const [currency, setCurrency] = useState(editingBudget?.currency ?? 'GBP')
     const [group, setGroup] = useState(editingBudget?.group ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     useEffect(() => {
         const token = localStorage.getItem('access_token')
@@ -59,6 +60,8 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         const payload = {
@@ -69,22 +72,26 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
             group: group || null,
         }
         try {
-            if (isEditMode) {
-                await axios.put(
-                    `${getApiBaseUrl()}/api/v1/budgets/${editingBudget.id}`,
-                    { default_amount: defaultAmount, currency, group: group || null },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-            } else {
-                await axios.post(
-                    `${getApiBaseUrl()}/api/v1/budgets`,
-                    payload,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
+            try {
+                if (isEditMode) {
+                    await axios.put(
+                        `${getApiBaseUrl()}/api/v1/budgets/${editingBudget.id}`,
+                        { default_amount: defaultAmount, currency, group: group || null },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                } else {
+                    await axios.post(
+                        `${getApiBaseUrl()}/api/v1/budgets`,
+                        payload,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                }
+                onBudgetSaved()
+            } catch {
+                setError(`Could not ${isEditMode ? 'update' : 'create'} budget. Please try again.`)
             }
-            onBudgetSaved()
-        } catch {
-            setError(`Could not ${isEditMode ? 'update' : 'create'} budget. Please try again.`)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -171,7 +178,7 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
                     </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full cursor-pointer">
+                <button type="submit" disabled={isSubmitting} className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {isEditMode ? 'Update Budget' : 'Save Budget'}
                 </button>
             </form>

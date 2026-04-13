@@ -214,28 +214,26 @@ def get_next_occurrence(schedule: Schedule) -> date | None:
         # Start from the schedule's start month and step forward
         y, m = schedule.start_date.year, schedule.start_date.month
 
-        # Jump close to today to avoid looping from ancient start dates
+        # Jump close to today to avoid looping from ancient start dates.
+        # Use 0-based month arithmetic to avoid off-by-one errors.
         if date(y, m, 1) < today:
             total_months_since = (today.year - y) * 12 + (today.month - m)
             steps_to_skip = total_months_since // step_months
-            m += steps_to_skip * step_months
-            y += m // 12
-            m = m % 12 or 12
-            if m > 12:
-                y += (m - 1) // 12
-                m = (m - 1) % 12 + 1
+            total = (y * 12 + (m - 1)) + steps_to_skip * step_months
+            y, m = divmod(total, 12)
+            m += 1
 
-        # Check a few months from the jump point
-        for _ in range(step_months + 2):
+        # Check up to 24 months from the jump point — enough for any interval
+        for _ in range(24):
             clamped_day = min(fire_day, calendar.monthrange(y, m)[1])
             candidate = date(y, m, clamped_day)
             if candidate >= today and candidate >= schedule.start_date:
                 if schedule.end_date is None or candidate <= schedule.end_date:
                     return candidate
-            m += step_months
-            if m > 12:
-                y += (m - 1) // 12
-                m = (m - 1) % 12 + 1
+            # Advance by step_months using 0-based arithmetic
+            total = y * 12 + (m - 1) + step_months
+            y, m = divmod(total, 12)
+            m += 1
 
         return None
 

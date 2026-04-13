@@ -44,6 +44,7 @@ function AddPromotionForm({ onPromotionSaved, editingPromotion }: Props) {
     const [isActive, _setIsActive] = useState(editingPromotion?.is_active ?? true)
     const [notes, setNotes] = useState(editingPromotion?.notes ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     useEffect(() => {
         const token = localStorage.getItem('access_token')
@@ -54,6 +55,8 @@ function AddPromotionForm({ onPromotionSaved, editingPromotion }: Props) {
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         const payload = {
@@ -67,16 +70,20 @@ function AddPromotionForm({ onPromotionSaved, editingPromotion }: Props) {
             notes: notes || null,
         }
         try {
-            if (isEditMode) {
-                await axios.put(`${getApiBaseUrl()}/api/v1/promotions/${editingPromotion.id}`, payload,
-                    { headers: { Authorization: `Bearer ${token}` } })
-            } else {
-                await axios.post(`${getApiBaseUrl()}/api/v1/promotions`, payload,
-                    { headers: { Authorization: `Bearer ${token}` } })
+            try {
+                if (isEditMode) {
+                    await axios.put(`${getApiBaseUrl()}/api/v1/promotions/${editingPromotion.id}`, payload,
+                        { headers: { Authorization: `Bearer ${token}` } })
+                } else {
+                    await axios.post(`${getApiBaseUrl()}/api/v1/promotions`, payload,
+                        { headers: { Authorization: `Bearer ${token}` } })
+                }
+                onPromotionSaved()
+            } catch {
+                setError(`Could not ${isEditMode ? 'update' : 'create'} promotion. Please try again.`)
             }
-            onPromotionSaved()
-        } catch {
-            setError(`Could not ${isEditMode ? 'update' : 'create'} promotion. Please try again.`)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -137,7 +144,7 @@ function AddPromotionForm({ onPromotionSaved, editingPromotion }: Props) {
                         <p className="text-coral-400 text-sm">{error}</p>
                     </div>
                 )}
-                <button type="submit" className="btn-primary w-full cursor-pointer">
+                <button type="submit" disabled={isSubmitting} className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {isEditMode ? 'Update Promotion' : 'Save Promotion'}
                 </button>
             </form>

@@ -73,6 +73,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
     )
     const [promotionId, setPromotionId] = useState(editingTransaction?.promotion_id ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     // Fetch accounts and categories to populate the dropdowns.
     // In edit mode, skip auto-selection — the pre-set values from editingTransaction are used.
@@ -101,6 +102,8 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         const payload = {
@@ -121,23 +124,27 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             promotion_id: promotionId || null,
         }
         try {
-            if (isEditMode) {
-                await axios.put(
-                    `${getApiBaseUrl()}/api/v1/transactions/${editingTransaction.id}`,
-                    payload,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                onTransactionUpdated?.()
-            } else {
-                await axios.post(
-                    `${getApiBaseUrl()}/api/v1/transactions`,
-                    payload,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                )
-                onTransactionAdded()
+            try {
+                if (isEditMode) {
+                    await axios.put(
+                        `${getApiBaseUrl()}/api/v1/transactions/${editingTransaction.id}`,
+                        payload,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                    onTransactionUpdated?.()
+                } else {
+                    await axios.post(
+                        `${getApiBaseUrl()}/api/v1/transactions`,
+                        payload,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    )
+                    onTransactionAdded()
+                }
+            } catch {
+                setError(`Could not ${isEditMode ? 'update' : 'create'} transaction. Please try again.`)
             }
-        } catch {
-            setError(`Could not ${isEditMode ? 'update' : 'create'} transaction. Please try again.`)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -308,7 +315,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full cursor-pointer">
+                <button type="submit" disabled={isSubmitting} className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {isEditMode ? 'Update Transaction' : 'Save Transaction'}
                 </button>
             </form>

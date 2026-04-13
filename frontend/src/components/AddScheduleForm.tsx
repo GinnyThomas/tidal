@@ -89,6 +89,7 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
     const [payee, setPayee] = useState(editingSchedule?.payee ?? '')
     const [note, setNote] = useState(editingSchedule?.note ?? '')
     const [error, setError] = useState<string | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     // Fetch accounts and categories to populate the dropdowns.
     // Both fetched in parallel via Promise.all to minimise load time.
@@ -114,6 +115,8 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
+        if (isSubmitting) return
+        setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
         const body = {
@@ -138,23 +141,27 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
         }
         const config = { headers: { Authorization: `Bearer ${token}` } }
         try {
-            if (isEditMode && editingSchedule) {
-                await axios.put(
-                    `${getApiBaseUrl()}/api/v1/schedules/${editingSchedule.id}`,
-                    body,
-                    config,
+            try {
+                if (isEditMode && editingSchedule) {
+                    await axios.put(
+                        `${getApiBaseUrl()}/api/v1/schedules/${editingSchedule.id}`,
+                        body,
+                        config,
+                    )
+                    onScheduleUpdated?.()
+                } else {
+                    await axios.post(`${getApiBaseUrl()}/api/v1/schedules`, body, config)
+                    onScheduleAdded()
+                }
+            } catch {
+                setError(
+                    isEditMode
+                        ? 'Could not update schedule. Please try again.'
+                        : 'Could not create schedule. Please try again.'
                 )
-                onScheduleUpdated?.()
-            } else {
-                await axios.post(`${getApiBaseUrl()}/api/v1/schedules`, body, config)
-                onScheduleAdded()
             }
-        } catch {
-            setError(
-                isEditMode
-                    ? 'Could not update schedule. Please try again.'
-                    : 'Could not create schedule. Please try again.'
-            )
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -362,7 +369,7 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                     </div>
                 )}
 
-                <button type="submit" className="btn-primary w-full cursor-pointer">
+                <button type="submit" disabled={isSubmitting} className="btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     {isEditMode ? 'Update Schedule' : 'Save Schedule'}
                 </button>
             </form>
