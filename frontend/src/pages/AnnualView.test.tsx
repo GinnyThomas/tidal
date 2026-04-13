@@ -331,6 +331,6 @@ describe('AnnualView', () => {
         expect(screen.getAllByText('Opening Balance').length).toBeGreaterThanOrEqual(1)
         expect(screen.getAllByText('Closing Balance').length).toBeGreaterThanOrEqual(1)
         // UK opening balance value visible
-        expect(screen.getByText('5000.00')).toBeInTheDocument()
+        expect(screen.getByText('5,000.00')).toBeInTheDocument()
     })
 })
