@@ -162,6 +162,18 @@ describe('AnnualView', () => {
         expect(screen.getAllByText('950.00').length).toBeGreaterThan(0)
     })
 
+    it('formats amounts >= 1000 with comma separators', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, { 0: [makePlanRow({ planned: '1500.00' })] }),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Bills')
+        // 1500.00 should be formatted as "1,500.00" with comma separator
+        expect(screen.getAllByText('1,500.00').length).toBeGreaterThan(0)
+    })
+
     it('shows "—" for months where a category has zero planned amount', async () => {
         // Bills has a planned amount only in January; Feb–Dec should all show "—"
         vi.mocked(axios.get).mockResolvedValueOnce({
@@ -331,6 +343,6 @@ describe('AnnualView', () => {
         expect(screen.getAllByText('Opening Balance').length).toBeGreaterThanOrEqual(1)
         expect(screen.getAllByText('Closing Balance').length).toBeGreaterThanOrEqual(1)
         // UK opening balance value visible
-        expect(screen.getByText('5000.00')).toBeInTheDocument()
+        expect(screen.getByText('5,000.00')).toBeInTheDocument()
     })
 })

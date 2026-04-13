@@ -26,6 +26,7 @@ import Layout from '../components/Layout'
 import AddReallocationForm from '../components/AddReallocationForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
+import { fmtCurrency } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
 
@@ -82,6 +83,12 @@ function formatMonth(year: number, month: number): string {
 // Returns an inline style object — MUST stay inline because tests use
 // toHaveStyle({ color: 'rgb(0, 128, 0)' }) etc. Tailwind classes are not
 // evaluated by jsdom's style engine.
+
+// Format amounts with thousand separators. Zero shows "0.00" not "—"
+// (MonthlyPlanView shows explicit zeros unlike AnnualView).
+function fmtAmount(amount: string): string {
+    return fmtCurrency(parseFloat(amount))
+}
 
 function remainingStyle(remaining: string): CSSProperties {
     const value = parseFloat(remaining)
@@ -321,7 +328,7 @@ function MonthlyPlanView() {
                 <td className={`${indent} py-2 text-slate-400 text-sm italic`}>
                     {s.schedule_name}
                 </td>
-                <td className="px-4 py-2 text-right text-sky-400/60 text-sm">{s.planned}</td>
+                <td className="px-4 py-2 text-right text-sky-400/60 text-sm">{fmtAmount(s.planned)}</td>
                 <td className="px-4 py-2 text-right text-slate-500 text-sm">—</td>
                 <td className="px-4 py-2 text-right text-slate-500 text-sm">—</td>
                 <td className="px-4 py-2 text-right text-slate-500 text-sm">—</td>
@@ -369,26 +376,26 @@ function MonthlyPlanView() {
                     </td>
                     <td className="px-4 py-3 text-right text-sky-400">
                         {parseFloat(parent.planned) !== 0 ? (
-                            <Link to="/schedules" className="hover:underline">{parent.planned}</Link>
-                        ) : parent.planned}
+                            <Link to="/schedules" className="hover:underline">{fmtAmount(parent.planned)}</Link>
+                        ) : fmtAmount(parent.planned)}
                     </td>
                     <td className="px-4 py-3 text-right text-teal-400">
                         {parseFloat(parent.actual) !== 0 ? (
                             <Link to={`/transactions?category_id=${parent.category_id}&status=cleared`} className="hover:underline">
-                                {parent.actual}
+                                {fmtAmount(parent.actual)}
                             </Link>
-                        ) : parent.actual}
+                        ) : fmtAmount(parent.actual)}
                     </td>
                     <td
                         className="px-4 py-3 text-right font-medium"
                         style={remainingStyle(parent.remaining)}
                     >
-                        {parent.remaining}
+                        {fmtAmount(parent.remaining)}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">
                         {parseFloat(parent.pending) !== 0 ? (
                             <Link to={`/transactions?category_id=${parent.category_id}&status=pending`} className="hover:underline cursor-pointer">
-                                {parent.pending}
+                                {fmtAmount(parent.pending)}
                             </Link>
                         ) : parent.pending}
                     </td>
@@ -432,26 +439,26 @@ function MonthlyPlanView() {
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
                                     {parseFloat(child.planned) !== 0 ? (
-                                        <Link to="/schedules" className="hover:underline">{child.planned}</Link>
-                                    ) : child.planned}
+                                        <Link to="/schedules" className="hover:underline">{fmtAmount(child.planned)}</Link>
+                                    ) : fmtAmount(child.planned)}
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">
                                     {parseFloat(child.actual) !== 0 ? (
                                         <Link to={`/transactions?category_id=${child.category_id}&status=cleared`} className="hover:underline">
-                                            {child.actual}
+                                            {fmtAmount(child.actual)}
                                         </Link>
-                                    ) : child.actual}
+                                    ) : fmtAmount(child.actual)}
                                 </td>
                                 <td
                                     className="px-4 py-2.5 text-right text-sm"
                                     style={remainingStyle(child.remaining)}
                                 >
-                                    {child.remaining}
+                                    {fmtAmount(child.remaining)}
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-slate-400 text-sm">
                                     {parseFloat(child.pending) !== 0 ? (
                                         <Link to={`/transactions?category_id=${child.category_id}&status=pending`} className="hover:underline cursor-pointer">
-                                            {child.pending}
+                                            {fmtAmount(child.pending)}
                                         </Link>
                                     ) : child.pending}
                                 </td>
@@ -552,7 +559,7 @@ function MonthlyPlanView() {
                                         const subActual = allSectionRows.reduce((s, r) => s + parseFloat(r.actual), 0)
                                         const subRemaining = subPlanned - subActual
                                         const subPending = allSectionRows.reduce((s, r) => s + parseFloat(r.pending), 0)
-                                        const fmt2 = (v: number) => v === 0 ? '—' : v.toFixed(2)
+                                        const fmt2 = (v: number) => v === 0 ? '—' : fmtCurrency(v)
 
                                         return (
                                             <React.Fragment key={sectionGroup}>
@@ -599,15 +606,15 @@ function MonthlyPlanView() {
                                 <tfoot>
                                     <tr className="border-t-2 border-ocean-600 bg-ocean-950">
                                         <td className="px-4 py-3 text-slate-100 font-bold">Total</td>
-                                        <td className="px-4 py-3 text-right text-sky-400 font-bold">{totals.planned}</td>
-                                        <td className="px-4 py-3 text-right text-teal-400 font-bold">{totals.actual}</td>
+                                        <td className="px-4 py-3 text-right text-sky-400 font-bold">{fmtAmount(totals.planned)}</td>
+                                        <td className="px-4 py-3 text-right text-teal-400 font-bold">{fmtAmount(totals.actual)}</td>
                                         <td
                                             className="px-4 py-3 text-right font-bold"
                                             style={remainingStyle(totals.remaining)}
                                         >
-                                            {totals.remaining}
+                                            {fmtAmount(totals.remaining)}
                                         </td>
-                                        <td className="px-4 py-3 text-right text-slate-400 font-bold">{totals.pending}</td>
+                                        <td className="px-4 py-3 text-right text-slate-400 font-bold">{fmtAmount(totals.pending)}</td>
                                     </tr>
                                 </tfoot>
                             )}
@@ -631,7 +638,7 @@ function MonthlyPlanView() {
                                 const toName = catNameMap.get(r.to_category_id) ?? r.to_category_id
                                 return (
                                     <li key={r.id} className="text-sm text-slate-300 bg-ocean-800 border border-ocean-700 rounded-lg px-4 py-2.5">
-                                        <span className="text-sky-400 font-medium">{r.amount}</span>
+                                        <span className="text-sky-400 font-medium">{fmtAmount(r.amount)}</span>
                                         {' moved from '}
                                         <span className="text-slate-100">{fromName}</span>
                                         {' to '}

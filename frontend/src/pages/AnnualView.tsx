@@ -34,6 +34,7 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { annualPlanCache } from '../lib/annualPlanCache'
+import { fmtCurrency, fmtAmount } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 import { getApiBaseUrl } from '../lib/api'
 
@@ -80,17 +81,14 @@ export type AnnualPlan = {
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-// Zero amounts render as "—" to avoid a wall of "0.00" cells.
-function fmt(amount: string): string {
-    return parseFloat(amount) === 0 ? '—' : amount
-}
+// Alias fmtAmount as fmt for shorter usage in this file.
+const fmt = fmtAmount
 
-// Non-zero planned amounts render as /schedules links.
-// TODO: update href to /schedules?category_id=xxx once schedule category
-//       filtering is added — for now all planned amounts link to the full list.
+// Non-zero planned amounts render as /schedules links with comma formatting.
 function fmtPlanned(amount: string): React.ReactNode {
-    if (parseFloat(amount) === 0) return '—'
-    return <Link to="/schedules" className="hover:underline">{amount}</Link>
+    const n = parseFloat(amount)
+    if (n === 0) return '—'
+    return <Link to="/schedules" className="hover:underline">{fmtCurrency(n)}</Link>
 }
 
 // Sum an array of decimal strings, return a 2-decimal-place string.
@@ -214,7 +212,7 @@ function AnnualView() {
                 {!ob ? (
                     <span className="text-slate-500 italic">Set opening balance</span>
                 ) : (
-                    <span className={amount >= 0 ? 'text-teal-400' : 'text-danger'}>{amount.toFixed(2)}</span>
+                    <span className={amount >= 0 ? 'text-teal-400' : 'text-danger'}>{fmtCurrency(amount)}</span>
                 )}
                 <span className="text-slate-600 opacity-0 group-hover/ob:opacity-100 transition-opacity text-xs">✏️</span>
             </button>
@@ -511,11 +509,11 @@ function AnnualView() {
                                                         <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
                                                         {closingBalances.map((bal, i) => (
                                                             <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
-                                                                {bal.toFixed(2)}
+                                                                {fmtCurrency(bal)}
                                                             </td>
                                                         ))}
                                                         <td className={`px-4 py-2 text-right text-sm font-medium ${closingBalances[11] >= 0 ? 'text-teal-400' : 'text-danger'}`}>
-                                                            {closingBalances[11].toFixed(2)} → {year + 1}
+                                                            {fmtCurrency(closingBalances[11])} → {year + 1}
                                                         </td>
                                                     </tr>
                                                 )}
@@ -589,11 +587,11 @@ function AnnualView() {
                                                         <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
                                                         {flatClosing.map((bal, i) => (
                                                             <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
-                                                                {bal.toFixed(2)}
+                                                                {fmtCurrency(bal)}
                                                             </td>
                                                         ))}
                                                         <td className={`px-4 py-2 text-right text-sm font-medium ${flatClosing[11] >= 0 ? 'text-teal-400' : 'text-danger'}`}>
-                                                            {flatClosing[11].toFixed(2)} → {year + 1}
+                                                            {fmtCurrency(flatClosing[11])} → {year + 1}
                                                         </td>
                                                     </tr>
                                                 )}

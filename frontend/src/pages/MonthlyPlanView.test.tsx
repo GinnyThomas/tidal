@@ -130,6 +130,18 @@ describe('MonthlyPlanView', () => {
         expect(screen.getAllByText('150.00').length).toBeGreaterThanOrEqual(1)
     })
 
+    it('formats amounts >= 1000 with comma separators', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_name: 'Rent', planned: '1200.00', actual: '1200.00', remaining: '0.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Rent')
+        // 1200.00 should be formatted as "1,200.00"
+        expect(screen.getAllByText('1,200.00').length).toBeGreaterThanOrEqual(1)
+    })
+
     it('indents child categories under their parent', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
             data: {
