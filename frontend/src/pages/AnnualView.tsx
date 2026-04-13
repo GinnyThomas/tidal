@@ -107,6 +107,9 @@ function AnnualView() {
     const [annualPlan, setAnnualPlan] = useState<AnnualPlan | null>(null)
     const [loading, setLoading] = useState(true)
     const [showCashFlow, setShowCashFlow] = useState(false)
+    // Editing state for opening balance inline edit
+    const [editingOBGroup, setEditingOBGroup] = useState<string | null>(null)
+    const [editingOBValue, setEditingOBValue] = useState('')
     const [error, setError] = useState<string | null>(null)
     // Budget group filter — '' means no filter
     const [filterGroup, setFilterGroup] = useState('')
@@ -145,6 +148,78 @@ function AnnualView() {
             })
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [year, filterGroup])
+
+    // Save opening balance — creates or updates
+    const saveOpeningBalance = async (groupName: string) => {
+        const token = localStorage.getItem('access_token')
+        const headers = { Authorization: `Bearer ${token}` }
+        const ob = annualPlan?.opening_balances?.find(b => b.group === groupName)
+        const currency = groupName === 'España' ? 'EUR' : 'GBP'
+
+        try {
+            if (ob) {
+                await axios.put(`${getApiBaseUrl()}/api/v1/opening-balances/${ob.id}`,
+                    { opening_balance: editingOBValue }, { headers })
+            } else {
+                await axios.post(`${getApiBaseUrl()}/api/v1/opening-balances`,
+                    { group: groupName, year, opening_balance: editingOBValue, currency }, { headers })
+            }
+            // Invalidate cache and re-fetch
+            annualPlanCache.clear()
+            setEditingOBGroup(null)
+            // Trigger re-fetch by toggling a dep — simplest: just re-run the effect
+            setLoading(true)
+            const params: Record<string, string> = {}
+            if (filterGroup) params.group = filterGroup
+            const res = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${year}`, { headers, params })
+            annualPlanCache.set(`${year}:${filterGroup}`, res.data)
+            setAnnualPlan(res.data)
+            setLoading(false)
+        } catch {
+            setEditingOBGroup(null)
+        }
+    }
+
+    // Renders the opening balance cell content — editable inline
+    const renderOBCell = (groupName: string) => {
+        const ob = annualPlan?.opening_balances?.find(b => b.group === groupName)
+        const amount = ob ? parseFloat(ob.opening_balance) : 0
+
+        if (editingOBGroup === groupName) {
+            return (
+                <input
+                    type="number"
+                    step="0.01"
+                    value={editingOBValue}
+                    onChange={(e) => setEditingOBValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveOpeningBalance(groupName)
+                        if (e.key === 'Escape') setEditingOBGroup(null)
+                    }}
+                    onBlur={() => saveOpeningBalance(groupName)}
+                    className="input-base text-sm text-right w-32 px-2 py-0.5"
+                    autoFocus
+                />
+            )
+        }
+
+        return (
+            <button
+                onClick={() => {
+                    setEditingOBGroup(groupName)
+                    setEditingOBValue(ob ? ob.opening_balance : '')
+                }}
+                className="group/ob inline-flex items-center gap-1 cursor-pointer hover:text-sky-400 transition-colors"
+            >
+                {!ob ? (
+                    <span className="text-slate-500 italic">Set opening balance</span>
+                ) : (
+                    <span className={amount >= 0 ? 'text-teal-400' : 'text-danger'}>{amount.toFixed(2)}</span>
+                )}
+                <span className="text-slate-600 opacity-0 group-hover/ob:opacity-100 transition-opacity text-xs">✏️</span>
+            </button>
+        )
+    }
 
     // --- Early returns ---
 
@@ -297,18 +372,15 @@ function AnnualView() {
 
                 {/* Budget group filter */}
                 <div className="flex justify-end items-center gap-4 mb-4">
-                    {/* Only show cash flow toggle when group sections are active */}
-                    {showAnnualGroupSections && (
-                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={showCashFlow}
-                                onChange={(e) => setShowCashFlow(e.target.checked)}
-                                className="accent-sky-500"
-                            />
-                            Show cash flow
-                        </label>
-                    )}
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={showCashFlow}
+                            onChange={(e) => setShowCashFlow(e.target.checked)}
+                            className="accent-sky-500"
+                        />
+                        Show cash flow
+                    </label>
                     <div>
                         <label htmlFor="filterGroup" className="label-base">Budget group</label>
                         <select
@@ -388,16 +460,12 @@ function AnnualView() {
                                                     </td>
                                                 </tr>
 
-                                                {/* Cash flow: Opening Balance row */}
+                                                {/* Cash flow: Opening Balance row — clickable to edit */}
                                                 {showCashFlow && (
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
                                                         <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
-                                                        <td colSpan={12} className="px-3 py-2 text-right text-slate-400 text-sm">
-                                                            {!ob ? (
-                                                                <span className="text-slate-500 italic">Not set</span>
-                                                            ) : (
-                                                                <span className={openingAmount >= 0 ? 'text-teal-400' : 'text-danger'}>{openingAmount.toFixed(2)}</span>
-                                                            )}
+                                                        <td colSpan={12} className="px-3 py-2 text-right text-sm">
+                                                            {renderOBCell(sectionGroup)}
                                                         </td>
                                                         <td className="px-4 py-2"></td>
                                                     </tr>
@@ -455,33 +523,83 @@ function AnnualView() {
                                         )
                                     })
                                 ) : (
-                                    parentCats.map(([parentId, parentData]) => {
-                                        const children = childrenOf(parentId)
-                                        const parentTotal = sumAmounts(parentData.amounts)
+                                    (() => {
+                                        // Compute cash flow for the flat view (single group or filtered)
+                                        const flatGroup = filterGroup || 'General'
+                                        const flatOb = annualPlan?.opening_balances?.find(b => b.group === flatGroup)
+                                        const flatOpening = flatOb ? parseFloat(flatOb.opening_balance) : 0
+                                        const allFlatRows = activeCats
+                                        const flatMonthlyIncome = Array.from({ length: 12 }, (_, i) =>
+                                            allFlatRows.filter(([, d]) => d.isIncome).reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                        )
+                                        const flatMonthlyExpense = Array.from({ length: 12 }, (_, i) =>
+                                            allFlatRows.filter(([, d]) => !d.isIncome).reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                        )
+                                        const flatClosing: number[] = []
+                                        let flatRunning = flatOpening
+                                        for (let i = 0; i < 12; i++) {
+                                            flatRunning = flatRunning + flatMonthlyIncome[i] - flatMonthlyExpense[i]
+                                            flatClosing.push(flatRunning)
+                                        }
+
                                         return (
-                                            <React.Fragment key={parentId}>
-                                                <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
-                                                    <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
-                                                    {parentData.amounts.map((a, i) => (
-                                                        <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
-                                                    ))}
-                                                    <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
-                                                </tr>
-                                                {children.map(([childId, childData]) => {
-                                                    const childTotal = sumAmounts(childData.amounts)
+                                            <>
+                                                {/* Cash flow: Opening Balance — clickable */}
+                                                {showCashFlow && (
+                                                    <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
+                                                        <td colSpan={12} className="px-3 py-2 text-right text-sm">
+                                                            {renderOBCell(flatGroup)}
+                                                        </td>
+                                                        <td className="px-4 py-2"></td>
+                                                    </tr>
+                                                )}
+
+                                                {parentCats.map(([parentId, parentData]) => {
+                                                    const children = childrenOf(parentId)
+                                                    const parentTotal = sumAmounts(parentData.amounts)
                                                     return (
-                                                        <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
-                                                            <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
-                                                            {childData.amounts.map((a, i) => (
-                                                                <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
-                                                            ))}
-                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
-                                                        </tr>
+                                                        <React.Fragment key={parentId}>
+                                                            <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
+                                                                <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
+                                                                {parentData.amounts.map((a, i) => (
+                                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                                ))}
+                                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                            </tr>
+                                                            {children.map(([childId, childData]) => {
+                                                                const childTotal = sumAmounts(childData.amounts)
+                                                                return (
+                                                                    <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
+                                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
+                                                                        {childData.amounts.map((a, i) => (
+                                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                                        ))}
+                                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                                    </tr>
+                                                                )
+                                                            })}
+                                                        </React.Fragment>
                                                     )
                                                 })}
-                                            </React.Fragment>
+
+                                                {/* Cash flow: Closing Balance */}
+                                                {showCashFlow && (
+                                                    <tr className="bg-ocean-900/40 border-b border-ocean-600">
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
+                                                        {flatClosing.map((bal, i) => (
+                                                            <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
+                                                                {bal.toFixed(2)}
+                                                            </td>
+                                                        ))}
+                                                        <td className={`px-4 py-2 text-right text-sm font-medium ${flatClosing[11] >= 0 ? 'text-teal-400' : 'text-danger'}`}>
+                                                            {flatClosing[11].toFixed(2)} → {year + 1}
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </>
                                         )
-                                    })
+                                    })()
                                 )}
                             </tbody>
 
