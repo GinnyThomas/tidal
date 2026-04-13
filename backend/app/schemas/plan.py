@@ -75,6 +75,8 @@ class PlanRow(BaseModel):
     # None if the category has no budget or the budget has no group.
     # Used by the frontend to display group section headers.
     group: Optional[str] = None
+    # True if the category represents income (salary, freelance, etc.)
+    is_income: bool = False
 
     @field_serializer("planned", "actual", "remaining", "pending")
     def serialize_amount(self, value: Decimal) -> str:

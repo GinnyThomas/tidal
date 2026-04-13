@@ -399,6 +399,32 @@ def test_schedule_group_appears_in_plan_row(test_client) -> None:
     assert row["group"] == "UK"
 
 
+def test_income_category_appears_in_plan_with_is_income(test_client) -> None:
+    """
+    Categories marked as is_income should have is_income=True in the PlanRow.
+    The Salary category (seeded as is_income=True) should reflect this.
+    """
+    token, account_id, _ = _setup(test_client)
+
+    # Get the Salary category (seeded as income)
+    categories = test_client.get(
+        "/api/v1/categories", headers=_auth_headers(token),
+    ).json()
+    salary_cat = next((c for c in categories if c["name"] == "Salary"), None)
+    assert salary_cat is not None
+    assert salary_cat["is_income"] is True
+
+    # Create a schedule for the salary category
+    _create_schedule(
+        test_client, token, account_id, salary_cat["id"],
+        name="Monthly Salary", amount="3000.00",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    row = next(r for r in response.json()["rows"] if r["category_id"] == salary_cat["id"])
+    assert row["is_income"] is True
+
+
 def test_plan_schedule_excluded_after_end_date(test_client) -> None:
     """
     A schedule whose end_date falls before the first day of the target month

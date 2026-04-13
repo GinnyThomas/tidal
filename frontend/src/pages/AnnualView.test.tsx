@@ -32,6 +32,7 @@ const makePlanRow = (overrides: object = {}) => ({
     remaining: '100.00',
     pending: '0.00',
     group: null,
+    is_income: false,
     ...overrides,
 })
 

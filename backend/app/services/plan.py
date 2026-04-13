@@ -504,6 +504,7 @@ def get_monthly_plan(
                 category_id=cat_id,
                 category_name=cat.name,
                 parent_category_id=cat.parent_category_id,
+                is_income=cat.is_income,
                 planned=planned,
                 actual=actual,
                 remaining=remaining,

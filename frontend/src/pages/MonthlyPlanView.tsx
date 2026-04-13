@@ -47,6 +47,7 @@ type PlanRow = {
     pending: string
     schedules: ScheduleRow[]
     group: string | null
+    is_income: boolean
 }
 
 type MonthlyPlan = {

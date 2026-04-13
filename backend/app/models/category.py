@@ -87,6 +87,13 @@ class Category(Base):
     # is_system=False: created by the user, can be freely deleted.
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # --- Income flag ---
+    # True for categories that represent income (salary, freelance, etc.).
+    # Used by the cash flow feature to distinguish money in from money out.
+    is_income: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+
     # --- Visibility ---
     #
     # is_hidden=True: category is hidden from the default list view.

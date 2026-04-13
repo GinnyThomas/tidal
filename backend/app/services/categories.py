@@ -47,12 +47,14 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
     def cat(
             name: str,
             parent_category_id: uuid.UUID | None = None,
+            is_income: bool = False,
     ) -> Category:
         return Category(
-            id=uuid.uuid4(),        # ← generate explicitly, don't rely on default
+            id=uuid.uuid4(),
             user_id=user_id,
             name=name,
             is_system=True,
+            is_income=is_income,
             parent_category_id=parent_category_id,
         )
 
@@ -73,7 +75,7 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
     savings = cat("Savings")
     gifts = cat("Gifts & Celebrations")
     travel = cat("Travel")
-    income = cat("Income")
+    income = cat("Income", is_income=True)
 
     all_categories = [
         # Top-level parents
@@ -113,10 +115,10 @@ def seed_default_categories(user_id: uuid.UUID, db: Session) -> None:
         cat("Bank Fees",        banking.id),
         cat("Debt Payments",    banking.id),
 
-        # Income children
-        cat("Salary",           income.id),
-        cat("Freelance",        income.id),
-        cat("Reimbursements",   income.id),
+        # Income children — is_income=True for cash flow calculations
+        cat("Salary",           income.id, is_income=True),
+        cat("Freelance",        income.id, is_income=True),
+        cat("Reimbursements",   income.id, is_income=True),
     ]
 
     db.add_all(all_categories)

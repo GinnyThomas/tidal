@@ -48,6 +48,7 @@ type PlanRow = {
     remaining: string
     pending: string
     group: string | null
+    is_income: boolean
 }
 
 type MonthlyPlan = {
@@ -173,7 +174,7 @@ function AnnualView() {
     // We only show "planned" — the annual view is forward-looking budget planning.
     // Actual and pending data is available on the monthly view.
 
-    type CatData = { name: string; parentId: string | null; amounts: string[]; group: string | null }
+    type CatData = { name: string; parentId: string | null; amounts: string[]; group: string | null; isIncome: boolean }
     const catMap = new Map<string, CatData>()
 
     annualPlan?.months.forEach((monthPlan, monthIdx) => {
@@ -184,6 +185,7 @@ function AnnualView() {
                     parentId: row.parent_category_id,
                     amounts: Array(12).fill('0.00'),
                     group: row.group ?? null,
+                    isIncome: row.is_income ?? false,
                 })
             }
             // Overwrite the placeholder with the actual planned amount.
@@ -353,18 +355,16 @@ function AnnualView() {
                                         const sectionTotal = sumAmounts(sectionMonthTotals)
 
                                         // Cash flow: opening balance → closing balance per month
-                                        const INCOME_KEYWORDS = ['salary', 'freelance', 'income', 'reimbursement']
-                                        const isIncome = (name: string) => INCOME_KEYWORDS.some(k => name.toLowerCase().includes(k))
                                         const ob = annualPlan?.opening_balances?.find(b => b.group === sectionGroup)
                                         const openingAmount = ob ? parseFloat(ob.opening_balance) : 0
 
-                                        // Compute monthly income and expense totals for this group
+                                        // Compute monthly income and expense totals using is_income flag
                                         const monthlyIncome = Array.from({ length: 12 }, (_, i) =>
-                                            allRows.filter(([, d]) => isIncome(d.name))
+                                            allRows.filter(([, d]) => d.isIncome)
                                                 .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
                                         )
                                         const monthlyExpense = Array.from({ length: 12 }, (_, i) =>
-                                            allRows.filter(([, d]) => !isIncome(d.name))
+                                            allRows.filter(([, d]) => !d.isIncome)
                                                 .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
                                         )
 
