@@ -12,9 +12,11 @@
 //   defaultYear     — the year to default to when creating (from parent's year selector)
 
 import axios from 'axios'
+import { sortCategoriesByName } from '../lib/categories'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { CURRENCIES } from '../lib/currencies'
 
 type Category = { id: string; name: string }
 
@@ -50,9 +52,10 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
         axios.get(`${getApiBaseUrl()}/api/v1/categories`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(res => {
-            setCategories(res.data)
-            if (!isEditMode && res.data.length > 0 && !categoryId) {
-                setCategoryId(res.data[0].id)
+            const sorted = sortCategoriesByName(res.data as Category[])
+            setCategories(sorted)
+            if (!isEditMode && sorted.length > 0 && !categoryId) {
+                setCategoryId(sorted[0].id)
             }
         }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,14 +151,17 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
 
                 <div>
                     <label htmlFor="budgetCurrency" className="label-base">Currency</label>
-                    <input
+                    <select
                         id="budgetCurrency"
-                        type="text"
-                        maxLength={3}
                         value={currency}
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
-                    />
+                    >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 </div>
 
                 <div>

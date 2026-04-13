@@ -15,6 +15,7 @@ import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { CURRENCIES } from '../lib/currencies'
 
 // The subset of Account fields needed to pre-populate the form in edit mode.
 // Matches the AccountResponse shape returned by GET /api/v1/accounts.
@@ -124,13 +125,17 @@ function AddAccountForm({ onAccountAdded, editingAccount, onAccountUpdated }: Pr
 
                 <div>
                     <label htmlFor="currency" className="label-base">Currency</label>
-                    <input
+                    <select
                         id="currency"
-                        type="text"
                         value={currency}
                         onChange={(e) => setCurrency(e.target.value)}
                         className="input-base"
-                    />
+                    >
+                        {currency && !(CURRENCIES as readonly string[]).includes(currency) && (
+                            <option value={currency}>{currency}</option>
+                        )}
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                 </div>
 
                 <div>
