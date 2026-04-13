@@ -26,6 +26,7 @@ type Category = {
     icon: string | null
     is_system: boolean
     is_hidden: boolean
+    is_income: boolean
     created_at: string
 }
 
@@ -220,6 +221,9 @@ function CategoriesPage() {
                                             >
                                                 {parent.name}
                                             </Link>
+                                            {parent.is_income && (
+                                                <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-400">income</span>
+                                            )}
                                         </span>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -254,6 +258,9 @@ function CategoriesPage() {
                                                         >
                                                             {child.name}
                                                         </Link>
+                                                        {child.is_income && (
+                                                            <span className="ml-1 text-xs px-1 py-0.5 rounded bg-teal-500/20 text-teal-400">income</span>
+                                                        )}
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button

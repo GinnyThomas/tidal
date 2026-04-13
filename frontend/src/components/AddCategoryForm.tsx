@@ -49,6 +49,7 @@ type EditingCategory = {
     parent_category_id: string | null
     colour: string | null
     icon: string | null
+    is_income: boolean
 }
 
 type Props = {
@@ -67,6 +68,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
     // Default colour is sky-500 (#0ea5e9) — ties the form to our ocean palette.
     const [colour, setColour] = useState(editingCategory?.colour ?? '#0ea5e9')
     const [icon, setIcon] = useState(editingCategory?.icon ?? '')
+    const [isIncome, setIsIncome] = useState(editingCategory?.is_income ?? false)
     const [error, setError] = useState<string | null>(null)
     // Tracks in-flight submission — disables the button to prevent double-submit.
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -82,6 +84,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
             parent_category_id: parentId || null,
             colour: colour || null,
             icon: icon || null,
+            is_income: isIncome,
         }
         const config = { headers: { Authorization: `Bearer ${token}` } }
 
@@ -191,6 +194,19 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                             </button>
                         ))}
                     </div>
+                </div>
+
+                {/* Income category toggle */}
+                <div>
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={isIncome}
+                            onChange={(e) => setIsIncome(e.target.checked)}
+                            className="accent-sky-500"
+                        />
+                        Income category (adds to cash flow balance)
+                    </label>
                 </div>
 
                 {error && (
