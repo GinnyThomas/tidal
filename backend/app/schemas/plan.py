@@ -22,7 +22,9 @@ import uuid
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+from app.schemas.opening_balance import OpeningBalanceResponse
 
 
 class ScheduleRow(BaseModel):
@@ -110,9 +112,11 @@ class AnnualPlan(BaseModel):
     """
     Full response from GET /api/v1/plan/{year}.
 
-    year   — the calendar year.
-    months — one MonthlyPlan per month, in order January (1) through December (12).
+    year              — the calendar year.
+    months            — one MonthlyPlan per month, January through December.
+    opening_balances  — group opening balances for the year (for cash flow view).
     """
 
     year: int
     months: list[MonthlyPlan]
+    opening_balances: list[OpeningBalanceResponse] = Field(default_factory=list)

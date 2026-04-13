@@ -60,9 +60,18 @@ type MonthlyPlan = {
     total_pending: string
 }
 
+type OpeningBalance = {
+    id: string
+    group: string
+    year: number
+    opening_balance: string
+    currency: string
+}
+
 export type AnnualPlan = {
     year: number
     months: MonthlyPlan[]
+    opening_balances: OpeningBalance[]
 }
 
 // --- Display helpers ---
@@ -96,6 +105,7 @@ function AnnualView() {
     const [year, setYear] = useState(new Date().getFullYear())
     const [annualPlan, setAnnualPlan] = useState<AnnualPlan | null>(null)
     const [loading, setLoading] = useState(true)
+    const [showCashFlow, setShowCashFlow] = useState(false)
     const [error, setError] = useState<string | null>(null)
     // Budget group filter — '' means no filter
     const [filterGroup, setFilterGroup] = useState('')
@@ -284,7 +294,16 @@ function AnnualView() {
                 </div>
 
                 {/* Budget group filter */}
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-end items-center gap-4 mb-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={showCashFlow}
+                            onChange={(e) => setShowCashFlow(e.target.checked)}
+                            className="accent-sky-500"
+                        />
+                        Show cash flow
+                    </label>
                     <div>
                         <label htmlFor="filterGroup" className="label-base">Budget group</label>
                         <select
@@ -333,6 +352,30 @@ function AnnualView() {
                                         )
                                         const sectionTotal = sumAmounts(sectionMonthTotals)
 
+                                        // Cash flow: opening balance → closing balance per month
+                                        const INCOME_KEYWORDS = ['salary', 'freelance', 'income', 'reimbursement']
+                                        const isIncome = (name: string) => INCOME_KEYWORDS.some(k => name.toLowerCase().includes(k))
+                                        const ob = annualPlan?.opening_balances?.find(b => b.group === sectionGroup)
+                                        const openingAmount = ob ? parseFloat(ob.opening_balance) : 0
+
+                                        // Compute monthly income and expense totals for this group
+                                        const monthlyIncome = Array.from({ length: 12 }, (_, i) =>
+                                            allRows.filter(([, d]) => isIncome(d.name))
+                                                .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                        )
+                                        const monthlyExpense = Array.from({ length: 12 }, (_, i) =>
+                                            allRows.filter(([, d]) => !isIncome(d.name))
+                                                .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                        )
+
+                                        // Closing balance: running balance across months
+                                        const closingBalances: number[] = []
+                                        let running = openingAmount
+                                        for (let i = 0; i < 12; i++) {
+                                            running = running + monthlyIncome[i] - monthlyExpense[i]
+                                            closingBalances.push(running)
+                                        }
+
                                         return (
                                             <React.Fragment key={sectionGroup}>
                                                 {/* Group header */}
@@ -341,6 +384,21 @@ function AnnualView() {
                                                         ── {sectionGroup} ──
                                                     </td>
                                                 </tr>
+
+                                                {/* Cash flow: Opening Balance row */}
+                                                {showCashFlow && (
+                                                    <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
+                                                        <td colSpan={12} className="px-3 py-2 text-right text-slate-400 text-sm">
+                                                            {openingAmount === 0 ? (
+                                                                <span className="text-slate-500 italic">Not set</span>
+                                                            ) : (
+                                                                <span className={openingAmount >= 0 ? 'text-teal-400' : 'text-danger'}>{openingAmount.toFixed(2)}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2"></td>
+                                                    </tr>
+                                                )}
                                                 {entries.map(({ parent: [parentId, parentData], children }) => {
                                                     const parentTotal = sumAmounts(parentData.amounts)
                                                     return (
@@ -375,6 +433,21 @@ function AnnualView() {
                                                     ))}
                                                     <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">{fmt(sectionTotal)}</td>
                                                 </tr>
+
+                                                {/* Cash flow: Closing Balance row */}
+                                                {showCashFlow && (
+                                                    <tr className="bg-ocean-900/40 border-b border-ocean-600">
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
+                                                        {closingBalances.map((bal, i) => (
+                                                            <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
+                                                                {bal.toFixed(2)}
+                                                            </td>
+                                                        ))}
+                                                        <td className={`px-4 py-2 text-right text-sm font-medium ${closingBalances[11] >= 0 ? 'text-teal-400' : 'text-danger'}`}>
+                                                            {closingBalances[11].toFixed(2)} → {year + 1}
+                                                        </td>
+                                                    </tr>
+                                                )}
                                             </React.Fragment>
                                         )
                                     })
