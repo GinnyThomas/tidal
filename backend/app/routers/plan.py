@@ -81,10 +81,12 @@ def get_annual_plan(
         for m in range(1, 13)
     ]
     # Fetch opening balances for the cash flow view
-    balances = (
-        db.query(GroupOpeningBalance)
-        .filter(GroupOpeningBalance.user_id == current_user.id, GroupOpeningBalance.year == year)
-        .all()
+    balances_query = db.query(GroupOpeningBalance).filter(
+        GroupOpeningBalance.user_id == current_user.id,
+        GroupOpeningBalance.year == year,
     )
+    if group is not None:
+        balances_query = balances_query.filter(GroupOpeningBalance.group == group)
+    balances = balances_query.all()
 
     return AnnualPlan(year=year, months=months, opening_balances=balances)

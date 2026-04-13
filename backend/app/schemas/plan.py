@@ -22,7 +22,7 @@ import uuid
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer
 
 from app.schemas.opening_balance import OpeningBalanceResponse
 

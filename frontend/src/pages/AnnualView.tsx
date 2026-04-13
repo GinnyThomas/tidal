@@ -297,15 +297,18 @@ function AnnualView() {
 
                 {/* Budget group filter */}
                 <div className="flex justify-end items-center gap-4 mb-4">
-                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={showCashFlow}
-                            onChange={(e) => setShowCashFlow(e.target.checked)}
-                            className="accent-sky-500"
-                        />
-                        Show cash flow
-                    </label>
+                    {/* Only show cash flow toggle when group sections are active */}
+                    {showAnnualGroupSections && (
+                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showCashFlow}
+                                onChange={(e) => setShowCashFlow(e.target.checked)}
+                                className="accent-sky-500"
+                            />
+                            Show cash flow
+                        </label>
+                    )}
                     <div>
                         <label htmlFor="filterGroup" className="label-base">Budget group</label>
                         <select
@@ -390,7 +393,7 @@ function AnnualView() {
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
                                                         <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
                                                         <td colSpan={12} className="px-3 py-2 text-right text-slate-400 text-sm">
-                                                            {openingAmount === 0 ? (
+                                                            {!ob ? (
                                                                 <span className="text-slate-500 italic">Not set</span>
                                                             ) : (
                                                                 <span className={openingAmount >= 0 ? 'text-teal-400' : 'text-danger'}>{openingAmount.toFixed(2)}</span>
