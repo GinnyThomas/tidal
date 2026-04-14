@@ -75,10 +75,26 @@ class Schedule(Base):
     )
 
     # --- Category link ---
-    category_id: Mapped[uuid.UUID] = mapped_column(
+    # Nullable for transfer schedules which don't need a category.
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("categories.id"),
-        nullable=False,
+        nullable=True,
+    )
+
+    # --- Schedule type ---
+    # "regular" for normal schedules, "transfer" for account-to-account transfers.
+    schedule_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="regular", server_default="regular",
+    )
+
+    # --- Transfer accounts ---
+    # Only used when schedule_type = "transfer". From/to account for the transfer.
+    from_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("accounts.id"), nullable=True,
+    )
+    to_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("accounts.id"), nullable=True,
     )
 
     # --- Descriptive fields ---

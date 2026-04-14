@@ -412,3 +412,21 @@ def test_list_budgets_filtered_by_group(test_client) -> None:
     body = response.json()
     assert len(body) == 1
     assert body[0]["group"] == "UK"
+
+
+def test_budget_with_notes(test_client) -> None:
+    """Budgets should support an optional notes field."""
+    token, _, category_id = _setup(test_client)
+    budget = _create_budget(
+        test_client, token, category_id,
+        notes="Variable spending for groceries",
+    )
+    assert budget["notes"] == "Variable spending for groceries"
+
+    # Update notes
+    resp = test_client.put(
+        f"/api/v1/budgets/{budget['id']}",
+        json={"notes": "Updated note"},
+        headers=_auth_headers(token),
+    )
+    assert resp.json()["notes"] == "Updated note"

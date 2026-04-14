@@ -130,6 +130,7 @@ def create_budget(
         default_amount=data.default_amount,
         currency=data.currency,
         group=data.group,
+        notes=data.notes,
     )
     db.add(budget)
     db.commit()

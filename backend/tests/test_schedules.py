@@ -428,3 +428,35 @@ def test_schedule_next_date_respects_end_date(test_client) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body["next_occurrence"] is None
+
+
+def test_create_transfer_schedule(test_client) -> None:
+    """
+    A transfer schedule should have schedule_type='transfer' with
+    from_account_id and to_account_id set, and no category required.
+    """
+    token = _register_and_login(test_client)
+    from_id = _create_account(test_client, token, name="From Acct")
+    to_id = _create_account(test_client, token, name="To Acct")
+
+    response = test_client.post(
+        "/api/v1/schedules",
+        json={
+            "name": "Monthly Savings Transfer",
+            "amount": "500.00",
+            "frequency": "monthly",
+            "start_date": "2026-01-01",
+            "account_id": from_id,
+            "schedule_type": "transfer",
+            "from_account_id": from_id,
+            "to_account_id": to_id,
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["schedule_type"] == "transfer"
+    assert body["from_account_id"] == from_id
+    assert body["to_account_id"] == to_id
+    assert body["category_id"] is None

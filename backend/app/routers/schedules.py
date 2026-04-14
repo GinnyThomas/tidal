@@ -144,6 +144,9 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "user_id": sched.user_id,
         "account_id": sched.account_id,
         "category_id": sched.category_id,
+        "schedule_type": sched.schedule_type,
+        "from_account_id": sched.from_account_id,
+        "to_account_id": sched.to_account_id,
         "name": sched.name,
         "payee": sched.payee,
         "amount": sched.amount,
@@ -159,8 +162,8 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "note": sched.note,
         "created_at": sched.created_at,
         "next_occurrence": get_next_occurrence(sched),
-        "category_name": category.name,
-        "category_icon": category.icon,
+        "category_name": category.name if category else None,
+        "category_icon": category.icon if category else None,
     }
 
 
@@ -186,13 +189,18 @@ def create_schedule(
     before inserting — prevents cross-user injection by guessing UUIDs.
     """
     _get_account_or_404(schedule_in.account_id, current_user.id, db)
-    # Capture the category so we can include its name/icon in the response.
-    category = _get_category_or_404(schedule_in.category_id, current_user.id, db)
+    # Category is optional for transfer schedules
+    category = None
+    if schedule_in.category_id is not None:
+        category = _get_category_or_404(schedule_in.category_id, current_user.id, db)
 
     schedule = Schedule(
         user_id=current_user.id,
         account_id=schedule_in.account_id,
         category_id=schedule_in.category_id,
+        schedule_type=schedule_in.schedule_type,
+        from_account_id=schedule_in.from_account_id,
+        to_account_id=schedule_in.to_account_id,
         name=schedule_in.name,
         payee=schedule_in.payee,
         amount=schedule_in.amount,
@@ -245,15 +253,13 @@ def list_schedules(
     schedules = query.all()
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
-    category_ids = {s.category_id for s in schedules}
-    cat_list = (
-        db.query(Category)
-        .filter(Category.id.in_(category_ids))
-        .all()
-    )
-    cat_map = {c.id: c for c in cat_list}
+    category_ids = {s.category_id for s in schedules if s.category_id is not None}
+    cat_map: dict = {}
+    if category_ids:
+        cat_list = db.query(Category).filter(Category.id.in_(category_ids)).all()
+        cat_map = {c.id: c for c in cat_list}
 
-    return [_build_sched_response(s, cat_map[s.category_id]) for s in schedules]
+    return [_build_sched_response(s, cat_map.get(s.category_id)) for s in schedules]
 
 
 @router.get(
@@ -271,7 +277,7 @@ def get_schedule(
     Returns 404 if not found, soft-deleted, or belongs to another user.
     """
     sched = _get_schedule_or_404(schedule_id, current_user.id, db)
-    category = db.query(Category).filter(Category.id == sched.category_id).first()
+    category = db.query(Category).filter(Category.id == sched.category_id).first() if sched.category_id else None
     return _build_sched_response(sched, category)
 
 
@@ -323,7 +329,7 @@ def update_schedule(
     db.commit()
     db.refresh(schedule)
     # Look up the (potentially updated) category for the response
-    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None
     return _build_sched_response(schedule, category)
 
 
@@ -354,7 +360,7 @@ def toggle_active(
     schedule.active = not schedule.active
     db.commit()
     db.refresh(schedule)
-    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None
     return _build_sched_response(schedule, category)
 
 

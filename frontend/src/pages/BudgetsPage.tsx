@@ -14,7 +14,7 @@
 //   - Overrides expand button shows BudgetOverrideForm inline
 
 import axios from 'axios'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddBudgetForm from '../components/AddBudgetForm'
 import BudgetOverrideForm from '../components/BudgetOverrideForm'
@@ -62,6 +62,7 @@ function BudgetsPage() {
     const [error, setError] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
+    const editFormRef = useRef<HTMLDivElement>(null)
     // Tracks which budget IDs have their overrides expanded
     const [expandedOverrides, setExpandedOverrides] = useState<Set<string>>(new Set())
     const [refreshKey, setRefreshKey] = useState(0)
@@ -186,6 +187,7 @@ function BudgetsPage() {
     const handleEdit = (budget: Budget) => {
         setShowForm(false)
         setEditingBudget(budget)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleDelete = async (budgetId: string) => {
@@ -294,7 +296,7 @@ function BudgetsPage() {
 
                 {/* Edit form */}
                 {editingBudget && (
-                    <div className="mb-6">
+                    <div ref={editFormRef} className="mb-6">
                         <AddBudgetForm
                             key={editingBudget.id}
                             onBudgetSaved={handleBudgetSaved}

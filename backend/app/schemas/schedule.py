@@ -44,7 +44,10 @@ class ScheduleCreate(BaseModel):
     """
 
     account_id: uuid.UUID
-    category_id: uuid.UUID
+    category_id: Optional[uuid.UUID] = None
+    schedule_type: str = Field(default="regular", max_length=20)
+    from_account_id: Optional[uuid.UUID] = None
+    to_account_id: Optional[uuid.UUID] = None
     name: str = Field(..., max_length=100)
     payee: Optional[str] = Field(default=None, max_length=100)
     amount: Decimal = Field(...)
@@ -82,7 +85,10 @@ class ScheduleResponse(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     account_id: uuid.UUID
-    category_id: uuid.UUID
+    category_id: Optional[uuid.UUID]
+    schedule_type: str
+    from_account_id: Optional[uuid.UUID]
+    to_account_id: Optional[uuid.UUID]
     name: str
     payee: Optional[str]
     amount: Decimal
@@ -100,7 +106,7 @@ class ScheduleResponse(BaseModel):
     # Computed by the router from the recurrence engine
     next_occurrence: Optional[date] = None
     # Denormalised from Category — populated by the router helper
-    category_name: str
+    category_name: Optional[str]
     category_icon: Optional[str]
 
     @field_serializer("amount")
@@ -119,6 +125,9 @@ class ScheduleUpdate(BaseModel):
 
     account_id: Optional[uuid.UUID] = None
     category_id: Optional[uuid.UUID] = None
+    schedule_type: Optional[str] = Field(default=None, max_length=20)
+    from_account_id: Optional[uuid.UUID] = None
+    to_account_id: Optional[uuid.UUID] = None
     name: Optional[str] = Field(default=None, max_length=100)
     payee: Optional[str] = Field(default=None, max_length=100)
     amount: Optional[Decimal] = None
