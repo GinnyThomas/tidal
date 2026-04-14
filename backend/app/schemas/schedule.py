@@ -36,6 +36,11 @@ class ScheduleFrequency(str, Enum):
     annually = "annually"
 
 
+class ScheduleType(str, Enum):
+    regular = "regular"
+    transfer = "transfer"
+
+
 class ScheduleCreate(BaseModel):
     """
     Request body for POST /api/v1/schedules.
@@ -45,7 +50,7 @@ class ScheduleCreate(BaseModel):
 
     account_id: uuid.UUID
     category_id: Optional[uuid.UUID] = None
-    schedule_type: str = Field(default="regular", max_length=20)
+    schedule_type: ScheduleType = ScheduleType.regular
     from_account_id: Optional[uuid.UUID] = None
     to_account_id: Optional[uuid.UUID] = None
     name: str = Field(..., max_length=100)
@@ -125,7 +130,7 @@ class ScheduleUpdate(BaseModel):
 
     account_id: Optional[uuid.UUID] = None
     category_id: Optional[uuid.UUID] = None
-    schedule_type: Optional[str] = Field(default=None, max_length=20)
+    schedule_type: Optional[ScheduleType] = None
     from_account_id: Optional[uuid.UUID] = None
     to_account_id: Optional[uuid.UUID] = None
     name: Optional[str] = Field(default=None, max_length=100)

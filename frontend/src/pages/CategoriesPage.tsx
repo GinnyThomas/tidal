@@ -145,7 +145,15 @@ function CategoriesPage() {
                     <h2 className="text-2xl font-bold text-slate-100">Categories</h2>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => { setShowForm((prev) => !prev); setEditingCategory(null) }}
+                            onClick={() => {
+                                if (showForm || editingCategory) {
+                                    // Close whichever form is open
+                                    setShowForm(false)
+                                    setEditingCategory(null)
+                                } else {
+                                    setShowForm(true)
+                                }
+                            }}
                             className={`${showForm || editingCategory ? 'btn-secondary' : 'btn-primary'} cursor-pointer`}
                         >
                             {showForm || editingCategory ? 'Close Form' : 'Add Category'}
