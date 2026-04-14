@@ -538,7 +538,7 @@ function MonthlyPlanView() {
                     <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
                         <table className="w-full text-sm min-w-[480px]">
                             <thead>
-                                <tr className="border-b border-ocean-700 bg-ocean-950">
+                                <tr className="border-b border-ocean-700 bg-ocean-950 sticky top-0 z-10">
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     <th className="text-right px-4 py-3 text-sky-400 font-medium">Planned</th>
                                     <th className="text-right px-4 py-3 text-teal-400 font-medium">Actual</th>

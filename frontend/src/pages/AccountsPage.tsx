@@ -19,7 +19,7 @@
 //     navigates to a pre-filtered transactions view for that account.
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddAccountForm from '../components/AddAccountForm'
@@ -56,6 +56,7 @@ function AccountsPage() {
     const [error, setError] = useState<string | null>(null)
     const [showForm, setShowForm] = useState(false)
     const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+    const editFormRef = useRef<HTMLDivElement>(null)
 
     const fetchAccounts = async () => {
         const token = localStorage.getItem('access_token')
@@ -105,6 +106,7 @@ function AccountsPage() {
         // Close the add form so only one form is visible at a time
         setShowForm(false)
         setEditingAccount(account)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleAccountUpdated = () => {
@@ -141,7 +143,7 @@ function AccountsPage() {
                 {/* Edit form — shown when an Edit button is clicked.
                     keyed on id so switching to a different account remounts with fresh state. */}
                 {editingAccount && (
-                    <div className="mb-6">
+                    <div ref={editFormRef} className="mb-6">
                         <AddAccountForm
                             key={editingAccount.id}
                             onAccountAdded={() => {}}

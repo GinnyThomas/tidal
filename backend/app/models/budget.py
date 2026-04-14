@@ -29,6 +29,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
 )
@@ -89,6 +90,9 @@ class Budget(Base):
     # e.g. "UK", "España" — allows users to view planned spending for a
     # specific context without seeing unrelated budgets.
     group: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+
+    # --- Notes ---
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # --- Timestamps ---
     created_at: Mapped[datetime] = mapped_column(

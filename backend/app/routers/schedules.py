@@ -130,7 +130,7 @@ def _get_category_or_404(
     return category
 
 
-def _build_sched_response(sched: Schedule, category: Category) -> dict:
+def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
     """
     Build a dict matching ScheduleResponse, adding category_name and
     category_icon from the related Category row.
@@ -144,6 +144,9 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "user_id": sched.user_id,
         "account_id": sched.account_id,
         "category_id": sched.category_id,
+        "schedule_type": sched.schedule_type,
+        "from_account_id": sched.from_account_id,
+        "to_account_id": sched.to_account_id,
         "name": sched.name,
         "payee": sched.payee,
         "amount": sched.amount,
@@ -159,8 +162,8 @@ def _build_sched_response(sched: Schedule, category: Category) -> dict:
         "note": sched.note,
         "created_at": sched.created_at,
         "next_occurrence": get_next_occurrence(sched),
-        "category_name": category.name,
-        "category_icon": category.icon,
+        "category_name": category.name if category else None,
+        "category_icon": category.icon if category else None,
     }
 
 
@@ -186,13 +189,37 @@ def create_schedule(
     before inserting — prevents cross-user injection by guessing UUIDs.
     """
     _get_account_or_404(schedule_in.account_id, current_user.id, db)
-    # Capture the category so we can include its name/icon in the response.
-    category = _get_category_or_404(schedule_in.category_id, current_user.id, db)
+
+    # Cross-field validation based on schedule_type
+    stype = schedule_in.schedule_type
+    if stype == "transfer":
+        if not schedule_in.from_account_id or not schedule_in.to_account_id:
+            raise HTTPException(status_code=422, detail="Transfer schedules require from_account_id and to_account_id.")
+        if schedule_in.from_account_id == schedule_in.to_account_id:
+            raise HTTPException(status_code=422, detail="Transfer source and destination must be different accounts.")
+        if schedule_in.category_id is not None:
+            raise HTTPException(status_code=422, detail="Transfer schedules must not have a category_id.")
+        # Validate transfer account ownership
+        _get_account_or_404(schedule_in.from_account_id, current_user.id, db)
+        _get_account_or_404(schedule_in.to_account_id, current_user.id, db)
+    else:
+        if schedule_in.category_id is None:
+            raise HTTPException(status_code=422, detail="Regular schedules require a category_id.")
+        if schedule_in.from_account_id or schedule_in.to_account_id:
+            raise HTTPException(status_code=422, detail="Regular schedules must not have from_account_id or to_account_id.")
+
+    # Category validation for regular schedules
+    category = None
+    if schedule_in.category_id is not None:
+        category = _get_category_or_404(schedule_in.category_id, current_user.id, db)
 
     schedule = Schedule(
         user_id=current_user.id,
         account_id=schedule_in.account_id,
         category_id=schedule_in.category_id,
+        schedule_type=stype.value if hasattr(stype, 'value') else stype,
+        from_account_id=schedule_in.from_account_id,
+        to_account_id=schedule_in.to_account_id,
         name=schedule_in.name,
         payee=schedule_in.payee,
         amount=schedule_in.amount,
@@ -245,15 +272,13 @@ def list_schedules(
     schedules = query.all()
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
-    category_ids = {s.category_id for s in schedules}
-    cat_list = (
-        db.query(Category)
-        .filter(Category.id.in_(category_ids))
-        .all()
-    )
-    cat_map = {c.id: c for c in cat_list}
+    category_ids = {s.category_id for s in schedules if s.category_id is not None}
+    cat_map: dict = {}
+    if category_ids:
+        cat_list = db.query(Category).filter(Category.id.in_(category_ids)).all()
+        cat_map = {c.id: c for c in cat_list}
 
-    return [_build_sched_response(s, cat_map[s.category_id]) for s in schedules]
+    return [_build_sched_response(s, cat_map.get(s.category_id)) for s in schedules]
 
 
 @router.get(
@@ -271,7 +296,7 @@ def get_schedule(
     Returns 404 if not found, soft-deleted, or belongs to another user.
     """
     sched = _get_schedule_or_404(schedule_id, current_user.id, db)
-    category = db.query(Category).filter(Category.id == sched.category_id).first()
+    category = db.query(Category).filter(Category.id == sched.category_id).first() if sched.category_id else None
     return _build_sched_response(sched, category)
 
 
@@ -298,8 +323,18 @@ def update_schedule(
     # Guard against explicitly nulling non-nullable fields.
     # exclude_unset=True omits missing fields, but the client can still
     # send {"amount": null} — reject that before writing to the database.
+    # Determine effective schedule_type for validation
+    effective_type = update_data.get("schedule_type", schedule.schedule_type)
+    if hasattr(effective_type, 'value'):
+        effective_type = effective_type.value
+
+    # Guard against explicitly nulling non-nullable fields.
+    # category_id is nullable for transfer schedules, so exclude it from
+    # NON_NULLABLE when the schedule is a transfer type.
     NON_NULLABLE = {"name", "amount", "currency", "frequency", "interval",
-                    "start_date", "account_id", "category_id", "auto_generate", "active"}
+                    "start_date", "account_id", "auto_generate", "active"}
+    if effective_type != "transfer":
+        NON_NULLABLE.add("category_id")
     for field in NON_NULLABLE:
         if field in update_data and update_data[field] is None:
             raise HTTPException(
@@ -314,16 +349,22 @@ def update_schedule(
     if "category_id" in update_data and update_data["category_id"] is not None:
         _get_category_or_404(update_data["category_id"], current_user.id, db)
 
+    if "from_account_id" in update_data and update_data["from_account_id"] is not None:
+        _get_account_or_404(update_data["from_account_id"], current_user.id, db)
+
+    if "to_account_id" in update_data and update_data["to_account_id"] is not None:
+        _get_account_or_404(update_data["to_account_id"], current_user.id, db)
+
     # Enum fields need .value to store the plain string in the database
     for field, value in update_data.items():
-        if field == "frequency" and value is not None:
+        if field in ("frequency", "schedule_type") and value is not None and hasattr(value, 'value'):
             value = value.value
         setattr(schedule, field, value)
 
     db.commit()
     db.refresh(schedule)
     # Look up the (potentially updated) category for the response
-    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None
     return _build_sched_response(schedule, category)
 
 
@@ -354,7 +395,7 @@ def toggle_active(
     schedule.active = not schedule.active
     db.commit()
     db.refresh(schedule)
-    category = db.query(Category).filter(Category.id == schedule.category_id).first()
+    category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None
     return _build_sched_response(schedule, category)
 
 

@@ -19,7 +19,7 @@
 //     triggers the useEffect dependency to re-run the full fetch.
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddScheduleForm from '../components/AddScheduleForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
@@ -74,6 +74,7 @@ function SchedulesPage() {
     const [showAddForm, setShowAddForm] = useState(false)
     const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
     const [includeInactive, setIncludeInactive] = useState(false)
+    const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
 
@@ -117,6 +118,7 @@ function SchedulesPage() {
     const handleEditSchedule = (schedule: Schedule) => {
         setShowAddForm(false)
         setEditingSchedule(schedule)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleScheduleUpdated = () => {
@@ -195,7 +197,7 @@ function SchedulesPage() {
 
                 {/* Edit form — keyed on id so switching records remounts with fresh state */}
                 {editingSchedule && (
-                    <div className="mb-6">
+                    <div ref={editFormRef} className="mb-6">
                         <AddScheduleForm
                             key={editingSchedule.id}
                             onScheduleAdded={() => {}}

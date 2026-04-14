@@ -4,7 +4,7 @@
 //          Shows urgency, progress, and required payments to clear before deadline.
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddPromotionForm from '../components/AddPromotionForm'
 import { getApiBaseUrl } from '../lib/api'
@@ -57,6 +57,7 @@ function PromotionsPage() {
     const [activeOnly, setActiveOnly] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
+    const editFormRef = useRef<HTMLDivElement>(null)
     const [refreshKey, setRefreshKey] = useState(0)
 
     useEffect(() => {
@@ -81,6 +82,7 @@ function PromotionsPage() {
     const handleEdit = (promo: Promotion) => {
         setShowForm(false)
         setEditingPromotion(promo)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleDelete = async (id: string) => {
@@ -137,7 +139,7 @@ function PromotionsPage() {
                     </div>
                 )}
                 {editingPromotion && (
-                    <div className="mb-6">
+                    <div ref={editFormRef} className="mb-6">
                         <AddPromotionForm key={editingPromotion.id} onPromotionSaved={handleSaved} editingPromotion={editingPromotion} />
                     </div>
                 )}

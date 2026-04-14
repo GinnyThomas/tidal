@@ -12,7 +12,7 @@
 //   - The <li>/<ul> hierarchy is preserved for DOM query tests
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddCategoryForm from '../components/AddCategoryForm'
@@ -37,6 +37,7 @@ function CategoriesPage() {
     const [showForm, setShowForm] = useState(false)
     const [editingCategory, setEditingCategory] = useState<Category | null>(null)
     const [includeHidden, setIncludeHidden] = useState(false)
+    const editFormRef = useRef<HTMLDivElement>(null)
 
     const fetchCategories = async (withHidden: boolean) => {
         const token = localStorage.getItem('access_token')
@@ -88,6 +89,7 @@ function CategoriesPage() {
         // Close the add form so only one form is visible at a time
         setShowForm(false)
         setEditingCategory(category)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleCategoryUpdated = () => {
@@ -143,10 +145,18 @@ function CategoriesPage() {
                     <h2 className="text-2xl font-bold text-slate-100">Categories</h2>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => { setShowForm((prev) => !prev); setEditingCategory(null) }}
-                            className="btn-primary cursor-pointer"
+                            onClick={() => {
+                                if (showForm || editingCategory) {
+                                    // Close whichever form is open
+                                    setShowForm(false)
+                                    setEditingCategory(null)
+                                } else {
+                                    setShowForm(true)
+                                }
+                            }}
+                            className={`${showForm || editingCategory ? 'btn-secondary' : 'btn-primary'} cursor-pointer`}
                         >
-                            Add Category
+                            {showForm || editingCategory ? 'Close Form' : 'Add Category'}
                         </button>
                         {/* Pill toggle — exact button text required by tests */}
                         <button
@@ -171,7 +181,7 @@ function CategoriesPage() {
                 {/* Edit form — shown when an Edit button is clicked.
                     keyed on id so switching to a different category remounts with fresh state. */}
                 {editingCategory && (
-                    <div className="mb-6">
+                    <div ref={editFormRef} className="mb-6">
                         <AddCategoryForm
                             key={editingCategory.id}
                             topLevelCategories={topLevelCategories}
