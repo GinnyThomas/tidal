@@ -414,6 +414,54 @@ def test_list_budgets_filtered_by_group(test_client) -> None:
     assert body[0]["group"] == "UK"
 
 
+def test_budget_response_includes_parent_category_id(test_client) -> None:
+    """
+    BudgetResponse should include parent_category_id, denormalised from the
+    related Category. This lets the frontend render the parent/child
+    hierarchy without a second API round-trip.
+
+    - Top-level categories: parent_category_id is null.
+    - Child categories: parent_category_id matches the parent.
+    """
+    token, _, _ = _setup(test_client)
+
+    # Create a user-defined parent category — name avoids system-seed collision
+    parent_resp = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Test Parent Group"},
+        headers=_auth_headers(token),
+    )
+    assert parent_resp.status_code == 201, parent_resp.json()
+    parent_id = parent_resp.json()["id"]
+
+    # Create a child category under the parent
+    child_resp = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Test Child Cat", "parent_category_id": parent_id},
+        headers=_auth_headers(token),
+    )
+    assert child_resp.status_code == 201, child_resp.json()
+    child_id = child_resp.json()["id"]
+
+    # Budget on the parent — parent_category_id should be null
+    parent_budget = _create_budget(test_client, token, parent_id, default_amount="100.00")
+    assert parent_budget["parent_category_id"] is None
+
+    # Budget on the child — parent_category_id should match the parent
+    child_budget = _create_budget(test_client, token, child_id, default_amount="50.00")
+    assert child_budget["parent_category_id"] == parent_id
+
+    # List endpoint must also populate parent_category_id
+    list_resp = test_client.get(
+        "/api/v1/budgets?year=2026",
+        headers=_auth_headers(token),
+    )
+    assert list_resp.status_code == 200
+    by_cat = {b["category_id"]: b for b in list_resp.json()}
+    assert by_cat[parent_id]["parent_category_id"] is None
+    assert by_cat[child_id]["parent_category_id"] == parent_id
+
+
 def test_budget_with_notes(test_client) -> None:
     """Budgets should support an optional notes field."""
     token, _, category_id = _setup(test_client)

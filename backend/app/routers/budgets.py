@@ -92,6 +92,52 @@ def _get_budget_or_404(
     return budget
 
 
+def _build_budget_response(budget: Budget, category: Category | None) -> dict:
+    """
+    Build a dict matching BudgetResponse, denormalising parent_category_id
+    from the related Category row.
+
+    Same pattern as _build_sched_response in schedules.py — parent_category_id
+    is not a column on Budget, so we build a dict manually rather than
+    returning the ORM object directly to Pydantic.
+    """
+    return {
+        "id": budget.id,
+        "user_id": budget.user_id,
+        "category_id": budget.category_id,
+        "parent_category_id": category.parent_category_id if category else None,
+        "year": budget.year,
+        "default_amount": budget.default_amount,
+        "currency": budget.currency,
+        "group": budget.group,
+        "notes": budget.notes,
+        "created_at": budget.created_at,
+        "updated_at": budget.updated_at,
+        "overrides": budget.overrides,
+    }
+
+
+def _lookup_category(
+    category_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+) -> Category | None:
+    """
+    Fetch a category by id for response-building — returns None if the
+    category has been soft-deleted or otherwise isn't available, rather
+    than raising. Use _get_category_or_404 for write-path validation.
+    """
+    return (
+        db.query(Category)
+        .filter(
+            Category.id == category_id,
+            Category.user_id == user_id,
+            Category.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -102,10 +148,12 @@ def create_budget(
     data: BudgetCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Budget:
+) -> dict:
     """Create a new budget for a category/year. Returns 409 if one already exists."""
-    # Validate category belongs to this user and is not soft-deleted
-    _get_category_or_404(data.category_id, current_user.id, db)
+    # Validate category belongs to this user and is not soft-deleted.
+    # We re-use the category object when building the response to denormalise
+    # parent_category_id without a second lookup.
+    category = _get_category_or_404(data.category_id, current_user.id, db)
 
     # Check for duplicate (user + category + year) before inserting
     existing = (
@@ -135,7 +183,7 @@ def create_budget(
     db.add(budget)
     db.commit()
     db.refresh(budget)
-    return budget
+    return _build_budget_response(budget, category)
 
 
 @router.get("", response_model=list[BudgetResponse])
@@ -144,7 +192,7 @@ def list_budgets(
     group: Optional[str] = Query(default=None, min_length=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[Budget]:
+) -> list[dict]:
     """List all budgets for the current user. Optional ?year= and ?group= filters."""
     query = (
         db.query(Budget)
@@ -155,7 +203,25 @@ def list_budgets(
         query = query.filter(Budget.year == year)
     if group is not None:
         query = query.filter(Budget.group == group)
-    return query.order_by(Budget.year, Budget.created_at).all()
+    budgets = query.order_by(Budget.year, Budget.created_at).all()
+
+    # Batch-fetch referenced categories in a single query to avoid N+1 —
+    # same pattern as list_schedules in schedules.py.
+    category_ids = {b.category_id for b in budgets}
+    cat_map: dict = {}
+    if category_ids:
+        cat_list = (
+            db.query(Category)
+            .filter(
+                Category.id.in_(category_ids),
+                Category.user_id == current_user.id,
+                Category.deleted_at.is_(None),
+            )
+            .all()
+        )
+        cat_map = {c.id: c for c in cat_list}
+
+    return [_build_budget_response(b, cat_map.get(b.category_id)) for b in budgets]
 
 
 @router.get("/{budget_id}", response_model=BudgetResponse)
@@ -163,9 +229,11 @@ def get_budget(
     budget_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Budget:
+) -> dict:
     """Get a single budget with its monthly overrides."""
-    return _get_budget_or_404(budget_id, current_user.id, db)
+    budget = _get_budget_or_404(budget_id, current_user.id, db)
+    category = _lookup_category(budget.category_id, current_user.id, db)
+    return _build_budget_response(budget, category)
 
 
 @router.put("/{budget_id}", response_model=BudgetResponse)
@@ -174,7 +242,7 @@ def update_budget(
     data: BudgetUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Budget:
+) -> dict:
     """Update a budget's default_amount and/or currency."""
     budget = _get_budget_or_404(budget_id, current_user.id, db)
 
@@ -194,7 +262,8 @@ def update_budget(
 
     db.commit()
     db.refresh(budget)
-    return budget
+    category = _lookup_category(budget.category_id, current_user.id, db)
+    return _build_budget_response(budget, category)
 
 
 @router.delete("/{budget_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -219,7 +288,7 @@ def set_override(
     data: BudgetOverrideCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Budget:
+) -> dict:
     """
     Upsert a month override — create if it doesn't exist, update if it does.
 
@@ -252,7 +321,8 @@ def set_override(
 
     db.commit()
     db.refresh(budget)
-    return budget
+    category = _lookup_category(budget.category_id, current_user.id, db)
+    return _build_budget_response(budget, category)
 
 
 @router.delete(

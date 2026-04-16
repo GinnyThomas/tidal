@@ -85,6 +85,10 @@ class BudgetResponse(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     category_id: uuid.UUID
+    # Denormalised from the Category row — populated by the router helper.
+    # Enables the frontend to render the parent/child hierarchy without a
+    # separate lookup against /api/v1/categories.
+    parent_category_id: Optional[uuid.UUID] = None
     year: int
     default_amount: Decimal
     currency: str
