@@ -124,7 +124,14 @@ function BudgetsPage() {
             <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => toggleOverrides(budget.id)}
+                        onClick={(e) => {
+                            // Stop propagation — the <tr> has a click-to-edit
+                            // handler that would otherwise scroll the page to
+                            // the edit form when the user only wanted to
+                            // expand the inline overrides section.
+                            e.stopPropagation()
+                            toggleOverrides(budget.id)
+                        }}
                         className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
                         aria-label={`${expandedOverrides.has(budget.id) ? 'Collapse' : 'Expand'} overrides for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
                     >
@@ -138,7 +145,10 @@ function BudgetsPage() {
                     <p className="text-xs text-slate-400 italic mt-0.5">{budget.notes}</p>
                 )}
                 {expandedOverrides.has(budget.id) && (
-                    <div className="mt-2">
+                    // stopPropagation so interactions with the inline override
+                    // form don't bubble up to the row-level click-to-edit
+                    // handler (which would scroll the page to the top form).
+                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
                         <BudgetOverrideForm
                             budgetId={budget.id}
                             overrides={budget.overrides}
