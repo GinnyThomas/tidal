@@ -535,10 +535,16 @@ function MonthlyPlanView() {
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
+                    // Vertical scrolling is contained within this wrapper
+                    // (max-h-[calc(100vh-200px)]) so `sticky top-0` on the
+                    // <thead> keeps the column headers visible as the user
+                    // scrolls. Sticky needs the scrolling ancestor to be this
+                    // overflow-auto container — on a <tr> inside an
+                    // overflow-x-only wrapper it silently does nothing.
+                    <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] rounded-xl border border-ocean-700 bg-ocean-800">
                         <table className="w-full text-sm min-w-[480px]">
-                            <thead>
-                                <tr className="border-b border-ocean-700 bg-ocean-950 sticky top-0 z-10">
+                            <thead className="sticky top-0 z-10 bg-ocean-950">
+                                <tr className="border-b border-ocean-700 bg-ocean-950">
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     <th className="text-right px-4 py-3 text-sky-400 font-medium">Planned</th>
                                     <th className="text-right px-4 py-3 text-teal-400 font-medium">Actual</th>

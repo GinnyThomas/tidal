@@ -417,10 +417,18 @@ function AnnualView() {
 
                     // Spreadsheet table — scrolls horizontally on small screens.
                     // min-w-[900px] prevents the table from collapsing before scroll kicks in.
-                    <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
+                    //
+                    // Vertical scrolling is also contained within this wrapper
+                    // (max-h-[calc(100vh-200px)]) so the <thead> can use
+                    // `sticky top-0` to remain visible as the user scrolls
+                    // down a tall table. Sticky positioning requires the
+                    // sticky element's nearest scrolling ancestor to be this
+                    // overflow-auto container — putting sticky on a <tr>
+                    // inside an overflow-x-only wrapper doesn't work.
+                    <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] rounded-xl border border-ocean-700 bg-ocean-800">
                         <table className="w-full text-sm min-w-[900px]">
-                            <thead>
-                                <tr className="border-b border-ocean-700 bg-ocean-950 sticky top-0 z-10">
+                            <thead className="sticky top-0 z-10 bg-ocean-950">
+                                <tr className="border-b border-ocean-700 bg-ocean-950">
                                     <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
                                     {MONTH_ABBR.map((m) => (
                                         <th key={m} className="text-right px-3 py-3 text-sky-400 font-medium">{m}</th>
