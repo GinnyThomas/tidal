@@ -473,8 +473,6 @@ def get_monthly_plan(
 
     # --- Step 7: Load category metadata ---
     # Scoped to the current user and non-deleted only.
-    # Without user_id scoping, a category ID collision across users (impossible
-    # with UUIDs but defensive coding) could leak another user's category name.
     categories = (
         db.query(Category)
         .filter(
@@ -485,6 +483,30 @@ def get_monthly_plan(
         .all()
     )
     category_map: dict[uuid.UUID, Category] = {c.id: c for c in categories}
+
+    # --- Step 7b: Include parent categories (for hierarchy display) ---
+    # Any parent that isn't already active gets added as a synthetic row with
+    # zero amounts, so the frontend can render the full parent/child hierarchy.
+    # Without this, parent categories with no direct budgets (like "Banking &
+    # Finance") would be missing and their children would appear as orphans.
+    parent_ids_needed = {
+        cat.parent_category_id for cat in categories
+        if cat.parent_category_id is not None
+        and cat.parent_category_id not in category_map
+    }
+    if parent_ids_needed:
+        parent_cats = (
+            db.query(Category)
+            .filter(
+                Category.id.in_(list(parent_ids_needed)),
+                Category.user_id == user_id,
+                Category.deleted_at.is_(None),
+            )
+            .all()
+        )
+        for pcat in parent_cats:
+            category_map[pcat.id] = pcat
+            all_category_ids.add(pcat.id)
 
     # --- Step 8: Build PlanRow objects, sorted by category name ---
     rows: list[PlanRow] = []
