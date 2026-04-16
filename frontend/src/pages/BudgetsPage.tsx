@@ -128,7 +128,18 @@ function BudgetsPage() {
     // styling used in AnnualView and CategoriesPage. Top-level (parent)
     // budgets render the category name in bold.
     const renderBudgetRow = (budget: Budget, isChild: boolean = false) => (
-        <tr key={budget.id} className="border-b border-ocean-700/50 cursor-pointer hover:bg-ocean-700/30 transition-colors" onClick={() => handleEdit(budget)} aria-label="Click to edit">
+        <tr
+            key={budget.id}
+            className="border-b border-ocean-700/50 cursor-pointer hover:bg-ocean-700/30 transition-colors"
+            onClick={(e) => {
+                const target = e.target as HTMLElement
+                if (target.closest('button, a, input, select, textarea, [role="button"]')) {
+                    return
+                }
+                handleEdit(budget)
+            }}
+            aria-label="Click to edit"
+        >
             <td className={`${isChild ? 'pl-10 pr-4 border-l-2 border-teal-500' : 'px-4'} py-3`}>
                 <div className="flex items-center gap-2">
                     <button
