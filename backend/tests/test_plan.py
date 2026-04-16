@@ -425,6 +425,66 @@ def test_income_category_appears_in_plan_with_is_income(test_client) -> None:
     assert row["is_income"] is True
 
 
+def test_plan_includes_parent_category_when_only_child_is_active(test_client) -> None:
+    """
+    When a child category has activity (a transaction or budget) but its
+    parent category has none of its own, the parent must still appear in
+    the plan rows as a synthetic zero-amount row.
+
+    Without this, the frontend can't render the parent/child hierarchy —
+    the child would appear as an orphan top-level row instead of nesting
+    under the parent header.
+
+    This covers the Step 7b parent-inclusion logic in plan.py.
+    """
+    token = _register_and_login(test_client)
+    account_id = _create_account(test_client, token)
+
+    # Create a user-defined parent category — name chosen to avoid colliding
+    # with any seeded system category.
+    parent_resp = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Test Parent Group"},
+        headers=_auth_headers(token),
+    )
+    assert parent_resp.status_code == 201, parent_resp.json()
+    parent_id = parent_resp.json()["id"]
+
+    # Create a child category under the parent
+    child_resp = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Test Child Category", "parent_category_id": parent_id},
+        headers=_auth_headers(token),
+    )
+    assert child_resp.status_code == 201, child_resp.json()
+    child_id = child_resp.json()["id"]
+
+    # Activity on the child only — nothing on the parent
+    _create_transaction(
+        test_client, token, account_id, child_id,
+        amount="25.00",
+        status="cleared",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    assert response.status_code == 200
+    rows = response.json()["rows"]
+
+    # Child row present with its actual spend
+    child_row = next((r for r in rows if r["category_id"] == child_id), None)
+    assert child_row is not None
+    assert child_row["actual"] == "25.00"
+    assert child_row["parent_category_id"] == parent_id
+
+    # Parent row also present, with all-zero amounts (synthetic row for hierarchy)
+    parent_row = next((r for r in rows if r["category_id"] == parent_id), None)
+    assert parent_row is not None, "Parent category row missing from plan response"
+    assert parent_row["planned"] == "0.00"
+    assert parent_row["actual"] == "0.00"
+    assert parent_row["pending"] == "0.00"
+    assert parent_row["parent_category_id"] is None
+
+
 def test_plan_schedule_excluded_after_end_date(test_client) -> None:
     """
     A schedule whose end_date falls before the first day of the target month

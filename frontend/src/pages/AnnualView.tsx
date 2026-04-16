@@ -272,9 +272,20 @@ function AnnualView() {
 
     // Filter to categories that have at least one non-zero planned amount.
     // Categories with zero planned in every month add visual noise without value.
-    const activeCats = [...catMap.entries()].filter(([, data]) =>
-        data.amounts.some((a) => parseFloat(a) !== 0)
-    )
+    //
+    // Exception: also keep parent categories of any non-zero category, even
+    // when the parent itself has zero amounts. Without this, a parent like
+    // "Banking & Finance" (no direct spend, only children) would be excluded
+    // and its children would render as orphan top-level rows instead of
+    // nesting under the parent header. The backend sends synthetic parent
+    // entries for exactly this purpose (plan.py Step 7b).
+    const activeCats = [...catMap.entries()].filter(([id, d]) => {
+        const hasOwnAmounts = d.amounts.some((a) => parseFloat(a) !== 0)
+        const hasActiveChildren = [...catMap.entries()].some(
+            ([, cd]) => cd.parentId === id && cd.amounts.some((a) => parseFloat(a) !== 0)
+        )
+        return hasOwnAmounts || hasActiveChildren
+    })
 
     // --- Build display order: parents first, children indented below them ---
     // Same "promote orphaned children" pattern used in MonthlyPlanView:
