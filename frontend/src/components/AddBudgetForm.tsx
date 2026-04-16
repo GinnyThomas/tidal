@@ -27,6 +27,7 @@ export type EditingBudget = {
     default_amount: string
     currency: string
     group: string | null
+    notes?: string | null
 }
 
 type Props = {
@@ -44,6 +45,7 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
     const [defaultAmount, setDefaultAmount] = useState(editingBudget?.default_amount ?? '')
     const [currency, setCurrency] = useState(editingBudget?.currency ?? 'GBP')
     const [group, setGroup] = useState(editingBudget?.group ?? '')
+    const [notes, setNotes] = useState(editingBudget?.notes ?? '')
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -73,13 +75,14 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
             default_amount: defaultAmount,
             currency,
             group: group || null,
+            notes: notes || null,
         }
         try {
             try {
                 if (isEditMode) {
                     await axios.put(
                         `${getApiBaseUrl()}/api/v1/budgets/${editingBudget.id}`,
-                        { default_amount: defaultAmount, currency, group: group || null },
+                        { default_amount: defaultAmount, currency, group: group || null, notes: notes || null },
                         { headers: { Authorization: `Bearer ${token}` } }
                     )
                 } else {
@@ -176,6 +179,18 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
                         <option value="UK">UK</option>
                         <option value="España">España</option>
                     </select>
+                </div>
+
+                <div>
+                    <label htmlFor="budgetNotes" className="label-base">Notes (optional)</label>
+                    <textarea
+                        id="budgetNotes"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="input-base"
+                        rows={2}
+                        placeholder="e.g. Barclaycard 0% promo payment"
+                    />
                 </div>
 
                 {error && (
