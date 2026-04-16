@@ -19,11 +19,12 @@
 //     triggers the useEffect dependency to re-run the full fetch.
 
 import axios from 'axios'
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddScheduleForm from '../components/AddScheduleForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 // --- TypeScript types ---
 
@@ -146,6 +147,86 @@ function SchedulesPage() {
         }
     }
 
+    // --- Group sections ---
+    // Group schedules by their group field ("UK", "España", or "General" for
+    // null). Within each group, sort alphabetically by name. Only render
+    // section headers when schedules span more than one group — a single
+    // group would just add a redundant header row.
+    // Same pattern as BudgetsPage group sections.
+    const groupedSchedules: { group: string; items: Schedule[] }[] = []
+    if (schedules.length > 0) {
+        const byGroup = new Map<string, Schedule[]>()
+        for (const s of schedules) {
+            const g = s.group ?? 'General'
+            if (!byGroup.has(g)) byGroup.set(g, [])
+            byGroup.get(g)!.push(s)
+        }
+        // Alphabetical within each group
+        for (const items of byGroup.values()) {
+            items.sort((a, b) => a.name.localeCompare(b.name))
+        }
+        // Canonical order first (UK → España → General), then any extras
+        for (const g of GROUP_ORDER) {
+            const items = byGroup.get(g)
+            if (items && items.length > 0) groupedSchedules.push({ group: g, items })
+        }
+        for (const [g, items] of byGroup) {
+            if (!(GROUP_ORDER as readonly string[]).includes(g) && items.length > 0) {
+                groupedSchedules.push({ group: g, items })
+            }
+        }
+    }
+    const showGroupSections = groupedSchedules.length > 1
+
+    // Render one row for a schedule. Extracted so the grouped and flat
+    // rendering paths can share the same markup.
+    const renderScheduleRow = (s: Schedule) => (
+        <tr
+            key={s.id}
+            className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
+            onClick={() => handleEditSchedule(s)}
+            aria-label="Click to edit"
+        >
+            <td className="px-4 py-3 text-slate-100 font-medium">{s.name}</td>
+            <td className="px-4 py-3 text-slate-300">{s.frequency}</td>
+            <td className="px-4 py-3 text-right text-sky-400 font-medium">
+                {s.amount} {s.currency}
+            </td>
+            <td className="px-4 py-3 text-slate-300">
+                {s.next_occurrence ?? <span className="text-slate-500 italic">—</span>}
+            </td>
+            <td className="px-4 py-3 text-slate-300">
+                {accountById.get(s.account_id) ?? '—'}
+            </td>
+            <td className="px-4 py-3 text-slate-300">
+                {s.category_icon && <span className="mr-1">{s.category_icon}</span>}
+                {s.category_name || '—'}
+            </td>
+            <td className="px-4 py-3 text-center text-slate-400">
+                {s.group ?? '—'}
+            </td>
+            <td className="px-4 py-3 text-center">
+                {/* Button enables keyboard access and the click-to-toggle behaviour */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleActiveToggle(s) }}
+                    className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
+                        s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
+                    }`}
+                >
+                    {s.active ? 'Active' : 'Inactive'}
+                </button>
+            </td>
+            <td className="px-4 py-3 text-center">
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleEditSchedule(s) }}
+                    className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                >
+                    Edit
+                </button>
+            </td>
+        </tr>
+    )
+
     // --- Early returns ---
 
     if (loading) {
@@ -232,52 +313,22 @@ function SchedulesPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {schedules.map((s) => (
-                                    <tr
-                                        key={s.id}
-                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
-                                        onClick={() => handleEditSchedule(s)}
-                                        aria-label="Click to edit"
-                                    >
-                                        <td className="px-4 py-3 text-slate-100 font-medium">{s.name}</td>
-                                        <td className="px-4 py-3 text-slate-300">{s.frequency}</td>
-                                        <td className="px-4 py-3 text-right text-sky-400 font-medium">
-                                            {s.amount} {s.currency}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-300">
-                                            {s.next_occurrence ?? <span className="text-slate-500 italic">—</span>}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-300">
-                                            {accountById.get(s.account_id) ?? '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-300">
-                                            {s.category_icon && <span className="mr-1">{s.category_icon}</span>}
-                                            {s.category_name || '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center text-slate-400">
-                                            {s.group ?? '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {/* Button enables keyboard access and the click-to-toggle behaviour */}
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleActiveToggle(s) }}
-                                                className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
-                                                    s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
-                                                }`}
-                                            >
-                                                {s.active ? 'Active' : 'Inactive'}
-                                            </button>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleEditSchedule(s) }}
-                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                            >
-                                                Edit
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {showGroupSections ? (
+                                    groupedSchedules.map(({ group: sectionGroup, items }) => (
+                                        <React.Fragment key={sectionGroup}>
+                                            <tr className="bg-ocean-950/60">
+                                                <td colSpan={9} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                    ── {sectionGroup} ──
+                                                </td>
+                                            </tr>
+                                            {items.map(renderScheduleRow)}
+                                        </React.Fragment>
+                                    ))
+                                ) : (
+                                    // Single group (or zero — but empty state handles that):
+                                    // render the one group's items, already sorted alphabetically.
+                                    groupedSchedules[0]?.items.map(renderScheduleRow)
+                                )}
                             </tbody>
                         </table>
                     </div>

@@ -55,6 +55,7 @@ const makeSchedule = (overrides = {}) => ({
     next_occurrence: '2026-05-01',
     auto_generate: true,
     active: true,
+    group: null,
     payee: null,
     note: null,
     ...overrides,
@@ -382,5 +383,77 @@ describe('SchedulesPage', () => {
         expect(await screen.findByText('Rent')).toBeInTheDocument()
         // Form should be hidden
         expect(screen.queryByLabelText(/^frequency$/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Group sections
+    // =========================================================================
+
+    it('shows group section headers when schedules span multiple groups', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeSchedule({ id: 'sch-uk', name: 'UK Rent', group: 'UK' }),
+                makeSchedule({ id: 'sch-es', name: 'Alquiler', group: 'España' }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('UK Rent')
+
+        expect(screen.getByText(/── UK ──/i)).toBeInTheDocument()
+        expect(screen.getByText(/── España ──/i)).toBeInTheDocument()
+    })
+
+    it('does not show group headers when only one group exists', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ group: 'UK' })],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+
+        expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
+    })
+
+    it('uses "General" as the section header for schedules with no group', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeSchedule({ id: 'sch-uk', name: 'UK Rent', group: 'UK' }),
+                makeSchedule({ id: 'sch-none', name: 'Ungrouped', group: null }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('UK Rent')
+
+        expect(screen.getByText(/── General ──/i)).toBeInTheDocument()
+    })
+
+    it('sorts schedules alphabetically within each group', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                // Deliberately not alphabetical in the mock response
+                makeSchedule({ id: 'sch-1', name: 'Netflix', group: 'UK' }),
+                makeSchedule({ id: 'sch-2', name: 'Amazon Prime', group: 'UK' }),
+                makeSchedule({ id: 'sch-3', name: 'Spotify', group: 'UK' }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+
+        // Find the table rows' first-cell (name) content in render order.
+        const nameCells = screen
+            .getAllByRole('row', { name: /click to edit/i })
+            .map((row) => row.querySelector('td')?.textContent)
+        expect(nameCells).toEqual(['Amazon Prime', 'Netflix', 'Spotify'])
     })
 })
