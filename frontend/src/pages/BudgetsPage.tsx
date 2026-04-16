@@ -35,6 +35,10 @@ type Budget = {
     id: string
     user_id: string
     category_id: string
+    // parent_category_id is denormalised from the related Category row by
+    // the backend so the client can render parent/child hierarchy without
+    // a second fetch. null for top-level categories.
+    parent_category_id: string | null
     year: number
     default_amount: string
     currency: string
@@ -119,9 +123,13 @@ function BudgetsPage() {
     }
     const showGroupSections = !filterGroup && groupedBudgets.length > 1
 
-    const renderBudgetRow = (budget: Budget) => (
+    // Render a single budget row. When isChild=true the Category cell is
+    // indented with a teal left border, matching the parent/child hierarchy
+    // styling used in AnnualView and CategoriesPage. Top-level (parent)
+    // budgets render the category name in bold.
+    const renderBudgetRow = (budget: Budget, isChild: boolean = false) => (
         <tr key={budget.id} className="border-b border-ocean-700/50 cursor-pointer hover:bg-ocean-700/30 transition-colors" onClick={() => handleEdit(budget)} aria-label="Click to edit">
-            <td className="px-4 py-3">
+            <td className={`${isChild ? 'pl-10 pr-4 border-l-2 border-teal-500' : 'px-4'} py-3`}>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={(e) => {
@@ -137,7 +145,7 @@ function BudgetsPage() {
                     >
                         {expandedOverrides.has(budget.id) ? '▼' : '▶'}
                     </button>
-                    <span className="text-slate-100">
+                    <span className={isChild ? "text-slate-300" : "font-semibold text-slate-100"}>
                         {categoryById.get(budget.category_id) ?? budget.category_id}
                     </span>
                 </div>
@@ -190,6 +198,90 @@ function BudgetsPage() {
             </td>
         </tr>
     )
+
+    // Render a synthetic parent header — used when a group contains a child
+    // budget whose parent has no budget of its own. Non-clickable (no edit
+    // row behaviour), "—" for the numeric columns, and no action buttons.
+    const renderSyntheticParentRow = (categoryId: string, name: string) => (
+        <tr key={`synthetic-parent-${categoryId}`} className="border-b border-ocean-700/50">
+            <td className="px-4 py-3">
+                <span className="font-semibold text-slate-100">{name}</span>
+            </td>
+            <td className="px-4 py-3 text-right text-slate-500">—</td>
+            <td className="px-4 py-3 text-center text-slate-500">—</td>
+            <td className="px-4 py-3 text-center text-slate-500">—</td>
+            <td className="px-4 py-3 text-center text-slate-500">—</td>
+        </tr>
+    )
+
+    // Build the parent/child sections for a given group's budgets.
+    //
+    // A "section" is a parent category plus its child budgets within the
+    // group. The parent may have its own budget (parentBudget is set) or
+    // be synthetic (parentBudget is null — child exists but parent has no
+    // budget in this group).
+    //
+    // Synthetic parents are included for every child whose parent is not
+    // itself a top-level budget in the group, matching the pattern in
+    // AnnualView/CategoriesPage where the hierarchy stays intact even when
+    // a parent category has no direct activity.
+    //
+    // Sorting: parents alphabetical by category name, children alphabetical
+    // within each parent.
+    type Section = {
+        parentId: string
+        parentName: string
+        parentBudget: Budget | null
+        children: Budget[]
+    }
+    const buildSections = (items: Budget[]): Section[] => {
+        const sectionMap = new Map<string, Section>()
+        const ensureSection = (pid: string): Section => {
+            if (!sectionMap.has(pid)) {
+                sectionMap.set(pid, {
+                    parentId: pid,
+                    parentName: categoryById.get(pid) ?? pid,
+                    parentBudget: null,
+                    children: [],
+                })
+            }
+            return sectionMap.get(pid)!
+        }
+        // First pass: top-level budgets become their own section's parent.
+        for (const b of items) {
+            if (b.parent_category_id === null) {
+                ensureSection(b.category_id).parentBudget = b
+            }
+        }
+        // Second pass: child budgets get attached to their parent's section.
+        // If the parent isn't a top-level budget in this group, the section
+        // is created as a synthetic parent (parentBudget stays null).
+        for (const b of items) {
+            if (b.parent_category_id !== null) {
+                ensureSection(b.parent_category_id).children.push(b)
+            }
+        }
+        const sections = [...sectionMap.values()]
+        // Sort parents alphabetically by name; sort each parent's children too.
+        sections.sort((a, b) => a.parentName.localeCompare(b.parentName))
+        for (const s of sections) {
+            s.children.sort((a, b) => {
+                const na = categoryById.get(a.category_id) ?? a.category_id
+                const nb = categoryById.get(b.category_id) ?? b.category_id
+                return na.localeCompare(nb)
+            })
+        }
+        return sections
+    }
+
+    const renderGroupItems = (items: Budget[]) =>
+        buildSections(items).flatMap((s) => {
+            const parentRow = s.parentBudget
+                ? renderBudgetRow(s.parentBudget, false)
+                : renderSyntheticParentRow(s.parentId, s.parentName)
+            const childRows = s.children.map((c) => renderBudgetRow(c, true))
+            return [parentRow, ...childRows]
+        })
 
     const handleBudgetSaved = () => {
         setShowForm(false)
@@ -348,11 +440,11 @@ function BudgetsPage() {
                                                     ── {sectionGroup} ──
                                                 </td>
                                             </tr>
-                                            {items.map(budget => renderBudgetRow(budget))}
+                                            {renderGroupItems(items)}
                                         </React.Fragment>
                                     ))
                                 ) : (
-                                    budgets.map(budget => renderBudgetRow(budget))
+                                    renderGroupItems(budgets)
                                 )}
                             </tbody>
                         </table>

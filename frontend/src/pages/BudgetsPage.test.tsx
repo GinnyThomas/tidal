@@ -28,6 +28,7 @@ const makeBudget = (overrides = {}) => ({
     id: 'bud-001',
     user_id: 'user-001',
     category_id: 'cat-001',
+    parent_category_id: null,
     year: 2026,
     default_amount: '300.00',
     currency: 'GBP',
@@ -216,5 +217,75 @@ describe('BudgetsPage', () => {
         await screen.findByText('Groceries UK')
 
         expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Parent/child hierarchy
+    // =========================================================================
+
+    it('renders a synthetic parent header row when a child budget has no parent budget', async () => {
+        // Parent category "Food" (no budget), child category "Groceries UK"
+        // with a budget whose parent_category_id points at Food.
+        mockFetch(
+            [makeBudget({
+                id: 'bud-child',
+                category_id: 'cat-groceries',
+                parent_category_id: 'cat-food',
+                group: 'UK',
+            })],
+            [
+                makeCategory({ id: 'cat-food', name: 'Food', parent_category_id: null }),
+                makeCategory({ id: 'cat-groceries', name: 'Groceries UK', parent_category_id: 'cat-food' }),
+            ],
+        )
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        // Synthetic parent header "Food" renders even though no budget exists for it
+        expect(await screen.findByText('Food')).toBeInTheDocument()
+        // Child budget renders under the synthetic header
+        expect(screen.getByText('Groceries UK')).toBeInTheDocument()
+        // Synthetic parent has no Edit button (only the child does)
+        const editButtons = screen.queryAllByRole('button', { name: /edit budget/i })
+        expect(editButtons).toHaveLength(1)
+    })
+
+    it('renders parent budgets as bold and child budgets indented', async () => {
+        // Both parent and child have budgets. Parent row renders the category
+        // name in bold (font-semibold); child row renders indented with
+        // a teal left border on its Category cell.
+        mockFetch(
+            [
+                makeBudget({
+                    id: 'bud-parent',
+                    category_id: 'cat-food',
+                    parent_category_id: null,
+                    group: 'UK',
+                    default_amount: '500.00',
+                }),
+                makeBudget({
+                    id: 'bud-child',
+                    category_id: 'cat-groceries',
+                    parent_category_id: 'cat-food',
+                    group: 'UK',
+                    default_amount: '200.00',
+                }),
+            ],
+            [
+                makeCategory({ id: 'cat-food', name: 'Food', parent_category_id: null }),
+                makeCategory({ id: 'cat-groceries', name: 'Groceries UK', parent_category_id: 'cat-food' }),
+            ],
+        )
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        // Parent category name is rendered in bold
+        const parentName = await screen.findByText('Food')
+        expect(parentName).toHaveClass('font-semibold')
+
+        // Child category name is not bold — lighter slate-300
+        const childName = screen.getByText('Groceries UK')
+        expect(childName).not.toHaveClass('font-semibold')
+        expect(childName).toHaveClass('text-slate-300')
     })
 })
