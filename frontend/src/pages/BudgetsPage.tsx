@@ -39,6 +39,7 @@ type Budget = {
     default_amount: string
     currency: string
     group: string | null
+    notes?: string | null
     created_at: string
     updated_at: string
     overrides: BudgetOverride[]
@@ -133,6 +134,9 @@ function BudgetsPage() {
                         {categoryById.get(budget.category_id) ?? budget.category_id}
                     </span>
                 </div>
+                {budget.notes && (
+                    <p className="text-xs text-slate-400 italic mt-0.5">{budget.notes}</p>
+                )}
                 {expandedOverrides.has(budget.id) && (
                     <div className="mt-2">
                         <BudgetOverrideForm
