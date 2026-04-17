@@ -478,3 +478,43 @@ def test_budget_with_notes(test_client) -> None:
         headers=_auth_headers(token),
     )
     assert resp.json()["notes"] == "Updated note"
+
+
+def test_batch_override_upsert(test_client) -> None:
+    """
+    POST /api/v1/budgets/{id}/overrides/batch should upsert and delete
+    overrides in a single transaction.
+
+    - Create an override for month 1 via the single-month endpoint.
+    - Batch: delete month 1, create months 2 and 3.
+    - Assert month 1 gone, months 2 and 3 present.
+    """
+    token, _, category_id = _setup(test_client)
+    budget = _create_budget(test_client, token, category_id)
+
+    # Seed: set an override for January via the single endpoint
+    test_client.post(
+        f"/api/v1/budgets/{budget['id']}/overrides",
+        json={"month": 1, "amount": "100.00"},
+        headers=_auth_headers(token),
+    )
+
+    # Batch: delete January, upsert February and March
+    response = test_client.post(
+        f"/api/v1/budgets/{budget['id']}/overrides/batch",
+        json={
+            "overrides": [
+                {"month": 1, "amount": None},
+                {"month": 2, "amount": "200.00"},
+                {"month": 3, "amount": "300.00"},
+            ]
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    overrides = response.json()["overrides"]
+    months = {o["month"]: o["amount"] for o in overrides}
+    assert 1 not in months
+    assert months[2] == "200.00"
+    assert months[3] == "300.00"

@@ -1,19 +1,22 @@
 // components/BudgetOverrideForm.tsx
 //
 // Purpose: Inline grid showing all 12 month overrides for a budget.
-//          Clicking a month value makes it editable. Changes are saved
-//          immediately via the upsert endpoint.
+//          Clicking a month value makes it editable. Changes are collected
+//          locally and sent to the server in a single batch request.
 //
 // UX features:
 //   - Auto-select on focus: clicking a cell selects all text for easy replacement
-//   - Keyboard navigation: Enter saves and moves focus to next month
+//   - Keyboard navigation: Enter saves locally and moves focus to next month
+//   - Unsaved changes highlighted with amber border
+//   - "Save all" button sends all pending changes via the batch endpoint
 //   - Set pattern: bulk-apply monthly/quarterly/annual amounts or clear all
+//     (these call the batch endpoint directly)
 //
 // Props:
 //   budgetId  — the budget these overrides belong to
 //   overrides — current overrides from the budget response
 //   defaultAmount — the budget's default monthly amount (shown when no override)
-//   onChanged — called after any override is created/updated/deleted
+//   onChanged — called after any override batch is committed
 
 import axios from 'axios'
 import { useState, useRef, useEffect } from 'react'
@@ -41,13 +44,15 @@ type PatternType = 'monthly' | 'quarterly' | 'annual' | 'clear' | null
 function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: Props) {
     const [editingMonth, setEditingMonth] = useState<number | null>(null)
     const [editValue, setEditValue] = useState('')
+    // Pending changes: month → amount string (set/update) or null (delete).
+    // These are staged locally and flushed via the batch endpoint on "Save all".
+    const [pendingChanges, setPendingChanges] = useState<Map<number, string | null>>(new Map())
     const [showPattern, setShowPattern] = useState<PatternType>(null)
     const [patternAmount, setPatternAmount] = useState('')
-    const [patternQuarter, setPatternQuarter] = useState<number>(0) // 0=Jan/Apr/Jul/Oct, 1=Feb/May/Aug/Nov, 2=Mar/Jun/Sep/Dec
+    const [patternQuarter, setPatternQuarter] = useState<number>(0)
     const [patternMonth, setPatternMonth] = useState(1)
     const [isApplying, setIsApplying] = useState(false)
 
-    // Refs for keyboard navigation between month inputs
     const inputRefs = useRef<(HTMLInputElement | null)[]>(Array(12).fill(null))
     const patternRef = useRef<HTMLDivElement>(null)
 
@@ -57,45 +62,80 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
     const headers = () => ({ Authorization: `Bearer ${token()}` })
     const apiUrl = (path: string) => `${getApiBaseUrl()}/api/v1/budgets/${budgetId}${path}`
 
-    const handleSave = async (month: number, nextIndex?: number) => {
-        try {
-            await axios.post(apiUrl('/overrides'), { month, amount: editValue }, { headers: headers() })
-            setEditingMonth(null)
-            onChanged()
-            // Move focus to next month after save
-            if (nextIndex !== undefined) {
-                setTimeout(() => {
-                    const nextMonth = (nextIndex % 12)
-                    // Open the next month for editing
-                    const nextMonthNum = nextMonth + 1
-                    const nextDisplay = overrideByMonth.get(nextMonthNum) ?? defaultAmount
-                    setEditingMonth(nextMonthNum)
-                    setEditValue(nextDisplay)
-                }, 50)
-            }
-        } catch {
-            // Silent failure
+    const hasPendingChanges = pendingChanges.size > 0
+
+    // Effective display amount for a month, considering pending changes.
+    const getDisplayAmount = (month: number): string => {
+        if (pendingChanges.has(month)) {
+            const pending = pendingChanges.get(month)
+            // null = pending delete → show the default amount
+            return pending ?? defaultAmount
+        }
+        return overrideByMonth.get(month) ?? defaultAmount
+    }
+
+    // Whether a month has an override (server-side or pending-set).
+    const hasEffectiveOverride = (month: number): boolean => {
+        if (pendingChanges.has(month)) {
+            return pendingChanges.get(month) !== null
+        }
+        return overrideByMonth.has(month)
+    }
+
+    // Save a single month's value locally (no API call).
+    const handleLocalSave = (month: number, nextIndex?: number) => {
+        setPendingChanges(prev => {
+            const next = new Map(prev)
+            next.set(month, editValue)
+            return next
+        })
+        setEditingMonth(null)
+        // Move focus to next month (Enter key navigation)
+        if (nextIndex !== undefined) {
+            setTimeout(() => {
+                const nextMonth = (nextIndex % 12) + 1
+                const nextDisplay = getDisplayAmount(nextMonth)
+                setEditingMonth(nextMonth)
+                setEditValue(nextDisplay)
+            }, 50)
         }
     }
 
-    const handleDelete = async (month: number) => {
-        try {
-            await axios.delete(apiUrl(`/overrides/${month}`), { headers: headers() })
-            onChanged()
-        } catch {
-            // Silent failure
-        }
+    // Mark a month for deletion locally (no API call).
+    const handleLocalDelete = (month: number) => {
+        setPendingChanges(prev => {
+            const next = new Map(prev)
+            next.set(month, null)
+            return next
+        })
     }
 
-    // --- Pattern application ---
+    // Flush all pending changes to the server via the batch endpoint.
+    const batchSave = async () => {
+        if (!hasPendingChanges) return
+        try {
+            const items = [...pendingChanges.entries()].map(([month, amount]) => ({
+                month,
+                amount,
+            }))
+            await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
+            setPendingChanges(new Map())
+            onChanged()
+        } catch { /* silent */ }
+    }
+
+    // --- Pattern application (calls batch endpoint directly) ---
 
     const applyMonthly = async () => {
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            for (let m = 1; m <= 12; m++) {
-                await axios.post(apiUrl('/overrides'), { month: m, amount: patternAmount }, { headers: headers() })
-            }
+            const items = Array.from({ length: 12 }, (_, i) => ({
+                month: i + 1,
+                amount: patternAmount,
+            }))
+            await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
+            setPendingChanges(new Map())
             onChanged()
             setShowPattern(null)
         } catch { /* silent */ }
@@ -106,14 +146,19 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            // Set the 4 quarter months, clear the other 8
-            for (let m = 1; m <= 12; m++) {
-                if ((m - 1) % 3 === patternQuarter) {
-                    await axios.post(apiUrl('/overrides'), { month: m, amount: patternAmount }, { headers: headers() })
-                } else if (overrideByMonth.has(m)) {
-                    await axios.delete(apiUrl(`/overrides/${m}`), { headers: headers() })
+            const items = Array.from({ length: 12 }, (_, i) => {
+                const m = i + 1
+                if (i % 3 === patternQuarter) {
+                    return { month: m, amount: patternAmount }
                 }
-            }
+                // Only delete months that have an override
+                if (overrideByMonth.has(m)) {
+                    return { month: m, amount: null as string | null }
+                }
+                return null
+            }).filter((x): x is { month: number; amount: string | null } => x !== null)
+            await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
+            setPendingChanges(new Map())
             onChanged()
             setShowPattern(null)
         } catch { /* silent */ }
@@ -124,14 +169,18 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            // Set only the selected month, clear the other 11
-            for (let m = 1; m <= 12; m++) {
+            const items = Array.from({ length: 12 }, (_, i) => {
+                const m = i + 1
                 if (m === patternMonth) {
-                    await axios.post(apiUrl('/overrides'), { month: m, amount: patternAmount }, { headers: headers() })
-                } else if (overrideByMonth.has(m)) {
-                    await axios.delete(apiUrl(`/overrides/${m}`), { headers: headers() })
+                    return { month: m, amount: patternAmount }
                 }
-            }
+                if (overrideByMonth.has(m)) {
+                    return { month: m, amount: null as string | null }
+                }
+                return null
+            }).filter((x): x is { month: number; amount: string | null } => x !== null)
+            await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
+            setPendingChanges(new Map())
             onChanged()
             setShowPattern(null)
         } catch { /* silent */ }
@@ -142,9 +191,9 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (isApplying) return
         setIsApplying(true)
         try {
-            for (const o of overrides) {
-                await axios.delete(apiUrl(`/overrides/${o.month}`), { headers: headers() })
-            }
+            const items = overrides.map(o => ({ month: o.month, amount: null as string | null }))
+            await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
+            setPendingChanges(new Map())
             onChanged()
             setShowPattern(null)
         } catch { /* silent */ }
@@ -169,9 +218,10 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
             <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-2 p-3 bg-ocean-900/50 rounded-lg">
                 {MONTHS.map((name, i) => {
                     const month = i + 1
-                    const hasOverride = overrideByMonth.has(month)
-                    const displayAmount = hasOverride ? overrideByMonth.get(month)! : defaultAmount
+                    const hasOverride = hasEffectiveOverride(month)
+                    const displayAmount = getDisplayAmount(month)
                     const isEditing = editingMonth === month
+                    const isPending = pendingChanges.has(month)
 
                     return (
                         <div key={month} className="text-center">
@@ -189,7 +239,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault()
-                                                handleSave(month, i + 1)
+                                                handleLocalSave(month, i + 1)
                                             }
                                             if (e.key === 'Escape') setEditingMonth(null)
                                         }}
@@ -198,10 +248,10 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                         aria-label={`Override amount for ${name}`}
                                     />
                                     <button
-                                        onClick={() => handleSave(month)}
+                                        onClick={() => handleLocalSave(month)}
                                         className="text-xs text-teal-400 hover:text-teal-300 cursor-pointer"
                                     >
-                                        Save
+                                        OK
                                     </button>
                                 </div>
                             ) : (
@@ -211,8 +261,10 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                             setEditingMonth(month)
                                             setEditValue(displayAmount)
                                         }}
-                                        className={`text-sm cursor-pointer hover:text-sky-400 transition-colors ${
-                                            hasOverride ? 'text-sky-400 font-medium' : 'text-slate-400'
+                                        className={`text-sm cursor-pointer hover:text-sky-400 transition-colors rounded px-1 ${
+                                            isPending
+                                                ? 'ring-1 ring-amber-500/60 text-amber-400 font-medium'
+                                                : hasOverride ? 'text-sky-400 font-medium' : 'text-slate-400'
                                         }`}
                                         aria-label={`${hasOverride ? 'Edit override' : 'Set override'} for ${name}`}
                                     >
@@ -220,7 +272,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                     </button>
                                     {hasOverride && (
                                         <button
-                                            onClick={() => handleDelete(month)}
+                                            onClick={() => handleLocalDelete(month)}
                                             className="text-xs text-slate-500 hover:text-coral-400 cursor-pointer"
                                             aria-label={`Remove override for ${name}`}
                                         >
@@ -234,8 +286,16 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                 })}
             </div>
 
-            {/* Pattern controls */}
+            {/* Save all + Pattern controls */}
             <div className="flex items-center gap-2" ref={patternRef}>
+                {hasPendingChanges && (
+                    <button
+                        onClick={batchSave}
+                        className="text-xs px-3 py-1 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30 cursor-pointer font-medium"
+                    >
+                        Save all
+                    </button>
+                )}
                 <button
                     onClick={() => setShowPattern(showPattern ? null : 'monthly')}
                     className="text-xs px-2 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"

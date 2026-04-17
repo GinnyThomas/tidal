@@ -22,6 +22,19 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
+class BudgetOverrideBatchItem(BaseModel):
+    """One item in a batch override request — amount=null means delete."""
+
+    month: int = Field(..., ge=1, le=12)
+    amount: Optional[Decimal] = None
+
+
+class BudgetOverrideBatch(BaseModel):
+    """Request body for POST /api/v1/budgets/{id}/overrides/batch."""
+
+    overrides: list[BudgetOverrideBatchItem]
+
+
 class BudgetOverrideCreate(BaseModel):
     """Request body for POST /api/v1/budgets/{id}/overrides — upsert a month override."""
 

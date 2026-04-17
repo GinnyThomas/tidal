@@ -48,9 +48,7 @@ describe('BudgetOverrideForm', () => {
         expect(input.value).toBe('200.00')
     })
 
-    it('Enter saves and opens the next month for editing', async () => {
-        vi.mocked(axios.post).mockResolvedValue({ data: {} })
-
+    it('Enter saves locally and opens the next month for editing', async () => {
         render(<MemoryRouter><BudgetOverrideForm {...defaultProps} /></MemoryRouter>)
 
         // Click Jan to start editing
@@ -61,15 +59,43 @@ describe('BudgetOverrideForm', () => {
         await userEvent.type(input, '250')
         await userEvent.keyboard('{Enter}')
 
-        // The save should have been called
-        await waitFor(() => {
-            expect(vi.mocked(axios.post)).toHaveBeenCalled()
-        })
+        // No API call yet — changes are staged locally
+        expect(vi.mocked(axios.post)).not.toHaveBeenCalled()
 
-        // After save + onChanged, the next month (Feb) should open for editing
+        // After local save, the next month (Feb) should open for editing
         await waitFor(() => {
             expect(screen.getByLabelText(/override amount for feb/i)).toBeInTheDocument()
         })
+
+        // "Save all" button should appear because there are pending changes
+        expect(screen.getByText('Save all')).toBeInTheDocument()
+    })
+
+    it('Save all button sends a single batch POST and calls onChanged', async () => {
+        vi.mocked(axios.post).mockResolvedValue({ data: { overrides: [] } })
+
+        render(<MemoryRouter><BudgetOverrideForm {...defaultProps} /></MemoryRouter>)
+
+        // Edit Jan locally
+        await userEvent.click(screen.getByRole('button', { name: /edit override for jan/i }))
+        const input = screen.getByLabelText(/override amount for jan/i)
+        await userEvent.clear(input)
+        await userEvent.type(input, '250')
+        // Click OK to save locally (not Enter — to avoid opening next month)
+        await userEvent.click(screen.getByText('OK'))
+
+        // Click "Save all"
+        await userEvent.click(screen.getByText('Save all'))
+
+        await waitFor(() => {
+            const batchCalls = vi.mocked(axios.post).mock.calls.filter(
+                ([url]) => String(url).includes('/overrides/batch')
+            )
+            expect(batchCalls.length).toBe(1)
+            expect(batchCalls[0][1].overrides).toEqual([{ month: 1, amount: '250' }])
+        })
+
+        expect(defaultProps.onChanged).toHaveBeenCalled()
     })
 
     it('shows Set pattern panel when button is clicked', async () => {
@@ -94,8 +120,8 @@ describe('BudgetOverrideForm', () => {
         expect(screen.queryByText('Monthly')).not.toBeInTheDocument()
     })
 
-    it('Apply to all months calls the API 12 times', async () => {
-        vi.mocked(axios.post).mockResolvedValue({ data: {} })
+    it('Apply to all months sends a single batch POST with 12 items', async () => {
+        vi.mocked(axios.post).mockResolvedValue({ data: { overrides: [] } })
 
         render(<MemoryRouter><BudgetOverrideForm {...defaultProps} /></MemoryRouter>)
 
@@ -104,11 +130,13 @@ describe('BudgetOverrideForm', () => {
         await userEvent.click(screen.getByText('Apply to all months'))
 
         await waitFor(() => {
-            // Should have made 12 POST calls (one per month)
-            const postCalls = vi.mocked(axios.post).mock.calls.filter(
-                ([url]) => String(url).includes('/overrides')
+            const batchCalls = vi.mocked(axios.post).mock.calls.filter(
+                ([url]) => String(url).includes('/overrides/batch')
             )
-            expect(postCalls.length).toBe(12)
+            // Single batch call (not 12 individual POSTs)
+            expect(batchCalls.length).toBe(1)
+            // All 12 months in the batch
+            expect(batchCalls[0][1].overrides.length).toBe(12)
         })
 
         expect(defaultProps.onChanged).toHaveBeenCalled()

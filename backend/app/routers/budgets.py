@@ -30,6 +30,7 @@ from app.models.category import Category
 from app.models.user import User
 from app.schemas.budget import (
     BudgetCreate,
+    BudgetOverrideBatch,
     BudgetOverrideCreate,
     BudgetResponse,
     BudgetUpdate,
@@ -318,6 +319,59 @@ def set_override(
             amount=data.amount,
         )
         db.add(override)
+
+    db.commit()
+    db.refresh(budget)
+    category = _lookup_category(budget.category_id, current_user.id, db)
+    return _build_budget_response(budget, category)
+
+
+@router.post(
+    "/{budget_id}/overrides/batch",
+    response_model=BudgetResponse,
+)
+def batch_overrides(
+    budget_id: uuid.UUID,
+    data: BudgetOverrideBatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Batch upsert/delete month overrides in a single transaction.
+
+    Each item in data.overrides:
+      - amount provided → upsert that month's override
+      - amount is null  → delete that month's override (if it exists)
+
+    Returns the full budget (with all overrides) so the client sees the
+    updated state without a second GET. Eliminates the N+1 pattern of
+    calling POST /overrides 12 times for "Apply to all months".
+    """
+    budget = _get_budget_or_404(budget_id, current_user.id, db)
+
+    for item in data.overrides:
+        existing = (
+            db.query(BudgetOverride)
+            .filter(
+                BudgetOverride.budget_id == budget.id,
+                BudgetOverride.month == item.month,
+            )
+            .first()
+        )
+        if item.amount is not None:
+            # Upsert
+            if existing:
+                existing.amount = item.amount
+            else:
+                db.add(BudgetOverride(
+                    budget_id=budget.id,
+                    month=item.month,
+                    amount=item.amount,
+                ))
+        else:
+            # Delete
+            if existing:
+                db.delete(existing)
 
     db.commit()
     db.refresh(budget)
