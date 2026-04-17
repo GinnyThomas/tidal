@@ -26,7 +26,7 @@ class BudgetOverrideBatchItem(BaseModel):
     """One item in a batch override request — amount=null means delete."""
 
     month: int = Field(..., ge=1, le=12)
-    amount: Optional[Decimal] = None
+    amount: Optional[Decimal] = Field(...)
 
 
 class BudgetOverrideBatch(BaseModel):

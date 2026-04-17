@@ -126,14 +126,31 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
 
     // --- Pattern application (calls batch endpoint directly) ---
 
+    // Merge any staged pendingChanges into a pattern's items array so that
+    // manual edits the user made before clicking a pattern button survive.
+    // Pattern items take priority (they explicitly set/clear months); pending
+    // changes for months NOT covered by the pattern are appended.
+    type BatchItem = { month: number; amount: string | null }
+    const mergeWithPending = (patternItems: BatchItem[]): BatchItem[] => {
+        const coveredMonths = new Set(patternItems.map(i => i.month))
+        const extras: BatchItem[] = []
+        for (const [month, amount] of pendingChanges) {
+            if (!coveredMonths.has(month)) {
+                extras.push({ month, amount })
+            }
+        }
+        return [...patternItems, ...extras]
+    }
+
     const applyMonthly = async () => {
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            const items = Array.from({ length: 12 }, (_, i) => ({
+            const patternItems: BatchItem[] = Array.from({ length: 12 }, (_, i) => ({
                 month: i + 1,
                 amount: patternAmount,
             }))
+            const items = mergeWithPending(patternItems)
             await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
             setPendingChanges(new Map())
             onChanged()
@@ -146,17 +163,17 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            const items = Array.from({ length: 12 }, (_, i) => {
+            const patternItems: BatchItem[] = Array.from({ length: 12 }, (_, i) => {
                 const m = i + 1
                 if (i % 3 === patternQuarter) {
                     return { month: m, amount: patternAmount }
                 }
-                // Only delete months that have an override
                 if (overrideByMonth.has(m)) {
-                    return { month: m, amount: null as string | null }
+                    return { month: m, amount: null }
                 }
                 return null
-            }).filter((x): x is { month: number; amount: string | null } => x !== null)
+            }).filter((x): x is BatchItem => x !== null)
+            const items = mergeWithPending(patternItems)
             await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
             setPendingChanges(new Map())
             onChanged()
@@ -169,16 +186,17 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (!patternAmount || isApplying) return
         setIsApplying(true)
         try {
-            const items = Array.from({ length: 12 }, (_, i) => {
+            const patternItems: BatchItem[] = Array.from({ length: 12 }, (_, i) => {
                 const m = i + 1
                 if (m === patternMonth) {
                     return { month: m, amount: patternAmount }
                 }
                 if (overrideByMonth.has(m)) {
-                    return { month: m, amount: null as string | null }
+                    return { month: m, amount: null }
                 }
                 return null
-            }).filter((x): x is { month: number; amount: string | null } => x !== null)
+            }).filter((x): x is BatchItem => x !== null)
+            const items = mergeWithPending(patternItems)
             await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
             setPendingChanges(new Map())
             onChanged()
@@ -191,7 +209,8 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
         if (isApplying) return
         setIsApplying(true)
         try {
-            const items = overrides.map(o => ({ month: o.month, amount: null as string | null }))
+            const patternItems: BatchItem[] = overrides.map(o => ({ month: o.month, amount: null }))
+            const items = mergeWithPending(patternItems)
             await axios.post(apiUrl('/overrides/batch'), { overrides: items }, { headers: headers() })
             setPendingChanges(new Map())
             onChanged()

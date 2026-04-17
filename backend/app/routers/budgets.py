@@ -349,15 +349,18 @@ def batch_overrides(
     """
     budget = _get_budget_or_404(budget_id, current_user.id, db)
 
+    # Batch-load all existing overrides for the requested months in a single
+    # query — avoids N individual SELECTs inside the loop.
+    months = {item.month for item in data.overrides}
+    existing_by_month = {
+        o.month: o for o in db.query(BudgetOverride).filter(
+            BudgetOverride.budget_id == budget.id,
+            BudgetOverride.month.in_(months),
+        ).all()
+    }
+
     for item in data.overrides:
-        existing = (
-            db.query(BudgetOverride)
-            .filter(
-                BudgetOverride.budget_id == budget.id,
-                BudgetOverride.month == item.month,
-            )
-            .first()
-        )
+        existing = existing_by_month.get(item.month)
         if item.amount is not None:
             # Upsert
             if existing:
