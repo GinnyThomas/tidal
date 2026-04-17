@@ -5,7 +5,8 @@
 // Test strategy:
 //   Loading state, error state, empty state (no planned amounts across the year),
 //   12 month column headers, category amounts, "—" for zero amounts,
-//   and year navigation (prev/next year buttons).
+//   year navigation, group sections with separate expense/income subtotals,
+//   and cash flow (on by default).
 //
 // One axios.get call on mount: GET /api/v1/plan/{year}
 // Returns an AnnualPlan: { year, months: MonthlyPlan[12] }
@@ -193,8 +194,6 @@ describe('AnnualView', () => {
     // =========================================================================
 
     it('shows the current year (2026) as the page heading on initial load', async () => {
-        // toFake: ['Date'] fakes only the Date constructor, leaving setTimeout/Promise
-        // timers real so findByRole's internal waitFor still works correctly.
         vi.useFakeTimers({ toFake: ['Date'] })
         vi.setSystemTime(new Date('2026-06-15'))
         try {
@@ -202,7 +201,6 @@ describe('AnnualView', () => {
 
             render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-            // h2 shows the year number once loading completes
             const heading = await screen.findByRole('heading', { level: 2 })
             expect(heading).toHaveTextContent('2026')
         } finally {
@@ -220,7 +218,6 @@ describe('AnnualView', () => {
 
             render(<MemoryRouter><AnnualView /></MemoryRouter>)
 
-            // Wait for initial load then click Prev
             await screen.findByRole('heading', { level: 2 })
             await userEvent.click(screen.getByRole('button', { name: /prev/i }))
 
@@ -263,7 +260,7 @@ describe('AnnualView', () => {
     // Group sections
     // =========================================================================
 
-    it('shows group section headers and subtotals when rows span multiple groups', async () => {
+    it('shows group section headers and separate expense subtotals when rows span multiple groups', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
             data: makeAnnualPlan(2026, {
                 0: [
@@ -281,19 +278,18 @@ describe('AnnualView', () => {
         expect(screen.getByText(/── UK ──/i)).toBeInTheDocument()
         expect(screen.getByText(/── España ──/i)).toBeInTheDocument()
 
-        // Subtotal rows
-        expect(screen.getByText('── UK Total')).toBeInTheDocument()
-        expect(screen.getByText('── España Total')).toBeInTheDocument()
+        // Separate expense subtotal rows (not a combined "── UK Total")
+        expect(screen.getByText('── UK Expenses Total ──')).toBeInTheDocument()
+        expect(screen.getByText('── España Expenses Total ──')).toBeInTheDocument()
 
-        // Verify UK subtotal Jan column shows 300.00
-        // Subtotal row: cells[0]=label, cells[1]=Jan, ... cells[12]=Dec, cells[13]=Total
-        const ukSubtotalRow = screen.getByText('── UK Total').closest('tr')!
+        // Verify UK expense subtotal Jan column shows 300.00
+        const ukSubtotalRow = screen.getByText('── UK Expenses Total ──').closest('tr')!
         const ukCells = ukSubtotalRow.querySelectorAll('td')
         expect(ukCells[1].textContent).toBe('300.00') // Jan
         expect(ukCells[13].textContent).toBe('300.00') // Annual total
 
-        // España subtotal: 200.00 in Jan only
-        const esSubtotalRow = screen.getByText('── España Total').closest('tr')!
+        // España expense subtotal: 200.00 in Jan only
+        const esSubtotalRow = screen.getByText('── España Expenses Total ──').closest('tr')!
         const esCells = esSubtotalRow.querySelectorAll('td')
         expect(esCells[1].textContent).toBe('200.00')
     })
@@ -310,14 +306,14 @@ describe('AnnualView', () => {
         await screen.findByText('Bills')
 
         expect(screen.queryByText(/── UK ──/i)).not.toBeInTheDocument()
-        expect(screen.queryByText(/── UK Total/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/── UK Expenses Total/)).not.toBeInTheDocument()
     })
 
     // =========================================================================
-    // Cash flow
+    // Cash flow (on by default)
     // =========================================================================
 
-    it('shows cash flow rows when "Show cash flow" is toggled on', async () => {
+    it('shows cash flow rows by default (no toggle needed)', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
             data: makeAnnualPlan(2026, {
                 0: [
@@ -333,16 +329,61 @@ describe('AnnualView', () => {
 
         await screen.findByText('Groceries UK')
 
-        // Cash flow rows NOT visible by default
-        expect(screen.queryByText('Opening Balance')).not.toBeInTheDocument()
-
-        // Toggle on
-        await userEvent.click(screen.getByLabelText(/show cash flow/i))
-
-        // Opening and Closing Balance rows should appear (one per group section)
+        // Cash flow rows visible by default (showCashFlow starts true)
         expect(screen.getAllByText('Opening Balance').length).toBeGreaterThanOrEqual(1)
         expect(screen.getAllByText('Closing Balance').length).toBeGreaterThanOrEqual(1)
         // UK opening balance value visible
         expect(screen.getByText('5,000.00')).toBeInTheDocument()
+    })
+
+    it('hides cash flow rows when "Show cash flow" is toggled off', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, {
+                0: [
+                    makePlanRow({ category_id: 'cat-uk', category_name: 'Groceries UK', planned: '300.00', group: 'UK' }),
+                    makePlanRow({ category_id: 'cat-es', category_name: 'Groceries España', planned: '200.00', group: 'España' }),
+                ],
+            }, [
+                { id: 'ob-1', user_id: 'u-1', group: 'UK', year: 2026, opening_balance: '5000.00', currency: 'GBP', created_at: '', updated_at: '' },
+            ]),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+
+        // Cash flow visible by default
+        expect(screen.getAllByText('Opening Balance').length).toBeGreaterThanOrEqual(1)
+
+        // Toggle off
+        await userEvent.click(screen.getByLabelText(/show cash flow/i))
+
+        // Cash flow rows should be gone
+        expect(screen.queryByText('Opening Balance')).not.toBeInTheDocument()
+        expect(screen.queryByText('Closing Balance')).not.toBeInTheDocument()
+    })
+
+    it('shows separate income subtotal when a group has income rows', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, {
+                0: [
+                    makePlanRow({ category_id: 'cat-rent', category_name: 'Rent', planned: '1000.00', group: 'UK', is_income: false }),
+                    makePlanRow({ category_id: 'cat-salary', category_name: 'Salary', planned: '3000.00', group: 'UK', is_income: true }),
+                    makePlanRow({ category_id: 'cat-es', category_name: 'Groceries ES', planned: '200.00', group: 'España', is_income: false }),
+                ],
+            }),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Rent')
+
+        // Both expense and income subtotal rows for UK
+        expect(screen.getByText('── UK Expenses Total ──')).toBeInTheDocument()
+        expect(screen.getByText('── UK Income Total ──')).toBeInTheDocument()
+
+        // España only has expenses — no income total
+        expect(screen.getByText('── España Expenses Total ──')).toBeInTheDocument()
+        expect(screen.queryByText('── España Income Total ──')).not.toBeInTheDocument()
     })
 })

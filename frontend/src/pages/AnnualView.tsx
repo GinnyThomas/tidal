@@ -104,7 +104,7 @@ function AnnualView() {
     const [year, setYear] = useState(new Date().getFullYear())
     const [annualPlan, setAnnualPlan] = useState<AnnualPlan | null>(null)
     const [loading, setLoading] = useState(true)
-    const [showCashFlow, setShowCashFlow] = useState(false)
+    const [showCashFlow, setShowCashFlow] = useState(true)
     // Editing state for opening balance inline edit
     const [editingOBGroup, setEditingOBGroup] = useState<string | null>(null)
     const [editingOBValue, setEditingOBValue] = useState('')
@@ -360,7 +360,7 @@ function AnnualView() {
 
     return (
         <Layout>
-            <div className="max-w-7xl mx-auto">
+            <div className="w-full px-4">
 
                 {/* Year navigation */}
                 <div className="flex items-center justify-between mb-6">
@@ -429,7 +429,7 @@ function AnnualView() {
                         <table className="w-full text-sm min-w-[900px]">
                             <thead className="sticky top-0 z-10 bg-ocean-950">
                                 <tr className="border-b border-ocean-700 bg-ocean-950">
-                                    <th className="text-left px-4 py-3 text-slate-400 font-medium">Category</th>
+                                    <th className="text-left px-4 py-3 text-slate-400 font-medium sticky left-0 z-20 bg-ocean-950">Category</th>
                                     {MONTH_ABBR.map((m) => (
                                         <th key={m} className="text-right px-3 py-3 text-sky-400 font-medium">{m}</th>
                                     ))}
@@ -439,14 +439,8 @@ function AnnualView() {
                             <tbody>
                                 {showAnnualGroupSections ? (
                                     annualGroupSections.map(({ group: sectionGroup, entries }) => {
-                                        // Compute section subtotals across all entries
-                                        const allRows = entries.flatMap(({ parent, children }) => [parent, ...children])
-                                        const sectionMonthTotals = Array.from({ length: 12 }, (_, i) =>
-                                            allRows.reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0).toFixed(2)
-                                        )
-                                        const sectionTotal = sumAmounts(sectionMonthTotals)
-
                                         // Cash flow: opening balance → closing balance per month
+                                        const allRows = entries.flatMap(({ parent, children }) => [parent, ...children])
                                         const ob = annualPlan?.opening_balances?.find(b => b.group === sectionGroup)
                                         const openingAmount = ob ? parseFloat(ob.opening_balance) : 0
 
@@ -472,7 +466,7 @@ function AnnualView() {
                                             <React.Fragment key={sectionGroup}>
                                                 {/* Group header */}
                                                 <tr className="bg-ocean-950/60">
-                                                    <td colSpan={14} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase">
+                                                    <td colSpan={14} className="px-4 py-2 text-slate-500 text-xs font-semibold tracking-wider uppercase sticky left-0 z-[5] bg-ocean-950">
                                                         ── {sectionGroup} ──
                                                     </td>
                                                 </tr>
@@ -480,52 +474,88 @@ function AnnualView() {
                                                 {/* Cash flow: Opening Balance row — clickable to edit */}
                                                 {showCashFlow && (
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
-                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic sticky left-0 z-[5] bg-ocean-900">Opening Balance</td>
                                                         <td colSpan={12} className="px-3 py-2 text-right text-sm">
                                                             {renderOBCell(sectionGroup)}
                                                         </td>
                                                         <td className="px-4 py-2"></td>
                                                     </tr>
                                                 )}
-                                                {entries.map(({ parent: [parentId, parentData], children }) => {
-                                                    const parentTotal = sumAmounts(parentData.amounts)
-                                                    return (
-                                                        <React.Fragment key={`${parentId}-${sectionGroup}`}>
-                                                            <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
-                                                                <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
-                                                                {parentData.amounts.map((a, i) => (
-                                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
-                                                                ))}
-                                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
-                                                            </tr>
-                                                            {children.map(([childId, childData]) => {
-                                                                const childTotal = sumAmounts(childData.amounts)
-                                                                return (
-                                                                    <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
-                                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
-                                                                        {childData.amounts.map((a, i) => (
-                                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
-                                                                        ))}
-                                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
-                                                                    </tr>
-                                                                )
-                                                            })}
-                                                        </React.Fragment>
+                                                {/* Expense rows first, then income rows */}
+                                                {(() => {
+                                                    const expenseEntries = entries.filter(({ parent: [, d] }) => !d.isIncome)
+                                                    const incomeEntries = entries.filter(({ parent: [, d] }) => d.isIncome)
+
+                                                    // Per-month subtotals for each sub-section
+                                                    const expenseRows = expenseEntries.flatMap(({ parent, children }) => [parent, ...children])
+                                                    const expenseMonthTotals = Array.from({ length: 12 }, (_, i) =>
+                                                        expenseRows.reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0).toFixed(2)
                                                     )
-                                                })}
-                                                {/* Group subtotal row */}
-                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
-                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm">── {sectionGroup} Total</td>
-                                                    {sectionMonthTotals.map((t, i) => (
-                                                        <td key={i} className="px-3 py-2.5 text-right text-sky-400 font-semibold text-sm">{fmt(t)}</td>
-                                                    ))}
-                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">{fmt(sectionTotal)}</td>
-                                                </tr>
+                                                    const expenseTotal = sumAmounts(expenseMonthTotals)
+
+                                                    const incomeRows = incomeEntries.flatMap(({ parent, children }) => [parent, ...children])
+                                                    const incomeMonthTotals = Array.from({ length: 12 }, (_, i) =>
+                                                        incomeRows.reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0).toFixed(2)
+                                                    )
+                                                    const incomeTotal = sumAmounts(incomeMonthTotals)
+
+                                                    const renderEntry = ({ parent: [parentId, parentData], children }: { parent: AnnualEntry; children: AnnualEntry[] }) => {
+                                                        const parentTotal = sumAmounts(parentData.amounts)
+                                                        return (
+                                                            <React.Fragment key={`${parentId}-${sectionGroup}`}>
+                                                                <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
+                                                                    <td className="px-4 py-3 text-slate-100 font-medium sticky left-0 z-[5] bg-ocean-900">{parentData.name}</td>
+                                                                    {parentData.amounts.map((a, i) => (
+                                                                        <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                                    ))}
+                                                                    <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                                </tr>
+                                                                {children.map(([childId, childData]) => {
+                                                                    const childTotal = sumAmounts(childData.amounts)
+                                                                    return (
+                                                                        <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
+                                                                            <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4 sticky left-0 z-[5] bg-ocean-800">{childData.name}</td>
+                                                                            {childData.amounts.map((a, i) => (
+                                                                                <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                                            ))}
+                                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                                        </tr>
+                                                                    )
+                                                                })}
+                                                            </React.Fragment>
+                                                        )
+                                                    }
+
+                                                    return (
+                                                        <>
+                                                            {expenseEntries.map(renderEntry)}
+                                                            {expenseEntries.length > 0 && (
+                                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
+                                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm sticky left-0 z-[5] bg-ocean-700">── {sectionGroup} Expenses Total ──</td>
+                                                                    {expenseMonthTotals.map((t, i) => (
+                                                                        <td key={i} className="px-3 py-2.5 text-right text-sky-400 font-semibold text-sm">{fmt(t)}</td>
+                                                                    ))}
+                                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">{fmt(expenseTotal)}</td>
+                                                                </tr>
+                                                            )}
+                                                            {incomeEntries.map(renderEntry)}
+                                                            {incomeEntries.length > 0 && (
+                                                                <tr className="bg-ocean-700/40 border-b border-ocean-600">
+                                                                    <td className="px-4 py-2.5 text-slate-300 font-semibold text-sm sticky left-0 z-[5] bg-ocean-700">── {sectionGroup} Income Total ──</td>
+                                                                    {incomeMonthTotals.map((t, i) => (
+                                                                        <td key={i} className="px-3 py-2.5 text-right text-sky-400 font-semibold text-sm">{fmt(t)}</td>
+                                                                    ))}
+                                                                    <td className="px-4 py-2.5 text-right text-teal-400 font-semibold text-sm">{fmt(incomeTotal)}</td>
+                                                                </tr>
+                                                            )}
+                                                        </>
+                                                    )
+                                                })()}
 
                                                 {/* Cash flow: Closing Balance row */}
                                                 {showCashFlow && (
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-600">
-                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic sticky left-0 z-[5] bg-ocean-900">Closing Balance</td>
                                                         {closingBalances.map((bal, i) => (
                                                             <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
                                                                 {fmtCurrency(bal)}
@@ -564,7 +594,7 @@ function AnnualView() {
                                                 {/* Cash flow: Opening Balance — clickable */}
                                                 {showCashFlow && (
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
-                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Opening Balance</td>
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic sticky left-0 z-[5] bg-ocean-900">Opening Balance</td>
                                                         <td colSpan={12} className="px-3 py-2 text-right text-sm">
                                                             {renderOBCell(flatGroup)}
                                                         </td>
@@ -578,7 +608,7 @@ function AnnualView() {
                                                     return (
                                                         <React.Fragment key={parentId}>
                                                             <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
-                                                                <td className="px-4 py-3 text-slate-100 font-medium">{parentData.name}</td>
+                                                                <td className="px-4 py-3 text-slate-100 font-medium sticky left-0 z-[5] bg-ocean-900">{parentData.name}</td>
                                                                 {parentData.amounts.map((a, i) => (
                                                                     <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
                                                                 ))}
@@ -588,7 +618,7 @@ function AnnualView() {
                                                                 const childTotal = sumAmounts(childData.amounts)
                                                                 return (
                                                                     <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
-                                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4">{childData.name}</td>
+                                                                        <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4 sticky left-0 z-[5] bg-ocean-800">{childData.name}</td>
                                                                         {childData.amounts.map((a, i) => (
                                                                             <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
                                                                         ))}
@@ -603,7 +633,7 @@ function AnnualView() {
                                                 {/* Cash flow: Closing Balance */}
                                                 {showCashFlow && (
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-600">
-                                                        <td className="px-4 py-2 text-slate-400 text-sm italic">Closing Balance</td>
+                                                        <td className="px-4 py-2 text-slate-400 text-sm italic sticky left-0 z-[5] bg-ocean-900">Closing Balance</td>
                                                         {flatClosing.map((bal, i) => (
                                                             <td key={i} className={`px-3 py-2 text-right text-sm font-medium ${bal >= 0 ? 'text-teal-400' : 'text-danger'}`}>
                                                                 {fmtCurrency(bal)}
@@ -623,7 +653,7 @@ function AnnualView() {
                             {/* Monthly totals footer — sums all categories per column */}
                             <tfoot>
                                 <tr className="border-t-2 border-ocean-600 bg-ocean-950">
-                                    <td className="px-4 py-3 text-slate-100 font-bold">Total</td>
+                                    <td className="px-4 py-3 text-slate-100 font-bold sticky left-0 z-[5] bg-ocean-950">Total</td>
                                     {monthTotals.map((t, i) => (
                                         <td key={i} className="px-3 py-3 text-right text-sky-400 font-bold">
                                             {fmt(t)}
