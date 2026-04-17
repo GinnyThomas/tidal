@@ -481,10 +481,17 @@ function AnnualView() {
                                                         <td className="px-4 py-2"></td>
                                                     </tr>
                                                 )}
-                                                {/* Expense rows first, then income rows */}
+                                                {/* Expense rows first, then income rows.
+                                                    An entry counts as "income" if the parent is income
+                                                    OR any of its children are income — this keeps a
+                                                    mixed parent (e.g. "Income" parent with "Salary"
+                                                    child) in the income section rather than splitting
+                                                    it across both. */}
                                                 {(() => {
-                                                    const expenseEntries = entries.filter(({ parent: [, d] }) => !d.isIncome)
-                                                    const incomeEntries = entries.filter(({ parent: [, d] }) => d.isIncome)
+                                                    const isIncomeEntry = ({ parent: [, d], children }: { parent: AnnualEntry; children: AnnualEntry[] }) =>
+                                                        d.isIncome || children.some(([, cd]) => cd.isIncome)
+                                                    const expenseEntries = entries.filter(e => !isIncomeEntry(e))
+                                                    const incomeEntries = entries.filter(isIncomeEntry)
 
                                                     // Per-month subtotals for each sub-section
                                                     const expenseRows = expenseEntries.flatMap(({ parent, children }) => [parent, ...children])
