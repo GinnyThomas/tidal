@@ -80,20 +80,28 @@ def _get_account_or_404(
     return account
 
 
-def _calculate_balance(account_id: uuid.UUID, user_id: uuid.UUID, db: Session) -> Decimal:
+def _calculate_balance(
+    account_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session,
+    account_type: str = "checking",
+) -> Decimal:
     """
     Compute the current balance for an account based on its transactions.
 
-    Balance = opening_balance (current_balance)
-              + sum(income/cleared+reconciled for this account)
-              - sum(expense/cleared+reconciled for this account)
+    For debit accounts (checking, savings, etc.):
+        Returns the net transaction effect on the account balance
 
-    Transfers: the "from" leg is an expense on the source account (reduces),
-    and the "to" leg is treated as income on the destination (increases).
-    Transfer type rows are handled by checking if the transaction's account
-    matches — debit reduces, credit increases. Since both legs have
-    transaction_type='transfer', we use parent_transaction_id to distinguish:
-    the parent (debit/from) reduces balance, the child (credit/to) increases.
+    For credit_card accounts the perspective is inverted — the balance
+    represents money OWED, not money held:
+        Balance = opening + expenses − payments
+        Expenses increase (more owed), income/payments decrease (less owed),
+        refunds decrease (merchant returned money, reducing what's owed).
+
+    Transfers: the debit leg (parent_transaction_id=None) always moves money
+    OUT of the source account; the credit leg moves money IN. For a credit
+    card the debit leg increases the owed balance (cash advance or payment
+    from the card) and the credit leg decreases it (payment received).
     """
     transactions = (
         db.query(Transaction)
@@ -106,21 +114,38 @@ def _calculate_balance(account_id: uuid.UUID, user_id: uuid.UUID, db: Session) -
         .all()
     )
 
+    is_credit_card = account_type == "credit_card"
+
     total = Decimal("0")
     for tx in transactions:
         if tx.transaction_type == "income":
-            total += tx.amount
+            if is_credit_card:
+                total -= tx.amount  # payment reduces what's owed
+            else:
+                total += tx.amount
         elif tx.transaction_type == "expense":
-            total -= tx.amount
+            if is_credit_card:
+                total += tx.amount  # purchase increases what's owed
+            else:
+                total -= tx.amount
         elif tx.transaction_type == "transfer":
             # Parent leg (debit/from) has parent_transaction_id = None
             # Child leg (credit/to) has parent_transaction_id set
             if tx.parent_transaction_id is None:
-                total -= tx.amount  # money left this account
+                if is_credit_card:
+                    total += tx.amount  # e.g. cash advance — increases owed
+                else:
+                    total -= tx.amount  # money left this account
             else:
-                total += tx.amount  # money arrived at this account
+                if is_credit_card:
+                    total -= tx.amount  # payment received — reduces owed
+                else:
+                    total += tx.amount  # money arrived at this account
         elif tx.transaction_type == "refund":
-            total += tx.amount  # refund returns money
+            if is_credit_card:
+                total -= tx.amount  # merchant refund reduces what's owed
+            else:
+                total += tx.amount  # refund returns money
 
     return total
 
@@ -128,7 +153,7 @@ def _calculate_balance(account_id: uuid.UUID, user_id: uuid.UUID, db: Session) -
 def _to_response(account: Account, db: Session) -> dict:
     """Build account response dict with computed calculated_balance."""
     opening = account.current_balance
-    tx_balance = _calculate_balance(account.id, account.user_id, db)
+    tx_balance = _calculate_balance(account.id, account.user_id, db, account.account_type)
     return {
         "id": account.id,
         "user_id": account.user_id,
