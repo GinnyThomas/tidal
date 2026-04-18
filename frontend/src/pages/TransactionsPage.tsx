@@ -313,12 +313,12 @@ function TransactionsPage() {
                 {/* Inline forms — only one visible at a time */}
                 {showAddForm && (
                     <div className="mb-6">
-                        <AddTransactionForm onTransactionAdded={handleTransactionAdded} />
+                        <AddTransactionForm onTransactionAdded={handleTransactionAdded} defaultAccountId={filterAccountId || undefined} />
                     </div>
                 )}
                 {showTransferForm && (
                     <div className="mb-6">
-                        <AddTransferForm onTransactionAdded={handleTransactionAdded} />
+                        <AddTransferForm onTransactionAdded={handleTransactionAdded} defaultAccountId={filterAccountId || undefined} />
                     </div>
                 )}
 

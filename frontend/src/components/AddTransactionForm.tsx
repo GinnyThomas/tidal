@@ -50,9 +50,12 @@ type Props = {
     onTransactionAdded: () => void
     editingTransaction?: EditingTransaction
     onTransactionUpdated?: () => void
+    // When the user is filtering by account on TransactionsPage, this
+    // pre-selects that account in the dropdown for new transactions.
+    defaultAccountId?: string
 }
 
-function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransactionUpdated }: Props) {
+function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransactionUpdated, defaultAccountId }: Props) {
     // isEditMode drives which endpoint is called and what the heading/button say.
     const isEditMode = editingTransaction !== undefined
 
@@ -61,7 +64,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
     const [promotions, setPromotions] = useState<PromotionOption[]>([])
 
     // All state is initialised from editingTransaction in edit mode, or defaults in create mode.
-    const [accountId, setAccountId] = useState(editingTransaction?.account_id ?? '')
+    const [accountId, setAccountId] = useState(editingTransaction?.account_id ?? defaultAccountId ?? '')
     const [categoryId, setCategoryId] = useState(editingTransaction?.category_id ?? '')
     const [transactionType, setTransactionType] = useState(editingTransaction?.transaction_type ?? 'expense')
     const [date, setDate] = useState(editingTransaction?.date ?? new Date().toISOString().split('T')[0])
@@ -95,7 +98,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             if (promosRes) setPromotions(promosRes.data)
             // Only auto-select the first option in create mode — in edit mode the
             // values are already set from the editingTransaction prop.
-            if (!isEditMode && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
+            if (!isEditMode && !defaultAccountId && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
             if (!isEditMode && sorted.length > 0) setCategoryId(sorted[0].id)
         }).catch(() => {
             // Best-effort — silently leave dropdowns empty
