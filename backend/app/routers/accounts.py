@@ -90,8 +90,7 @@ def _calculate_balance(
     Compute the current balance for an account based on its transactions.
 
     For debit accounts (checking, savings, etc.):
-        Balance = opening + income − expenses
-        Income adds, expenses subtract, refunds add.
+        Returns the net transaction effect on the account balance
 
     For credit_card accounts the perspective is inverted — the balance
     represents money OWED, not money held:
