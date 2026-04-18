@@ -56,8 +56,12 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
         }).then(res => {
             setAccounts(res.data)
             if (!isEditMode) {
-                if (!defaultAccountId && res.data.length > 0) setFromAccountId(res.data[0].id)
-                if (res.data.length > 1) setToAccountId(res.data[1].id)
+                const fromId = defaultAccountId ?? res.data[0]?.id
+                if (!defaultAccountId && res.data.length > 0) setFromAccountId(fromId)
+                // Pick the first account that isn't the "from" account so the
+                // two dropdowns never start with the same value.
+                const nextTo = res.data.find((a: Account) => a.id !== fromId)
+                if (nextTo) setToAccountId(nextTo.id)
             }
             // In edit mode, find the linked leg via targeted query
             if (isEditMode && editingTransfer) {
