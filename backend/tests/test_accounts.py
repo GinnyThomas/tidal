@@ -374,3 +374,50 @@ def test_transfer_updates_both_account_balances(test_client) -> None:
 
     assert from_acct["calculated_balance"] == "1700.00"  # 2000 - 300
     assert to_acct["calculated_balance"] == "800.00"     # 500 + 300
+
+
+def test_credit_card_balance_increases_with_expenses(test_client) -> None:
+    """
+    Credit card balances represent money OWED, so the arithmetic is inverted:
+    expenses increase the balance (more owed), income/payments decrease it.
+
+    With a £0 opening balance:
+      + £150 expense (purchase)  → balance = 150
+      + £50  expense (purchase)  → balance = 200
+      − £80  income  (payment)   → balance = 120
+    """
+    token = _register_and_login(test_client)
+
+    acct_resp = test_client.post(
+        "/api/v1/accounts",
+        json={"name": "Barclaycard", "account_type": "credit_card", "current_balance": "0.00"},
+        headers=_auth_headers(token),
+    )
+    account_id = acct_resp.json()["id"]
+
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    category_id = cats[0]["id"]
+
+    # Two purchases — should INCREASE the owed balance
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-10", "amount": "150.00",
+        "transaction_type": "expense", "status": "cleared",
+    }, headers=_auth_headers(token))
+
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-12", "amount": "50.00",
+        "transaction_type": "expense", "status": "cleared",
+    }, headers=_auth_headers(token))
+
+    # Payment — should DECREASE the owed balance
+    test_client.post("/api/v1/transactions", json={
+        "account_id": account_id, "category_id": category_id,
+        "date": "2026-01-15", "amount": "80.00",
+        "transaction_type": "income", "status": "cleared",
+    }, headers=_auth_headers(token))
+
+    resp = test_client.get(f"/api/v1/accounts/{account_id}", headers=_auth_headers(token))
+    # 0 + 150 + 50 - 80 = 120 owed
+    assert resp.json()["calculated_balance"] == "120.00"
