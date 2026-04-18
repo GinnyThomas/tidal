@@ -129,6 +129,34 @@ describe('AddTransferForm', () => {
         expect(mockOnTransactionAdded).not.toHaveBeenCalled()
     })
 
+    it('pre-selects the from account when defaultAccountId is provided', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [
+                makeAccount({ id: 'acc-001', name: 'Current' }),
+                makeAccount({ id: 'acc-002', name: 'Savings' }),
+                makeAccount({ id: 'acc-003', name: 'España' }),
+            ],
+        })
+
+        // defaultAccountId = acc-002 → "From" should be acc-002, "To" should
+        // be the first account that isn't acc-002 (i.e. acc-001).
+        render(
+            <MemoryRouter>
+                <AddTransferForm onTransactionAdded={mockOnTransactionAdded} defaultAccountId="acc-002" />
+            </MemoryRouter>
+        )
+
+        // Wait for the accounts fetch to resolve and the dropdowns to populate
+        await waitFor(() => {
+            const fromSelect = screen.getByLabelText(/from account/i) as HTMLSelectElement
+            expect(fromSelect.value).toBe('acc-002')
+        })
+
+        const toSelect = screen.getByLabelText(/to account/i) as HTMLSelectElement
+        // "To" must NOT match "From" — should pick acc-001 (first non-matching)
+        expect(toSelect.value).toBe('acc-001')
+    })
+
     it('shows Edit Transfer heading in edit mode', () => {
         const editing = {
             id: 'tx-1', account_id: 'acc-001', date: '2026-01-15',

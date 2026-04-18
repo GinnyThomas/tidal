@@ -31,13 +31,16 @@ type Props = {
     onTransactionAdded: () => void
     editingTransfer?: EditingTransfer
     onTransferUpdated?: () => void
+    // When the user is filtering by account on TransactionsPage, this
+    // pre-selects that account as the "from" account for new transfers.
+    defaultAccountId?: string
 }
 
-function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdated }: Props) {
+function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdated, defaultAccountId }: Props) {
     const isEditMode = editingTransfer !== undefined
 
     const [accounts, setAccounts] = useState<Account[]>([])
-    const [fromAccountId, setFromAccountId] = useState(editingTransfer?.account_id ?? '')
+    const [fromAccountId, setFromAccountId] = useState(editingTransfer?.account_id ?? defaultAccountId ?? '')
     const [toAccountId, setToAccountId] = useState('')
     const [date, setDate] = useState(editingTransfer?.date ?? new Date().toISOString().split('T')[0])
     const [amount, setAmount] = useState(editingTransfer?.amount ?? '')
@@ -53,8 +56,12 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
         }).then(res => {
             setAccounts(res.data)
             if (!isEditMode) {
-                if (res.data.length > 0) setFromAccountId(res.data[0].id)
-                if (res.data.length > 1) setToAccountId(res.data[1].id)
+                const fromId = defaultAccountId ?? res.data[0]?.id
+                if (!defaultAccountId && res.data.length > 0) setFromAccountId(fromId)
+                // Pick the first account that isn't the "from" account so the
+                // two dropdowns never start with the same value.
+                const nextTo = res.data.find((a: Account) => a.id !== fromId)
+                if (nextTo) setToAccountId(nextTo.id)
             }
             // In edit mode, find the linked leg via targeted query
             if (isEditMode && editingTransfer) {

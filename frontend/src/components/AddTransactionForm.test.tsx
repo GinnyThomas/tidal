@@ -293,4 +293,32 @@ describe('AddTransactionForm', () => {
         // The create callback should NOT have fired
         expect(mockOnTransactionAdded).not.toHaveBeenCalled()
     })
+
+    it('pre-selects the account when defaultAccountId is provided', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({
+                data: [
+                    makeAccount({ id: 'acc-001', name: 'Current Account' }),
+                    makeAccount({ id: 'acc-002', name: 'Savings' }),
+                ],
+            })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    defaultAccountId="acc-002"
+                />
+            </MemoryRouter>
+        )
+
+        // Wait for accounts to load
+        await screen.findByRole('option', { name: 'Savings' })
+
+        // The account dropdown should be pre-selected to acc-002, NOT
+        // overwritten by the useEffect fallback to the first account.
+        const accountSelect = screen.getByLabelText(/account/i) as HTMLSelectElement
+        expect(accountSelect.value).toBe('acc-002')
+    })
 })
