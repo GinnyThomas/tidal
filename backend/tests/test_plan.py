@@ -515,3 +515,33 @@ def test_plan_schedule_excluded_after_end_date(test_client) -> None:
         None,
     )
     assert march_row is None
+
+
+def test_category_group_appears_in_plan_row(test_client) -> None:
+    """
+    When a category has a group set and there is no budget or schedule group
+    to override it, the category's group should be used as a fallback in the
+    PlanRow. This is the lowest-priority group source:
+    budget group → schedule group → category group → None.
+    """
+    token, account_id, _ = _setup(test_client)
+
+    # Create a category with group="UK"
+    cat_resp = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Test Grouped Cat", "group": "UK"},
+        headers=_auth_headers(token),
+    )
+    assert cat_resp.status_code == 201
+    cat_id = cat_resp.json()["id"]
+
+    # Create a transaction (no budget, no schedule) so the category appears
+    _create_transaction(
+        test_client, token, account_id, cat_id,
+        amount="50.00", status="cleared",
+    )
+
+    response = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    assert response.status_code == 200
+    row = next(r for r in response.json()["rows"] if r["category_id"] == cat_id)
+    assert row["group"] == "UK"

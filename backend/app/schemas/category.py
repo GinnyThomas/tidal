@@ -36,6 +36,7 @@ class CategoryCreate(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=50)
     is_hidden: bool = False
     is_income: bool = False
+    group: Optional[str] = Field(default=None, max_length=50)
 
 
 class CategoryResponse(BaseModel):
@@ -59,6 +60,7 @@ class CategoryResponse(BaseModel):
     is_system: bool
     is_hidden: bool
     is_income: bool
+    group: Optional[str]
     created_at: datetime
 
 
@@ -78,3 +80,4 @@ class CategoryUpdate(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=50)
     is_hidden: Optional[bool] = None
     is_income: Optional[bool] = None
+    group: Optional[str] = Field(default=None, max_length=50)

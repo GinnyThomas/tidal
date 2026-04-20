@@ -94,6 +94,12 @@ class Category(Base):
         Boolean, nullable=False, default=False, server_default="false",
     )
 
+    # --- Group ---
+    # Optional grouping label — same pattern as budgets and schedules.
+    # e.g. "UK", "España" — used as a final fallback in the plan service
+    # when neither the budget nor the schedule has a group assigned.
+    group: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     # --- Visibility ---
     #
     # is_hidden=True: category is hidden from the default list view.
