@@ -533,7 +533,7 @@ def get_monthly_plan(
                 pending=pending,
                 schedules=schedules_by_category.get(cat_id, []),
                 # Group resolution: budget group → schedule group → category group
-                group=group_by_category.get(cat_id) or schedule_group_by_category.get(cat_id) or (cat.group if cat else None),
+                group=group_by_category.get(cat_id) or schedule_group_by_category.get(cat_id) or cat.group,
             )
         )
 

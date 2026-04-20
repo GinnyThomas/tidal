@@ -149,6 +149,73 @@ describe('AddCategoryForm', () => {
         await waitFor(() => expect(mockOnCategoryAdded).toHaveBeenCalledTimes(1))
     })
 
+    // =========================================================================
+    // Group selector
+    // =========================================================================
+
+    it('renders group selector with None option', () => {
+        render(
+            <MemoryRouter>
+                <AddCategoryForm topLevelCategories={mockParents} onCategoryAdded={mockOnCategoryAdded} />
+            </MemoryRouter>
+        )
+
+        const select = screen.getByLabelText(/group/i) as HTMLSelectElement
+        expect(select).toBeInTheDocument()
+        const options = Array.from(select.options).map(o => o.text)
+        expect(options).toContain('None')
+        expect(options).toContain('UK')
+        expect(options).toContain('España')
+    })
+
+    it('includes selected group in POST payload', async () => {
+        vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <AddCategoryForm topLevelCategories={mockParents} onCategoryAdded={mockOnCategoryAdded} />
+            </MemoryRouter>
+        )
+
+        await userEvent.type(screen.getByLabelText(/category name/i), 'UK Bills')
+        await userEvent.selectOptions(screen.getByLabelText(/group/i), 'UK')
+        await userEvent.click(screen.getByRole('button', { name: /save category/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/categories`,
+                expect.objectContaining({ group: 'UK' }),
+                expect.anything()
+            )
+        })
+    })
+
+    it('sends null when None is selected for group', async () => {
+        vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <AddCategoryForm topLevelCategories={mockParents} onCategoryAdded={mockOnCategoryAdded} />
+            </MemoryRouter>
+        )
+
+        await userEvent.type(screen.getByLabelText(/category name/i), 'General Cat')
+        // Group defaults to None (empty string → null in payload)
+        await userEvent.click(screen.getByRole('button', { name: /save category/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/categories`,
+                expect.objectContaining({ group: null }),
+                expect.anything()
+            )
+        })
+    })
+
+    // =========================================================================
+    // Error handling
+    // =========================================================================
+
     it('shows an error message when the submission fails', async () => {
         vi.mocked(axios.post).mockRejectedValueOnce(new Error('Server error'))
 
