@@ -143,9 +143,11 @@ describe('AddTransactionForm', () => {
 
         render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
 
-        // Wait for dropdowns so account_id / category_id are set
+        // Wait for dropdowns so account_id is set
         await screen.findByRole('option', { name: 'Current Account' })
 
+        // Explicitly select a category — no auto-select since "No category" is default
+        await userEvent.selectOptions(screen.getByLabelText(/category/i), 'cat-001')
         await userEvent.type(screen.getByLabelText(/amount/i), '25.00')
         await userEvent.click(screen.getByRole('button', { name: /save transaction/i }))
 

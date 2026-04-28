@@ -30,12 +30,12 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
-import { sortCategoriesByName } from '../lib/categories'
+import { sortCategoriesByName, buildCategoryOptions } from '../lib/categories'
 import { CURRENCIES } from '../lib/currencies'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
 type Account = { id: string; name: string }
-type Category = { id: string; name: string }
+type Category = { id: string; name: string; parent_category_id?: string | null }
 
 type EditingSchedule = {
     id: string
@@ -209,8 +209,8 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                         className="input-base"
                         required
                     >
-                        {categories.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                        {buildCategoryOptions(categories).map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
                         ))}
                     </select>
                 </div>

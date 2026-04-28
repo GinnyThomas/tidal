@@ -324,12 +324,9 @@ def create_transaction(
     # Fix 1: validate account and category ownership.
     # Capture the category so we can include its name/icon in the response.
     _get_account_or_404(transaction_in.account_id, current_user.id, db)
-    # Category is optional for transfers but required for other types
-    if transaction_in.category_id is None and transaction_in.transaction_type != "transfer":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="category_id is required for expense, income, and refund transactions.",
-        )
+    # Category is optional for all transaction types. Transfers typically
+    # have no category; expense/income/refund transactions usually do, but
+    # it's valid to omit it (e.g. a credit card payment has no category).
     category = None
     if transaction_in.category_id is not None:
         category = _get_category_or_404(transaction_in.category_id, current_user.id, db)
@@ -491,17 +488,9 @@ def update_transaction(
     if "category_id" in update_data and update_data["category_id"] is not None:
         _get_category_or_404(update_data["category_id"], current_user.id, db)
 
-    # Reject nulling category_id on non-transfer transactions
-    if "category_id" in update_data and update_data["category_id"] is None:
-        effective_type = update_data.get("transaction_type", transaction.transaction_type)
-        # Handle enum values
-        if hasattr(effective_type, 'value'):
-            effective_type = effective_type.value
-        if effective_type != "transfer":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="category_id is required for expense, income, and refund transactions.",
-            )
+    # category_id is now fully optional for all transaction types — no
+    # rejection when nulling it. Credit card payments and other uncategorised
+    # transactions are valid.
 
     if "parent_transaction_id" in update_data and update_data["parent_transaction_id"] is not None:
         _get_transaction_or_404(update_data["parent_transaction_id"], current_user.id, db)

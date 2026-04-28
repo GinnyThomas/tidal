@@ -45,6 +45,7 @@ const makeSchedule = (overrides = {}) => ({
     category_id: 'cat-001',
     category_name: 'Bills',
     category_icon: null,
+    schedule_type: 'regular',
     amount: '15.99',
     currency: 'GBP',
     frequency: 'monthly',
@@ -455,5 +456,32 @@ describe('SchedulesPage', () => {
             .getAllByRole('row', { name: /click to edit/i })
             .map((row) => row.querySelector('td')?.textContent)
         expect(nameCells).toEqual(['Amazon Prime', 'Netflix', 'Spotify'])
+    })
+
+    // =========================================================================
+    // Add now button
+    // =========================================================================
+
+    it('renders an "Add now" button for each regular schedule row', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ name: 'Netflix' })],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        expect(await screen.findByRole('button', { name: /add transaction from netflix/i })).toBeInTheDocument()
+    })
+
+    it('disables "Add now" button for transfer-type schedules', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ name: 'Monthly Transfer', schedule_type: 'transfer' })],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        const btn = await screen.findByRole('button', { name: /add transaction from monthly transfer/i })
+        expect(btn).toBeDisabled()
     })
 })

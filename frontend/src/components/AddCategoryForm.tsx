@@ -143,7 +143,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                         className="input-base"
                     >
                         <option value="">— None (top-level) —</option>
-                        {topLevelCategories.map((cat) => (
+                        {[...topLevelCategories].sort((a, b) => a.name.localeCompare(b.name)).map((cat) => (
                             <option key={cat.id} value={cat.id}>
                                 {cat.name}
                             </option>
