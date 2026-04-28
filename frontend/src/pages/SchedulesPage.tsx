@@ -22,6 +22,7 @@ import axios from 'axios'
 import React, { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddScheduleForm from '../components/AddScheduleForm'
+import AddTransactionForm from '../components/AddTransactionForm'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 import { GROUP_ORDER } from '../lib/budgetGroups'
@@ -35,6 +36,8 @@ type Schedule = {
     category_id: string
     category_name: string
     category_icon: string | null
+    category_is_income: boolean
+    schedule_type: string
     amount: string
     currency: string
     frequency: string
@@ -74,6 +77,8 @@ function SchedulesPage() {
     const [error, setError] = useState<string | null>(null)
     const [showAddForm, setShowAddForm] = useState(false)
     const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+    // "Add now" opens AddTransactionForm pre-populated from a schedule
+    const [addNowSchedule, setAddNowSchedule] = useState<Schedule | null>(null)
     const [includeInactive, setIncludeInactive] = useState(false)
     const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing any filter.
@@ -111,13 +116,27 @@ function SchedulesPage() {
 
     const handleScheduleAdded = () => {
         setShowAddForm(false)
+        setAddNowSchedule(null)
         setRefreshKey(k => k + 1)
         // Schedule changes affect planned amounts — invalidate annual plan cache
         annualPlanCache.clear()
     }
 
+    const handleAddNow = (schedule: Schedule) => {
+        setShowAddForm(false)
+        setEditingSchedule(null)
+        setAddNowSchedule(schedule)
+    }
+
+    const handleAddNowComplete = () => {
+        setAddNowSchedule(null)
+        setRefreshKey(k => k + 1)
+        annualPlanCache.clear()
+    }
+
     const handleEditSchedule = (schedule: Schedule) => {
         setShowAddForm(false)
+        setAddNowSchedule(null)
         setEditingSchedule(schedule)
         setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
@@ -217,12 +236,22 @@ function SchedulesPage() {
                 </button>
             </td>
             <td className="px-4 py-3 text-center">
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleEditSchedule(s) }}
-                    className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                >
-                    Edit
-                </button>
+                <div className="flex items-center justify-center gap-2">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleEditSchedule(s) }}
+                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                    >
+                        Edit
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleAddNow(s) }}
+                        disabled={s.schedule_type === 'transfer'}
+                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-teal-400 hover:border-teal-500 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        aria-label={`Add transaction from ${s.name}`}
+                    >
+                        Add now
+                    </button>
+                </div>
             </td>
         </tr>
     )
@@ -284,6 +313,24 @@ function SchedulesPage() {
                             onScheduleAdded={() => {}}
                             editingSchedule={editingSchedule}
                             onScheduleUpdated={handleScheduleUpdated}
+                        />
+                    </div>
+                )}
+
+                {/* Add now form — pre-populated from a schedule, creates a one-off transaction */}
+                {addNowSchedule && (
+                    <div className="mb-6">
+                        <AddTransactionForm
+                            key={`add-now-${addNowSchedule.id}`}
+                            onTransactionAdded={handleAddNowComplete}
+                            defaultAccountId={addNowSchedule.account_id}
+                            defaultValues={{
+                                categoryId: addNowSchedule.category_id,
+                                amount: addNowSchedule.amount,
+                                currency: addNowSchedule.currency,
+                                payee: addNowSchedule.payee ?? '',
+                                transactionType: addNowSchedule.category_is_income ? 'income' : 'expense',
+                            }}
                         />
                     </div>
                 )}

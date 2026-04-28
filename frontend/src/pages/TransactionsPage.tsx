@@ -27,7 +27,7 @@
 //     triggers the useEffect dependency to re-run the full fetch.
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
@@ -40,8 +40,8 @@ import { getApiBaseUrl } from '../lib/api'
 type Transaction = {
     id: string
     account_id: string
-    category_id: string
-    category_name: string
+    category_id: string | null
+    category_name: string | null
     category_icon: string | null
     date: string
     payee: string | null
@@ -57,6 +57,8 @@ type Transaction = {
 type Account = {
     id: string
     name: string
+    calculated_balance: string
+    currency: string
 }
 
 type Category = {
@@ -120,6 +122,7 @@ function TransactionsPage() {
     const [showTransferForm, setShowTransferForm] = useState(false)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [editingTransfer, setEditingTransfer] = useState<Transaction | null>(null)
+    const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
     // Client-side sorting — applied to the fetched data
@@ -195,6 +198,7 @@ function TransactionsPage() {
         }
         setShowAddForm(false)
         setShowTransferForm(false)
+        setTimeout(() => editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleTransactionUpdated = () => {
@@ -322,30 +326,31 @@ function TransactionsPage() {
                     </div>
                 )}
 
-                {/* Edit form — shown when an Edit button is clicked on a transaction row.
-                    keyed on id so switching to a different transaction remounts with fresh state. */}
-                {editingTransaction && (
-                    <div className="mb-6">
-                        <AddTransactionForm
-                            key={editingTransaction.id}
-                            onTransactionAdded={() => {}}
-                            editingTransaction={editingTransaction}
-                            onTransactionUpdated={handleTransactionUpdated}
-                        />
-                    </div>
-                )}
-
-                {/* Edit transfer form — opens when a transfer row is clicked */}
-                {editingTransfer && (
-                    <div className="mb-6">
-                        <AddTransferForm
-                            key={editingTransfer.id}
-                            onTransactionAdded={() => {}}
-                            editingTransfer={editingTransfer}
-                            onTransferUpdated={handleTransactionUpdated}
-                        />
-                    </div>
-                )}
+                {/* Edit forms — positioned above the filter row so scrollIntoView
+                    takes the user to the form, not the table row they clicked.
+                    The ref sits on the outer wrapper; only one form is visible at a time. */}
+                <div ref={editFormRef}>
+                    {editingTransaction && (
+                        <div className="mb-6">
+                            <AddTransactionForm
+                                key={editingTransaction.id}
+                                onTransactionAdded={() => {}}
+                                editingTransaction={editingTransaction}
+                                onTransactionUpdated={handleTransactionUpdated}
+                            />
+                        </div>
+                    )}
+                    {editingTransfer && (
+                        <div className="mb-6">
+                            <AddTransferForm
+                                key={editingTransfer.id}
+                                onTransactionAdded={() => {}}
+                                editingTransfer={editingTransfer}
+                                onTransferUpdated={handleTransactionUpdated}
+                            />
+                        </div>
+                    )}
+                </div>
 
                 {/* Filter row */}
                 <div className="flex flex-wrap gap-4 mb-4">
@@ -362,6 +367,14 @@ function TransactionsPage() {
                                 <option key={a.id} value={a.id}>{a.name}</option>
                             ))}
                         </select>
+                        {filterAccountId && (() => {
+                            const acct = accounts.find(a => a.id === filterAccountId)
+                            return acct ? (
+                                <div className="text-sm text-slate-400 mt-1">
+                                    Balance: <span className="text-sky-400 font-medium">{acct.calculated_balance} {acct.currency}</span>
+                                </div>
+                            ) : null
+                        })()}
                     </div>
                     <div>
                         <label htmlFor="filterCategory" className="label-base">Filter by category</label>

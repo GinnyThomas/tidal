@@ -164,6 +164,7 @@ def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
         "next_occurrence": get_next_occurrence(sched),
         "category_name": category.name if category else None,
         "category_icon": category.icon if category else None,
+        "category_is_income": category.is_income if category else False,
     }
 
 

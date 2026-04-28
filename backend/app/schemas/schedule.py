@@ -113,6 +113,7 @@ class ScheduleResponse(BaseModel):
     # Denormalised from Category — populated by the router helper
     category_name: Optional[str]
     category_icon: Optional[str]
+    category_is_income: bool = False
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

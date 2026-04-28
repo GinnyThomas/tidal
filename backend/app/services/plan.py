@@ -532,8 +532,8 @@ def get_monthly_plan(
                 remaining=remaining,
                 pending=pending,
                 schedules=schedules_by_category.get(cat_id, []),
-                # Budget group takes precedence; fall back to schedule group
-                group=group_by_category.get(cat_id) or schedule_group_by_category.get(cat_id),
+                # Group resolution: budget group → schedule group → category group
+                group=group_by_category.get(cat_id) or schedule_group_by_category.get(cat_id) or cat.group,
             )
         )
 

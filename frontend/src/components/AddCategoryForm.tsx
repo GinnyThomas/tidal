@@ -27,6 +27,7 @@ import axios from 'axios'
 import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import { GROUP_ORDER } from '../lib/budgetGroups'
 
 const EMOJI_OPTIONS = [
     '🏠', '🚗', '🍔', '💊', '🎮', '✈️', '💰', '🎓',
@@ -50,6 +51,7 @@ type EditingCategory = {
     colour: string | null
     icon: string | null
     is_income: boolean
+    group?: string | null
 }
 
 type Props = {
@@ -69,6 +71,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
     const [colour, setColour] = useState(editingCategory?.colour ?? '#0ea5e9')
     const [icon, setIcon] = useState(editingCategory?.icon ?? '')
     const [isIncome, setIsIncome] = useState(editingCategory?.is_income ?? false)
+    const [group, setGroup] = useState(editingCategory?.group ?? '')
     const [error, setError] = useState<string | null>(null)
     // Tracks in-flight submission — disables the button to prevent double-submit.
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -85,6 +88,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
             colour: colour || null,
             icon: icon || null,
             is_income: isIncome,
+            group: group || null,
         }
         const config = { headers: { Authorization: `Bearer ${token}` } }
 
@@ -139,7 +143,7 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                         className="input-base"
                     >
                         <option value="">— None (top-level) —</option>
-                        {topLevelCategories.map((cat) => (
+                        {[...topLevelCategories].sort((a, b) => a.name.localeCompare(b.name)).map((cat) => (
                             <option key={cat.id} value={cat.id}>
                                 {cat.name}
                             </option>
@@ -207,6 +211,22 @@ function AddCategoryForm({ topLevelCategories, onCategoryAdded, editingCategory,
                         />
                         Income category (adds to cash flow balance)
                     </label>
+                </div>
+
+                {/* Group selector */}
+                <div>
+                    <label htmlFor="categoryGroup" className="label-base">Group</label>
+                    <select
+                        id="categoryGroup"
+                        value={group}
+                        onChange={(e) => setGroup(e.target.value)}
+                        className="input-base"
+                    >
+                        <option value="">None</option>
+                        {GROUP_ORDER.filter(g => g !== 'General').map(g => (
+                            <option key={g} value={g}>{g}</option>
+                        ))}
+                    </select>
                 </div>
 
                 {error && (

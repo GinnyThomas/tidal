@@ -133,10 +133,11 @@ def test_create_transaction_without_auth_returns_401(test_client) -> None:
     assert response.status_code == 401
 
 
-def test_create_expense_without_category_returns_422(test_client) -> None:
+def test_create_expense_without_category_succeeds(test_client) -> None:
     """
-    Creating an expense without category_id should return 422.
-    category_id is required for expense, income, and refund transactions.
+    Creating an expense without category_id should succeed (201).
+    category_id is optional for all transaction types — allows uncategorised
+    transactions like credit card payments.
     """
     token, account_id, _ = _setup(test_client)
 
@@ -150,7 +151,9 @@ def test_create_expense_without_category_returns_422(test_client) -> None:
         },
         headers=_auth_headers(token),
     )
-    assert response.status_code == 422
+    assert response.status_code == 201
+    assert response.json()["category_id"] is None
+    assert response.json()["category_name"] is None
 
 
 # =============================================================================

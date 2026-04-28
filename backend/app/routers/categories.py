@@ -157,6 +157,7 @@ def create_category(
         icon=category_in.icon,
         is_hidden=category_in.is_hidden,
         is_income=category_in.is_income,
+        group=category_in.group,
         # is_system not set here — model default is False
     )
     db.add(category)

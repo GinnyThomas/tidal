@@ -29,6 +29,7 @@ const makeAccount = (overrides = {}) => ({
     account_type: 'checking',
     currency: 'GBP',
     current_balance: '1500.00',
+    calculated_balance: '1300.00',
     institution: null,
     is_active: true,
     ...overrides,
@@ -543,5 +544,34 @@ describe('TransactionsPage', () => {
         const rows = screen.getAllByRole('row')
         // Ascending: Nationwide before Santander
         expect(rows[1].querySelectorAll('td')[3].textContent).toBe('Nationwide')
+    })
+
+    // =========================================================================
+    // Account balance indicator
+    // =========================================================================
+
+    it('shows account balance when a specific account is selected in the filter', async () => {
+        const acct = makeAccount({ id: 'acc-001', name: 'Current', calculated_balance: '2500.00', currency: 'GBP' })
+        mockFetch([acct], [makeTransaction()])
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+
+        // No balance shown initially (All accounts)
+        expect(screen.queryByText(/Balance:/)).not.toBeInTheDocument()
+
+        // Queue mocks for the re-fetch that will fire when filter changes
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [acct] })
+            .mockResolvedValueOnce({ data: [makeTransaction()] })
+
+        // Select a specific account — triggers re-fetch
+        await userEvent.selectOptions(screen.getByLabelText(/filter by account/i), 'acc-001')
+
+        await waitFor(() => {
+            expect(screen.getByText(/Balance:/)).toBeInTheDocument()
+            expect(screen.getByText('2500.00 GBP')).toBeInTheDocument()
+        })
     })
 })

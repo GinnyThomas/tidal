@@ -22,19 +22,19 @@
 import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
-import { sortCategoriesByName } from '../lib/categories'
+import { sortCategoriesByName, buildCategoryOptions } from '../lib/categories'
 import { getApiBaseUrl } from '../lib/api'
 import { CURRENCIES } from '../lib/currencies'
 
 type Account = { id: string; name: string }
-type Category = { id: string; name: string }
+type Category = { id: string; name: string; parent_category_id?: string | null }
 type PromotionOption = { id: string; name: string }
 
 // The subset of Transaction fields needed to pre-populate the form in edit mode.
 export type EditingTransaction = {
     id: string
     account_id: string
-    category_id: string
+    category_id: string | null
     transaction_type: string
     date: string
     payee: string | null
@@ -53,9 +53,17 @@ type Props = {
     // When the user is filtering by account on TransactionsPage, this
     // pre-selects that account in the dropdown for new transactions.
     defaultAccountId?: string
+    // Pre-populate fields for "Add now" from a schedule.
+    defaultValues?: {
+        categoryId?: string
+        amount?: string
+        currency?: string
+        payee?: string
+        transactionType?: string
+    }
 }
 
-function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransactionUpdated, defaultAccountId }: Props) {
+function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransactionUpdated, defaultAccountId, defaultValues }: Props) {
     // isEditMode drives which endpoint is called and what the heading/button say.
     const isEditMode = editingTransaction !== undefined
 
@@ -65,12 +73,12 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
 
     // All state is initialised from editingTransaction in edit mode, or defaults in create mode.
     const [accountId, setAccountId] = useState(editingTransaction?.account_id ?? defaultAccountId ?? '')
-    const [categoryId, setCategoryId] = useState(editingTransaction?.category_id ?? '')
-    const [transactionType, setTransactionType] = useState(editingTransaction?.transaction_type ?? 'expense')
+    const [categoryId, setCategoryId] = useState(editingTransaction?.category_id ?? defaultValues?.categoryId ?? '')
+    const [transactionType, setTransactionType] = useState(editingTransaction?.transaction_type ?? defaultValues?.transactionType ?? 'expense')
     const [date, setDate] = useState(editingTransaction?.date ?? new Date().toISOString().split('T')[0])
-    const [payee, setPayee] = useState(editingTransaction?.payee ?? '')
-    const [amount, setAmount] = useState(editingTransaction?.amount ?? '')
-    const [currency, setCurrency] = useState(editingTransaction?.currency ?? 'GBP')
+    const [payee, setPayee] = useState(editingTransaction?.payee ?? defaultValues?.payee ?? '')
+    const [amount, setAmount] = useState(editingTransaction?.amount ?? defaultValues?.amount ?? '')
+    const [currency, setCurrency] = useState(editingTransaction?.currency ?? defaultValues?.currency ?? 'GBP')
     const [status, setStatus] = useState(editingTransaction?.status ?? 'pending')
     const [note, setNote] = useState(editingTransaction?.note ?? '')
     const [parentTransactionId, setParentTransactionId] = useState(
@@ -99,7 +107,9 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             // Only auto-select the first option in create mode — in edit mode the
             // values are already set from the editingTransaction prop.
             if (!isEditMode && !defaultAccountId && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
-            if (!isEditMode && sorted.length > 0) setCategoryId(sorted[0].id)
+            // Category is not auto-selected — "No category" is a valid choice
+            // (e.g. credit card payments). defaultValues?.categoryId pre-fills
+            // when coming from "Add now" on the schedules page.
         }).catch(() => {
             // Best-effort — silently leave dropdowns empty
         })
@@ -114,7 +124,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         const token = localStorage.getItem('access_token')
         const payload = {
             account_id: accountId,
-            category_id: categoryId,
+            category_id: categoryId || null,
             transaction_type: transactionType,
             date,
             payee: payee || null,
@@ -183,10 +193,10 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                         value={categoryId}
                         onChange={(e) => setCategoryId(e.target.value)}
                         className="input-base"
-                        required
                     >
-                        {categories.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                        <option value="">— No category —</option>
+                        {buildCategoryOptions(categories).map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
                         ))}
                     </select>
                 </div>
