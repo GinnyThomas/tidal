@@ -40,8 +40,8 @@ import { getApiBaseUrl } from '../lib/api'
 type Transaction = {
     id: string
     account_id: string
-    category_id: string
-    category_name: string
+    category_id: string | null
+    category_name: string | null
     category_icon: string | null
     date: string
     payee: string | null

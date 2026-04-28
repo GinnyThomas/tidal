@@ -41,7 +41,16 @@ export function buildCategoryOptions(categories: HierarchyCategory[]): CategoryO
 
     const result: CategoryOption[] = []
     for (const p of parents) {
-        result.push({ id: p.id, label: p.name, parentId: p.parent_category_id ?? null })
+        result.push({
+            id: p.id,
+            label: p.name,
+            // Orphaned children (parent not in the list) are promoted to
+            // top-level — set parentId to null so consumers don't reference
+            // a missing parent id.
+            parentId: p.parent_category_id && idSet.has(p.parent_category_id)
+                ? p.parent_category_id
+                : null,
+        })
         for (const c of childrenOf(p.id)) {
             result.push({ id: c.id, label: `  → ${c.name}`, parentId: c.parent_category_id ?? null })
         }

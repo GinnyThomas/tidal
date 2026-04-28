@@ -34,7 +34,7 @@ type PromotionOption = { id: string; name: string }
 export type EditingTransaction = {
     id: string
     account_id: string
-    category_id: string
+    category_id: string | null
     transaction_type: string
     date: string
     payee: string | null

@@ -36,6 +36,7 @@ type Schedule = {
     category_id: string
     category_name: string
     category_icon: string | null
+    category_is_income: boolean
     schedule_type: string
     amount: string
     currency: string
@@ -328,7 +329,7 @@ function SchedulesPage() {
                                 amount: addNowSchedule.amount,
                                 currency: addNowSchedule.currency,
                                 payee: addNowSchedule.payee ?? '',
-                                transactionType: addNowSchedule.category_name ? 'expense' : 'expense',
+                                transactionType: addNowSchedule.category_is_income ? 'income' : 'expense',
                             }}
                         />
                     </div>

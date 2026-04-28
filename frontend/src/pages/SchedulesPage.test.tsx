@@ -45,6 +45,7 @@ const makeSchedule = (overrides = {}) => ({
     category_id: 'cat-001',
     category_name: 'Bills',
     category_icon: null,
+    category_is_income: false,
     schedule_type: 'regular',
     amount: '15.99',
     currency: 'GBP',
