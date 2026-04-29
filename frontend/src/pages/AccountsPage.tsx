@@ -20,7 +20,7 @@
 
 import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddAccountForm from '../components/AddAccountForm'
 import { getApiBaseUrl } from '../lib/api'
@@ -51,6 +51,7 @@ const BADGE: Record<string, string> = {
 }
 
 function AccountsPage() {
+    const navigate = useNavigate()
     const [accounts, setAccounts] = useState<Account[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -164,9 +165,9 @@ function AccountsPage() {
                         {accounts.map((account) => (
                             <li
                                 key={account.id}
-                                className="card-hover flex items-center justify-between cursor-pointer"
-                                onClick={() => handleEditAccount(account)}
-                                aria-label="Click to edit"
+                                className="card-hover flex items-center justify-between cursor-pointer hover:bg-ocean-700/40 transition-colors"
+                                onClick={() => navigate(`/transactions?account_id=${account.id}`)}
+                                aria-label={`View transactions for ${account.name}`}
                             >
                                 <div>
                                     {/* Name is a link to the pre-filtered transactions view */}
@@ -194,7 +195,7 @@ function AccountsPage() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => handleEditAccount(account)}
+                                        onClick={(e) => { e.stopPropagation(); handleEditAccount(account) }}
                                         aria-label={`Edit ${account.name}`}
                                         className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
                                     >
