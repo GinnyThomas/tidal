@@ -81,6 +81,7 @@ function SchedulesPage() {
     const [addNowSchedule, setAddNowSchedule] = useState<Schedule | null>(null)
     const [includeInactive, setIncludeInactive] = useState(false)
     const editFormRef = useRef<HTMLDivElement>(null)
+    const addNowFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
 
@@ -126,6 +127,7 @@ function SchedulesPage() {
         setShowAddForm(false)
         setEditingSchedule(null)
         setAddNowSchedule(schedule)
+        setTimeout(() => addNowFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
     }
 
     const handleAddNowComplete = () => {
@@ -319,7 +321,7 @@ function SchedulesPage() {
 
                 {/* Add now form — pre-populated from a schedule, creates a one-off transaction */}
                 {addNowSchedule && (
-                    <div className="mb-6">
+                    <div ref={addNowFormRef} className="mb-6">
                         <AddTransactionForm
                             key={`add-now-${addNowSchedule.id}`}
                             onTransactionAdded={handleAddNowComplete}
