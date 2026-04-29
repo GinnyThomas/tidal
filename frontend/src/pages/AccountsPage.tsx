@@ -166,7 +166,15 @@ function AccountsPage() {
                             <li
                                 key={account.id}
                                 className="card-hover flex items-center justify-between cursor-pointer hover:bg-ocean-700/40 transition-colors"
+                                role="link"
+                                tabIndex={0}
                                 onClick={() => navigate(`/transactions?account_id=${account.id}`)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault()
+                                        navigate(`/transactions?account_id=${account.id}`)
+                                    }
+                                }}
                                 aria-label={`View transactions for ${account.name}`}
                             >
                                 <div>
