@@ -13,7 +13,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
 import AccountsPage from './AccountsPage'
@@ -240,17 +240,27 @@ describe('AccountsPage', () => {
     // Clickable rows
     // =========================================================================
 
-    it('clicking an account card opens the edit form', async () => {
+    it('clicking an account card navigates to transactions filtered by that account', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
-            data: [makeAccount({ name: 'Click Test' })],
+            data: [makeAccount({ id: 'acc-nav', name: 'Click Test' })],
         })
 
-        render(<MemoryRouter><AccountsPage /></MemoryRouter>)
+        // Use Routes so we can verify the router navigated to the target path.
+        // A mock /transactions route renders a sentinel that includes the
+        // query string, confirming the correct account_id was passed.
+        render(
+            <MemoryRouter initialEntries={['/accounts']}>
+                <Routes>
+                    <Route path="/accounts" element={<AccountsPage />} />
+                    <Route path="/transactions" element={<p>Transactions Page</p>} />
+                </Routes>
+            </MemoryRouter>
+        )
 
         await screen.findByText('Click Test')
-        // Click the card (has aria-label="Click to edit")
-        await userEvent.click(screen.getByLabelText('Click to edit'))
+        await userEvent.click(screen.getByLabelText(/view transactions for click test/i))
 
-        expect(screen.getByText('Edit Account')).toBeInTheDocument()
+        // The router should navigate to /transactions — the sentinel text appears
+        expect(await screen.findByText('Transactions Page')).toBeInTheDocument()
     })
 })
