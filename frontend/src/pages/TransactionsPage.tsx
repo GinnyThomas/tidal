@@ -109,7 +109,10 @@ function TransactionsPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [filterAccountId, setFilterAccountId] = useState('')
+    // Initialise from URL — '' means no filter
+    const [filterAccountId, setFilterAccountId] = useState(
+        () => searchParams.get('account_id') ?? ''
+    )
     // Initialise from URL — '' means no filter
     const [filterCategoryId, setFilterCategoryId] = useState(
         () => searchParams.get('category_id') ?? ''
@@ -359,7 +362,13 @@ function TransactionsPage() {
                         <select
                             id="filterAccount"
                             value={filterAccountId}
-                            onChange={(e) => setFilterAccountId(e.target.value)}
+                            onChange={(e) => {
+                                setFilterAccountId(e.target.value)
+                                const next = new URLSearchParams(searchParams)
+                                if (e.target.value) next.set('account_id', e.target.value)
+                                else next.delete('account_id')
+                                setSearchParams(next)
+                            }}
                             className="input-base"
                         >
                             <option value="">All accounts</option>
