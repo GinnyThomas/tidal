@@ -323,4 +323,52 @@ describe('AddTransactionForm', () => {
         const accountSelect = screen.getByLabelText(/account/i) as HTMLSelectElement
         expect(accountSelect.value).toBe('acc-002')
     })
+
+    // =========================================================================
+    // Split transactions
+    // =========================================================================
+
+    it('split toggle shows/hides the splits section', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+        await screen.findByRole('option', { name: 'Current Account' })
+
+        // Split section not visible initially
+        expect(screen.queryByText(/allocated:/i)).not.toBeInTheDocument()
+
+        // Toggle on
+        await userEvent.click(screen.getByRole('button', { name: /split transaction/i }))
+        expect(screen.getByText(/allocated:/i)).toBeInTheDocument()
+        // Category dropdown should be hidden in split mode
+        expect(screen.queryByLabelText(/^category$/i)).not.toBeInTheDocument()
+
+        // Toggle off — button text changes to "Cancel split" when active
+        await userEvent.click(screen.getByText(/cancel split/i))
+        expect(screen.queryByText(/allocated:/i)).not.toBeInTheDocument()
+    })
+
+    it('allocated total updates as split amounts change', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+        await screen.findByRole('option', { name: 'Current Account' })
+
+        // Set total amount first
+        await userEvent.type(screen.getByLabelText(/amount/i), '100')
+
+        // Enable split mode
+        await userEvent.click(screen.getByRole('button', { name: /split transaction/i }))
+
+        // Type amount in first split
+        const splitAmount = screen.getByLabelText(/split 1 amount/i)
+        await userEvent.type(splitAmount, '60')
+
+        // Allocated should show 60.00
+        expect(screen.getByText('60.00')).toBeInTheDocument()
+    })
 })

@@ -21,9 +21,11 @@ from app.models.opening_balance import GroupOpeningBalance
 from app.models.promotion import Promotion
 from app.models.schedule import Schedule
 from app.models.transaction import Transaction
+from app.models.transaction_split import TransactionSplit
 from app.models.reallocation import Reallocation
 
 __all__ = [
     "User", "Account", "Budget", "BudgetOverride", "Category",
-    "GroupOpeningBalance", "Promotion", "Schedule", "Transaction", "Reallocation",
+    "GroupOpeningBalance", "Promotion", "Schedule", "Transaction",
+    "TransactionSplit", "Reallocation",
 ]

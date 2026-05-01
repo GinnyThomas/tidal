@@ -59,6 +59,8 @@ const makeTransaction = (overrides = {}) => ({
     status: 'pending',
     note: null,
     created_at: '2026-04-01T10:00:00',
+    is_split: false,
+    splits: [],
     ...overrides,
 })
 
@@ -607,5 +609,23 @@ describe('TransactionsPage', () => {
         await userEvent.click(screen.getByLabelText(/clear payee search/i))
         expect(screen.getByText('Sainsburys')).toBeInTheDocument()
         expect(screen.getByText('Amazon')).toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Split transactions
+    // =========================================================================
+
+    it('shows a "split" badge on split transactions', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeTransaction({ id: 'tx-split', is_split: true, category_id: null, category_name: null, splits: [
+                { id: 's1', transaction_id: 'tx-split', category_id: 'cat-001', category_name: 'Groceries', promotion_id: null, amount: '30.00', note: null },
+                { id: 's2', transaction_id: 'tx-split', category_id: 'cat-002', category_name: 'Electronics', promotion_id: null, amount: '15.50', note: null },
+            ] })],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        expect(await screen.findByText('split')).toBeInTheDocument()
     })
 })

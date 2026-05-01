@@ -56,6 +56,33 @@ class TransactionStatus(str, Enum):
     reconciled = "reconciled"
 
 
+class TransactionSplitCreate(BaseModel):
+    """One split within a split transaction request."""
+
+    category_id: Optional[uuid.UUID] = None
+    promotion_id: Optional[uuid.UUID] = None
+    amount: Decimal = Field(...)
+    note: Optional[str] = None
+
+
+class TransactionSplitResponse(BaseModel):
+    """One split within a transaction response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    transaction_id: uuid.UUID
+    category_id: Optional[uuid.UUID]
+    category_name: Optional[str] = None
+    promotion_id: Optional[uuid.UUID]
+    amount: Decimal
+    note: Optional[str]
+
+    @field_serializer("amount")
+    def serialize_amount(self, value: Decimal) -> str:
+        return str(value.quantize(Decimal("0.01")))
+
+
 class TransactionCreate(BaseModel):
     """
     Request body for POST /api/v1/transactions.
@@ -81,6 +108,7 @@ class TransactionCreate(BaseModel):
     # For transfers: set automatically by the transfer endpoint.
     parent_transaction_id: Optional[uuid.UUID] = None
     promotion_id: Optional[uuid.UUID] = None
+    splits: list[TransactionSplitCreate] = Field(default_factory=list)
 
 
 class TransactionResponse(BaseModel):
@@ -119,6 +147,8 @@ class TransactionResponse(BaseModel):
     # Nullable for transfers which don't require a category
     category_name: Optional[str]
     category_icon: Optional[str]
+    is_split: bool = False
+    splits: list[TransactionSplitResponse] = Field(default_factory=list)
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:
@@ -153,6 +183,7 @@ class TransactionUpdate(BaseModel):
     note: Optional[str] = None
     parent_transaction_id: Optional[uuid.UUID] = None
     promotion_id: Optional[uuid.UUID] = None
+    splits: Optional[list[TransactionSplitCreate]] = None
 
 
 class TransferCreate(BaseModel):

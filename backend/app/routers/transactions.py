@@ -42,14 +42,18 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, or_
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.account import Account
 from app.models.category import Category
 from app.models.promotion import Promotion
 from app.models.transaction import Transaction
+from app.models.transaction_split import TransactionSplit
 from app.models.user import User
 from app.schemas.transaction import (
     TransactionCreate,
@@ -206,7 +210,26 @@ def _build_tx_response(tx: Transaction, category: Category | None) -> dict:
         "created_at": tx.created_at,
         "category_name": category.name if category else None,
         "category_icon": category.icon if category else None,
+        "is_split": tx.is_split,
+        "splits": _build_splits_response(tx) if tx.is_split else [],
     }
+
+
+def _build_splits_response(tx: Transaction) -> list[dict]:
+    """Build split response dicts using the eager-loaded category relationship."""
+    splits = tx.splits if hasattr(tx, 'splits') and tx.splits is not None else []
+    return [
+        {
+            "id": s.id,
+            "transaction_id": s.transaction_id,
+            "category_id": s.category_id,
+            "category_name": s.category.name if s.category else None,
+            "promotion_id": s.promotion_id,
+            "amount": s.amount,
+            "note": s.note,
+        }
+        for s in splits
+    ]
 
 
 # =============================================================================
@@ -349,10 +372,27 @@ def create_transaction(
     if transaction_in.promotion_id is not None:
         _get_promotion_or_404(transaction_in.promotion_id, current_user.id, db)
 
+    # --- Split transaction handling ---
+    has_splits = len(transaction_in.splits) > 0
+    if has_splits:
+        # Validate split amounts sum to the transaction total
+        split_total = sum(s.amount for s in transaction_in.splits)
+        if split_total != transaction_in.amount:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Split amounts ({split_total}) must equal transaction amount ({transaction_in.amount}).",
+            )
+        # Validate split category and promotion ownership
+        for s in transaction_in.splits:
+            if s.category_id is not None:
+                _get_category_or_404(s.category_id, current_user.id, db)
+            if s.promotion_id is not None:
+                _get_promotion_or_404(s.promotion_id, current_user.id, db)
+
     transaction = Transaction(
         user_id=current_user.id,
         account_id=transaction_in.account_id,
-        category_id=transaction_in.category_id,
+        category_id=None if has_splits else transaction_in.category_id,
         date=transaction_in.date,
         amount=transaction_in.amount,
         currency=transaction_in.currency,
@@ -363,8 +403,21 @@ def create_transaction(
         note=transaction_in.note,
         parent_transaction_id=transaction_in.parent_transaction_id,
         promotion_id=transaction_in.promotion_id,
+        is_split=has_splits,
     )
     db.add(transaction)
+    db.flush()  # Get the transaction.id for split FKs
+
+    if has_splits:
+        for s in transaction_in.splits:
+            db.add(TransactionSplit(
+                transaction_id=transaction.id,
+                category_id=s.category_id,
+                promotion_id=s.promotion_id,
+                amount=s.amount,
+                note=s.note,
+            ))
+
     db.commit()
     db.refresh(transaction)
     return _build_tx_response(transaction, category)
@@ -404,7 +457,17 @@ def list_transactions(
         query = query.filter(Transaction.account_id == account_id)
 
     if category_id is not None:
-        query = query.filter(Transaction.category_id == category_id)
+        # Include split transactions that have a split with the requested
+        # category, not just transactions with category_id directly set.
+        query = query.filter(
+            or_(
+                Transaction.category_id == category_id,
+                exists().where(
+                    TransactionSplit.transaction_id == Transaction.id,
+                    TransactionSplit.category_id == category_id,
+                )
+            )
+        )
 
     if status is not None:
         status_list = [s.strip() for s in status.split(",") if s.strip()]
@@ -413,18 +476,15 @@ def list_transactions(
     if parent_transaction_id is not None:
         query = query.filter(Transaction.parent_transaction_id == parent_transaction_id)
 
-    transactions = query.all()
+    transactions = query.options(
+        selectinload(Transaction.splits).selectinload(TransactionSplit.category)
+    ).all()
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
-    # {tx.category_id for tx in transactions} collects the unique IDs.
     category_ids = {tx.category_id for tx in transactions if tx.category_id is not None}
     cat_map: dict = {}
     if category_ids:
-        cat_list = (
-            db.query(Category)
-            .filter(Category.id.in_(category_ids))
-            .all()
-        )
+        cat_list = db.query(Category).filter(Category.id.in_(category_ids)).all()
         cat_map = {c.id: c for c in cat_list}
 
     return [_build_tx_response(tx, cat_map.get(tx.category_id)) for tx in transactions]
@@ -498,6 +558,42 @@ def update_transaction(
     if "promotion_id" in update_data and update_data["promotion_id"] is not None:
         _get_promotion_or_404(update_data["promotion_id"], current_user.id, db)
 
+    # Handle splits update
+    if "splits" in update_data:
+        splits_data = update_data.pop("splits")
+        if splits_data is not None:
+            # Delete existing splits
+            db.query(TransactionSplit).filter(
+                TransactionSplit.transaction_id == transaction.id
+            ).delete()
+            if len(splits_data) > 0:
+                # Validate split amounts
+                split_total = sum(Decimal(str(s["amount"])) for s in splits_data)
+                tx_amount = update_data.get("amount", transaction.amount)
+                if split_total != tx_amount:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Split amounts ({split_total}) must equal transaction amount ({tx_amount}).",
+                    )
+                # Validate ownership of each split's category and promotion
+                for s in splits_data:
+                    if s.get("category_id") is not None:
+                        _get_category_or_404(s["category_id"], current_user.id, db)
+                    if s.get("promotion_id") is not None:
+                        _get_promotion_or_404(s["promotion_id"], current_user.id, db)
+                for s in splits_data:
+                    db.add(TransactionSplit(
+                        transaction_id=transaction.id,
+                        category_id=s.get("category_id"),
+                        promotion_id=s.get("promotion_id"),
+                        amount=s["amount"],
+                        note=s.get("note"),
+                    ))
+                transaction.is_split = True
+                transaction.category_id = None
+            else:
+                transaction.is_split = False
+
     # Enum fields need .value to store the plain string in the database
     for field, value in update_data.items():
         if field in ("transaction_type", "status") and value is not None:
@@ -506,7 +602,6 @@ def update_transaction(
 
     db.commit()
     db.refresh(transaction)
-    # Look up the (potentially updated) category for the response
     category = db.query(Category).filter(Category.id == transaction.category_id).first() if transaction.category_id else None
     return _build_tx_response(transaction, category)
 

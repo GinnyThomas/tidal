@@ -31,6 +31,13 @@ type Category = { id: string; name: string; parent_category_id?: string | null }
 type PromotionOption = { id: string; name: string }
 
 // The subset of Transaction fields needed to pre-populate the form in edit mode.
+type SplitRow = {
+    categoryId: string
+    amount: string
+    promotionId: string
+    note: string
+}
+
 export type EditingTransaction = {
     id: string
     account_id: string
@@ -44,6 +51,8 @@ export type EditingTransaction = {
     note: string | null
     parent_transaction_id: string | null
     promotion_id: string | null
+    is_split?: boolean
+    splits?: { category_id: string | null; promotion_id: string | null; amount: string; note: string | null }[]
 }
 
 type Props = {
@@ -85,6 +94,19 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         editingTransaction?.parent_transaction_id ?? ''
     )
     const [promotionId, setPromotionId] = useState(editingTransaction?.promotion_id ?? '')
+    // Split transaction state
+    const [isSplitMode, setIsSplitMode] = useState(editingTransaction?.is_split ?? false)
+    const [splits, setSplits] = useState<SplitRow[]>(() => {
+        if (editingTransaction?.is_split && editingTransaction.splits) {
+            return editingTransaction.splits.map(s => ({
+                categoryId: s.category_id ?? '',
+                amount: s.amount,
+                promotionId: s.promotion_id ?? '',
+                note: s.note ?? '',
+            }))
+        }
+        return []
+    })
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -122,9 +144,35 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
+        // Validate splits before submitting
+        if (isSplitMode && splits.length > 0) {
+            const invalidSplit = splits.some(r => isNaN(parseFloat(r.amount)) || r.amount.trim() === '')
+            if (invalidSplit) {
+                setError('All split amounts must be valid numbers.')
+                setIsSubmitting(false)
+                return
+            }
+            const splitTotal = splits.reduce((s, r) => s + parseFloat(r.amount), 0)
+            const txTotal = parseFloat(amount || '0')
+            if (Math.abs(splitTotal - txTotal) > 0.005) {
+                setError(`Split amounts (${splitTotal.toFixed(2)}) must equal transaction amount (${txTotal.toFixed(2)}).`)
+                setIsSubmitting(false)
+                return
+            }
+        }
+
+        const splitPayload = isSplitMode && splits.length > 0
+            ? splits.map(s => ({
+                category_id: s.categoryId || null,
+                promotion_id: s.promotionId || null,
+                amount: s.amount,
+                note: s.note || null,
+            }))
+            : []
+
         const payload = {
             account_id: accountId,
-            category_id: categoryId || null,
+            category_id: isSplitMode ? null : (categoryId || null),
             transaction_type: transactionType,
             date,
             payee: payee || null,
@@ -132,12 +180,12 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             currency,
             status,
             note: note || null,
-            // Only include parent_transaction_id for refunds, and only if filled in
             parent_transaction_id:
                 transactionType === 'refund' && parentTransactionId
                     ? parentTransactionId
                     : null,
-            promotion_id: promotionId || null,
+            promotion_id: isSplitMode ? null : (promotionId || null),
+            splits: splitPayload,
         }
         try {
             try {
@@ -186,20 +234,22 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     </select>
                 </div>
 
-                <div>
-                    <label htmlFor="txCategory" className="label-base">Category</label>
-                    <select
-                        id="txCategory"
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
-                        className="input-base"
-                    >
-                        <option value="">— No category —</option>
-                        {buildCategoryOptions(categories).map((opt) => (
-                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                    </select>
-                </div>
+                {!isSplitMode && (
+                    <div>
+                        <label htmlFor="txCategory" className="label-base">Category</label>
+                        <select
+                            id="txCategory"
+                            value={categoryId}
+                            onChange={(e) => setCategoryId(e.target.value)}
+                            className="input-base"
+                        >
+                            <option value="">— No category —</option>
+                            {buildCategoryOptions(categories).map((opt) => (
+                                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 <div>
                     {/* transfer is excluded — use AddTransferForm for that */}
@@ -253,6 +303,96 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     />
                 </div>
 
+                {/* Split transaction toggle + rows */}
+                <div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const enabling = !isSplitMode
+                            setIsSplitMode(enabling)
+                            if (enabling) {
+                                setPromotionId('')
+                                if (splits.length === 0) {
+                                    setSplits([{ categoryId: '', amount: '', promotionId: '', note: '' }])
+                                }
+                            }
+                        }}
+                        className={`text-xs px-3 py-1 rounded border cursor-pointer transition-colors ${
+                            isSplitMode
+                                ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                                : 'border-ocean-600 text-slate-400 hover:text-slate-200'
+                        }`}
+                        aria-label="Split transaction"
+                    >
+                        {isSplitMode ? 'Cancel split' : 'Split transaction'}
+                    </button>
+                </div>
+
+                {isSplitMode && (
+                    <div className="space-y-2 p-3 bg-ocean-900/50 rounded-lg">
+                        <div className="text-xs text-slate-400 mb-2">
+                            Allocated:{' '}
+                            <span className={(() => {
+                                const allocated = splits.reduce((s, r) => s + parseFloat(r.amount || '0'), 0)
+                                const total = parseFloat(amount || '0')
+                                if (Math.abs(allocated - total) < 0.005) return 'text-teal-400'
+                                return 'text-coral-400'
+                            })()}>
+                                {splits.reduce((s, r) => s + parseFloat(r.amount || '0'), 0).toFixed(2)}
+                            </span>
+                            {' '}of {parseFloat(amount || '0').toFixed(2)}
+                        </div>
+                        {splits.map((split, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                                <select
+                                    value={split.categoryId}
+                                    onChange={(e) => {
+                                        const next = [...splits]
+                                        next[idx] = { ...next[idx], categoryId: e.target.value }
+                                        setSplits(next)
+                                    }}
+                                    className="input-base text-xs flex-1"
+                                    aria-label={`Split ${idx + 1} category`}
+                                >
+                                    <option value="">— No category —</option>
+                                    {buildCategoryOptions(categories).map(opt => (
+                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={split.amount}
+                                    onChange={(e) => {
+                                        const next = [...splits]
+                                        next[idx] = { ...next[idx], amount: e.target.value }
+                                        setSplits(next)
+                                    }}
+                                    className="input-base text-xs w-24"
+                                    placeholder="Amount"
+                                    aria-label={`Split ${idx + 1} amount`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setSplits(splits.filter((_, i) => i !== idx))}
+                                    className="text-slate-400 hover:text-coral-400 cursor-pointer text-sm"
+                                    aria-label={`Remove split ${idx + 1}`}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => setSplits([...splits, { categoryId: '', amount: '', promotionId: '', note: '' }])}
+                            className="text-xs text-sky-400 hover:text-sky-300 cursor-pointer"
+                        >
+                            + Add split
+                        </button>
+                    </div>
+                )}
+
                 <div>
                     <label htmlFor="txCurrency" className="label-base">Currency</label>
                     <select
@@ -299,8 +439,8 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     </div>
                 )}
 
-                {/* Link to promotion — optional, only shown if promotions exist */}
-                {promotions.length > 0 && (
+                {/* Link to promotion — hidden in split mode (promotions are per-split) */}
+                {promotions.length > 0 && !isSplitMode && (
                     <div>
                         <label htmlFor="txPromotion" className="label-base">Link to Promotion (optional)</label>
                         <select

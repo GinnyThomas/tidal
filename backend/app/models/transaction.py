@@ -39,8 +39,8 @@ import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, Uuid
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -146,6 +146,20 @@ class Transaction(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- Split transaction ---
+    # When True, the transaction's total amount is allocated across multiple
+    # categories via TransactionSplit rows. category_id on the parent
+    # transaction is set to NULL; the splits carry the per-category amounts.
+    is_split: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+
+    # --- Relationships ---
+    splits: Mapped[list["TransactionSplit"]] = relationship(  # noqa: F821
+        "TransactionSplit", back_populates="transaction",
+        cascade="all, delete-orphan",
+    )
 
     # --- Timestamps ---
     created_at: Mapped[datetime] = mapped_column(
