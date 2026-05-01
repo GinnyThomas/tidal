@@ -28,6 +28,7 @@ import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 import { fmtCurrency } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
+import { buildCsvContent, downloadCsv } from '../lib/csvExport'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -472,29 +473,33 @@ function MonthlyPlanView() {
     }
 
     // --- CSV export ---
+    // CSV mirrors the displayed grouping when group sections are active.
+    const showGrouped = !filterGroup && groupedSections.length > 1
     const exportCsv = () => {
         const header = ['Category', 'Planned', 'Actual', 'Remaining', 'Pending']
         const csvRows: string[][] = []
-        for (const pr of parentRows) {
-            csvRows.push([pr.category_name, pr.planned, pr.actual, pr.remaining, pr.pending])
-            for (const cr of childrenOf(pr.category_id)) {
-                csvRows.push([`  ${cr.category_name}`, cr.planned, cr.actual, cr.remaining, cr.pending])
+        const addRow = (r: PlanRow, indent = false) =>
+            csvRows.push([`${indent ? '  ' : ''}${r.category_name}`, r.planned, r.actual, r.remaining, r.pending])
+
+        if (showGrouped) {
+            for (const { group: g, entries } of groupedSections) {
+                csvRows.push([`-- ${g} --`])
+                for (const { parent, children } of entries) {
+                    addRow(parent)
+                    children.forEach(c => addRow(c, true))
+                }
+            }
+        } else {
+            for (const pr of parentRows) {
+                addRow(pr)
+                childrenOf(pr.category_id).forEach(c => addRow(c, true))
             }
         }
         if (totals) {
             csvRows.push(['Total', totals.planned, totals.actual, totals.remaining, totals.pending])
         }
 
-        const csvContent = [header, ...csvRows]
-            .map(row => row.map(cell => `"${cell}"`).join(','))
-            .join('\n')
-        const blob = new Blob([csvContent], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `tidal-plan-${month}-${year}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadCsv(buildCsvContent([header, ...csvRows]), `tidal-plan-${month}-${year}.csv`)
     }
 
     return (

@@ -37,6 +37,7 @@ import { annualPlanCache } from '../lib/annualPlanCache'
 import { fmtCurrency, fmtAmount } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 import { getApiBaseUrl } from '../lib/api'
+import { buildCsvContent, downloadCsv } from '../lib/csvExport'
 
 // --- TypeScript types ---
 
@@ -359,27 +360,35 @@ function AnnualView() {
     const grandTotal = sumAmounts(monthTotals)
 
     // --- CSV export ---
+    // When group sections are active, the CSV mirrors the displayed grouping
+    // (group header → entries → subtotals per group). Otherwise, flat order.
     const exportCsv = () => {
         const header = ['Category', ...MONTH_ABBR, 'Total']
         const csvRows: string[][] = []
-        for (const [parentId, parentData] of parentCats) {
+
+        const addEntry = ({ parent: [, parentData], children }: { parent: [string, CatData]; children: [string, CatData][] }) => {
             csvRows.push([parentData.name, ...parentData.amounts, sumAmounts(parentData.amounts)])
-            for (const [, childData] of childrenOf(parentId)) {
+            for (const [, childData] of children) {
                 csvRows.push([`  ${childData.name}`, ...childData.amounts, sumAmounts(childData.amounts)])
+            }
+        }
+
+        if (showAnnualGroupSections) {
+            for (const { group: g, entries } of annualGroupSections) {
+                csvRows.push([`-- ${g} --`])
+                entries.forEach(addEntry)
+            }
+        } else {
+            for (const [parentId, parentData] of parentCats) {
+                csvRows.push([parentData.name, ...parentData.amounts, sumAmounts(parentData.amounts)])
+                for (const [, childData] of childrenOf(parentId)) {
+                    csvRows.push([`  ${childData.name}`, ...childData.amounts, sumAmounts(childData.amounts)])
+                }
             }
         }
         csvRows.push(['Total', ...monthTotals, grandTotal])
 
-        const csvContent = [header, ...csvRows]
-            .map(row => row.map(cell => `"${cell}"`).join(','))
-            .join('\n')
-        const blob = new Blob([csvContent], { type: 'text/csv' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `tidal-annual-${year}.csv`
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadCsv(buildCsvContent([header, ...csvRows]), `tidal-annual-${year}.csv`)
     }
 
     return (

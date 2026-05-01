@@ -568,20 +568,22 @@ describe('MonthlyPlanView', () => {
         const origRevoke = URL.revokeObjectURL
         URL.revokeObjectURL = () => {}
 
-        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
-        await screen.findByText('Rent')
+        try {
+            render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+            await screen.findByText('Rent')
 
-        await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
+            await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
 
-        globalThis.Blob = origBlob
-        URL.createObjectURL = origCreate
-        URL.revokeObjectURL = origRevoke
-
-        const headerLine = capturedCsv.split('\n')[0]
-        expect(headerLine).toContain('"Category"')
-        expect(headerLine).toContain('"Planned"')
-        expect(headerLine).toContain('"Actual"')
-        expect(headerLine).toContain('"Remaining"')
-        expect(headerLine).toContain('"Pending"')
+            const headerLine = capturedCsv.split('\n')[0]
+            expect(headerLine).toContain('"Category"')
+            expect(headerLine).toContain('"Planned"')
+            expect(headerLine).toContain('"Actual"')
+            expect(headerLine).toContain('"Remaining"')
+            expect(headerLine).toContain('"Pending"')
+        } finally {
+            globalThis.Blob = origBlob
+            URL.createObjectURL = origCreate
+            URL.revokeObjectURL = origRevoke
+        }
     })
 })

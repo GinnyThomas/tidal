@@ -420,20 +420,21 @@ describe('AnnualView', () => {
         const origRevoke = URL.revokeObjectURL
         URL.revokeObjectURL = () => {}
 
-        render(<MemoryRouter><AnnualView /></MemoryRouter>)
-        await screen.findByText('Bills')
+        try {
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+            await screen.findByText('Bills')
 
-        await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
+            await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
 
-        // Restore
-        globalThis.Blob = origBlob
-        URL.createObjectURL = origCreate
-        URL.revokeObjectURL = origRevoke
-
-        const headerLine = capturedCsv.split('\n')[0]
-        expect(headerLine).toContain('"Category"')
-        expect(headerLine).toContain('"Jan"')
-        expect(headerLine).toContain('"Dec"')
-        expect(headerLine).toContain('"Total"')
+            const headerLine = capturedCsv.split('\n')[0]
+            expect(headerLine).toContain('"Category"')
+            expect(headerLine).toContain('"Jan"')
+            expect(headerLine).toContain('"Dec"')
+            expect(headerLine).toContain('"Total"')
+        } finally {
+            globalThis.Blob = origBlob
+            URL.createObjectURL = origCreate
+            URL.revokeObjectURL = origRevoke
+        }
     })
 })

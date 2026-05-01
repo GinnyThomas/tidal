@@ -101,8 +101,9 @@
    white background and black text for readability. */
 @media print {
   nav, .no-print { display: none !important; }
-  body { background: white !important; color: black !important; }
-  table { font-size: 10px; }
+  html, body, #root { background: white !important; color: black !important; }
+  table { font-size: 10px; background: white !important; color: black !important; }
+  thead, tbody, tfoot, tr, th, td { background: transparent !important; color: black !important; }
   /* Remove the max-height scroll container so the full table prints */
   .overflow-y-auto { max-height: none !important; overflow: visible !important; }
 }
