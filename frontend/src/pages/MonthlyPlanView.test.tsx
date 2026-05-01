@@ -535,4 +535,53 @@ describe('MonthlyPlanView', () => {
             expect(yearAfter).toBe(yearBefore - 1)
         })
     })
+
+    // =========================================================================
+    // Export buttons
+    // =========================================================================
+
+    it('renders Download PDF and Export CSV buttons', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_name: 'Rent', planned: '1200.00' }]),
+        })
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+
+        await screen.findByText('Rent')
+
+        expect(screen.getByRole('button', { name: /download pdf/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument()
+    })
+
+    it('CSV export generates correct header row', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makePlan([{ category_name: 'Rent', planned: '1200.00' }]),
+        })
+
+        let capturedCsv = ''
+        const origBlob = globalThis.Blob
+        globalThis.Blob = class MockBlob {
+            constructor(parts: string[]) { capturedCsv = parts[0] }
+        } as unknown as typeof Blob
+        const origCreate = URL.createObjectURL
+        URL.createObjectURL = () => 'blob:mock'
+        const origRevoke = URL.revokeObjectURL
+        URL.revokeObjectURL = () => {}
+
+        render(<MemoryRouter><MonthlyPlanView /></MemoryRouter>)
+        await screen.findByText('Rent')
+
+        await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
+
+        globalThis.Blob = origBlob
+        URL.createObjectURL = origCreate
+        URL.revokeObjectURL = origRevoke
+
+        const headerLine = capturedCsv.split('\n')[0]
+        expect(headerLine).toContain('"Category"')
+        expect(headerLine).toContain('"Planned"')
+        expect(headerLine).toContain('"Actual"')
+        expect(headerLine).toContain('"Remaining"')
+        expect(headerLine).toContain('"Pending"')
+    })
 })

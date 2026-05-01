@@ -358,12 +358,36 @@ function AnnualView() {
     // Grand total: sum of all monthly totals
     const grandTotal = sumAmounts(monthTotals)
 
+    // --- CSV export ---
+    const exportCsv = () => {
+        const header = ['Category', ...MONTH_ABBR, 'Total']
+        const csvRows: string[][] = []
+        for (const [parentId, parentData] of parentCats) {
+            csvRows.push([parentData.name, ...parentData.amounts, sumAmounts(parentData.amounts)])
+            for (const [, childData] of childrenOf(parentId)) {
+                csvRows.push([`  ${childData.name}`, ...childData.amounts, sumAmounts(childData.amounts)])
+            }
+        }
+        csvRows.push(['Total', ...monthTotals, grandTotal])
+
+        const csvContent = [header, ...csvRows]
+            .map(row => row.map(cell => `"${cell}"`).join(','))
+            .join('\n')
+        const blob = new Blob([csvContent], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `tidal-annual-${year}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
     return (
         <Layout>
             <div className="w-full px-4">
 
                 {/* Year navigation */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 no-print">
                     <button
                         onClick={() => setYear((y) => y - 1)}
                         className="bg-ocean-800 hover:bg-ocean-700 border border-ocean-600 text-slate-300 hover:text-sky-400 px-4 py-2 rounded-lg transition-colors cursor-pointer text-sm font-medium"
@@ -379,8 +403,8 @@ function AnnualView() {
                     </button>
                 </div>
 
-                {/* Budget group filter */}
-                <div className="flex justify-end items-center gap-4 mb-4">
+                {/* Budget group filter + export buttons */}
+                <div className="flex justify-end items-center gap-4 mb-4 no-print">
                     <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                         <input
                             type="checkbox"
@@ -403,6 +427,20 @@ function AnnualView() {
                             <option value="España">España</option>
                         </select>
                     </div>
+                    <button
+                        onClick={() => window.print()}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Download PDF"
+                    >
+                        Download PDF
+                    </button>
+                    <button
+                        onClick={exportCsv}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Export CSV"
+                    >
+                        Export CSV
+                    </button>
                 </div>
 
                 {/* Empty state — shown when no categories have any planned amounts */}

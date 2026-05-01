@@ -471,12 +471,38 @@ function MonthlyPlanView() {
         )
     }
 
+    // --- CSV export ---
+    const exportCsv = () => {
+        const header = ['Category', 'Planned', 'Actual', 'Remaining', 'Pending']
+        const csvRows: string[][] = []
+        for (const pr of parentRows) {
+            csvRows.push([pr.category_name, pr.planned, pr.actual, pr.remaining, pr.pending])
+            for (const cr of childrenOf(pr.category_id)) {
+                csvRows.push([`  ${cr.category_name}`, cr.planned, cr.actual, cr.remaining, cr.pending])
+            }
+        }
+        if (totals) {
+            csvRows.push(['Total', totals.planned, totals.actual, totals.remaining, totals.pending])
+        }
+
+        const csvContent = [header, ...csvRows]
+            .map(row => row.map(cell => `"${cell}"`).join(','))
+            .join('\n')
+        const blob = new Blob([csvContent], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `tidal-plan-${month}-${year}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
     return (
         <Layout>
             <div className="max-w-5xl mx-auto">
 
                 {/* Month navigation — h2 required by tests (getByRole heading level 2) */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 no-print">
                     <button
                         onClick={handlePrev}
                         className="bg-ocean-800 hover:bg-ocean-700 border border-ocean-600 text-slate-300 hover:text-sky-400 px-4 py-2 rounded-lg transition-colors cursor-pointer text-sm font-medium"
@@ -494,8 +520,8 @@ function MonthlyPlanView() {
                     </button>
                 </div>
 
-                {/* Budget group filter */}
-                <div className="flex justify-end mb-4">
+                {/* Budget group filter + export buttons */}
+                <div className="flex justify-end items-center gap-4 mb-4 no-print">
                     <div>
                         <label htmlFor="filterGroup" className="label-base">Budget group</label>
                         <select
@@ -509,6 +535,20 @@ function MonthlyPlanView() {
                             <option value="España">España</option>
                         </select>
                     </div>
+                    <button
+                        onClick={() => window.print()}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Download PDF"
+                    >
+                        Download PDF
+                    </button>
+                    <button
+                        onClick={exportCsv}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Export CSV"
+                    >
+                        Export CSV
+                    </button>
                 </div>
 
                 {/* Reallocation form — shown when a Reallocate button is clicked */}

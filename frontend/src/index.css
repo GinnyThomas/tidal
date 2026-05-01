@@ -94,3 +94,15 @@
   .badge-sky  { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400; }
   .badge-teal { @apply text-xs font-medium px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400; }
 }
+
+/* ── Print styles ──────────────────────────────────────────────────────── */
+/* Hide navigation, controls, and non-data elements when printing or
+   exporting to PDF via window.print(). Tables print cleanly with a
+   white background and black text for readability. */
+@media print {
+  nav, .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  table { font-size: 10px; }
+  /* Remove the max-height scroll container so the full table prints */
+  .overflow-y-auto { max-height: none !important; overflow: visible !important; }
+}

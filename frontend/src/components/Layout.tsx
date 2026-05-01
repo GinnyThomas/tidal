@@ -67,7 +67,7 @@ function Layout({ children }: Props) {
         <div className="min-h-screen bg-ocean-900 flex flex-col">
 
             {/* ── Navigation bar ─────────────────────────────────────────── */}
-            <nav className="bg-ocean-950 border-b border-ocean-700">
+            <nav className="bg-ocean-950 border-b border-ocean-700 no-print">
 
                 {/* Main nav row — always visible */}
                 <div className="px-4 sm:px-6 py-3 flex items-center justify-between">

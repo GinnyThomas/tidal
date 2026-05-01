@@ -386,4 +386,54 @@ describe('AnnualView', () => {
         expect(screen.getByText('── España Expenses Total ──')).toBeInTheDocument()
         expect(screen.queryByText('── España Income Total ──')).not.toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Export buttons
+    // =========================================================================
+
+    it('renders Download PDF and Export CSV buttons', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, { 0: [makePlanRow()] }),
+        })
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+        await screen.findByText('Bills')
+
+        expect(screen.getByRole('button', { name: /download pdf/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument()
+    })
+
+    it('CSV export generates correct header row', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: makeAnnualPlan(2026, { 0: [makePlanRow()] }),
+        })
+
+        // Mock the Blob constructor and URL.createObjectURL to capture CSV content
+        let capturedCsv = ''
+        const origBlob = globalThis.Blob
+        globalThis.Blob = class MockBlob {
+            constructor(parts: string[]) { capturedCsv = parts[0] }
+        } as unknown as typeof Blob
+        const origCreate = URL.createObjectURL
+        URL.createObjectURL = () => 'blob:mock'
+        const origRevoke = URL.revokeObjectURL
+        URL.revokeObjectURL = () => {}
+
+        render(<MemoryRouter><AnnualView /></MemoryRouter>)
+        await screen.findByText('Bills')
+
+        await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
+
+        // Restore
+        globalThis.Blob = origBlob
+        URL.createObjectURL = origCreate
+        URL.revokeObjectURL = origRevoke
+
+        const headerLine = capturedCsv.split('\n')[0]
+        expect(headerLine).toContain('"Category"')
+        expect(headerLine).toContain('"Jan"')
+        expect(headerLine).toContain('"Dec"')
+        expect(headerLine).toContain('"Total"')
+    })
 })
