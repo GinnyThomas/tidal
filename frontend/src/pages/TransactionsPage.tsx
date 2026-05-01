@@ -128,6 +128,8 @@ function TransactionsPage() {
     const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
+    // Client-side payee search — filters displayed transactions after fetch
+    const [payeeSearch, setPayeeSearch] = useState('')
     // Client-side sorting — applied to the fetched data
     const [sortField, setSortField] = useState<'date' | 'payee' | 'category_name' | 'account_name' | 'amount' | 'status'>('date')
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -264,7 +266,10 @@ function TransactionsPage() {
             cmp = a.status.localeCompare(b.status)
         }
         return sortDirection === 'asc' ? cmp : -cmp
-    })
+    }).filter(tx =>
+        // Client-side payee search — applied after sort
+        !payeeSearch || (tx.payee ?? '').toLowerCase().includes(payeeSearch.toLowerCase())
+    )
 
     // --- Early returns ---
 
@@ -353,6 +358,29 @@ function TransactionsPage() {
                             />
                         </div>
                     )}
+                </div>
+
+                {/* Payee search */}
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={payeeSearch}
+                            onChange={(e) => setPayeeSearch(e.target.value)}
+                            placeholder="Search by payee..."
+                            className="input-base w-64 pr-8"
+                            aria-label="Search by payee"
+                        />
+                        {payeeSearch && (
+                            <button
+                                onClick={() => setPayeeSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
+                                aria-label="Clear payee search"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Filter row */}

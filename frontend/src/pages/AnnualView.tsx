@@ -86,10 +86,12 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
 const fmt = fmtAmount
 
 // Non-zero planned amounts render as /schedules links with comma formatting.
-function fmtPlanned(amount: string): React.ReactNode {
+// When categoryId is provided, the link drills down to that category's schedules.
+function fmtPlanned(amount: string, categoryId?: string): React.ReactNode {
     const n = parseFloat(amount)
     if (n === 0) return '—'
-    return <Link to="/schedules" className="hover:underline">{fmtCurrency(n)}</Link>
+    const to = categoryId ? `/schedules?category_id=${categoryId}` : '/schedules'
+    return <Link to={to} className="hover:underline">{fmtCurrency(n)}</Link>
 }
 
 // Sum an array of decimal strings, return a 2-decimal-place string.
@@ -560,9 +562,9 @@ function AnnualView() {
                                                                 <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                                                                     <td className="px-4 py-3 text-slate-100 font-medium sticky left-0 z-[5] bg-ocean-900">{parentData.name}</td>
                                                                     {parentData.amounts.map((a, i) => (
-                                                                        <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                                        <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a, parentId)}</td>
                                                                     ))}
-                                                                    <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                                    <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal, parentId)}</td>
                                                                 </tr>
                                                                 {children.map(([childId, childData]) => {
                                                                     const childTotal = sumAmounts(childData.amounts)
@@ -570,9 +572,9 @@ function AnnualView() {
                                                                         <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
                                                                             <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4 sticky left-0 z-[5] bg-ocean-800">{childData.name}</td>
                                                                             {childData.amounts.map((a, i) => (
-                                                                                <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                                                <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a, childId)}</td>
                                                                             ))}
-                                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                                            <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal, childId)}</td>
                                                                         </tr>
                                                                     )
                                                                 })}
@@ -664,9 +666,9 @@ function AnnualView() {
                                                             <tr className="border-b border-ocean-700 hover:bg-ocean-700/40 transition-colors">
                                                                 <td className="px-4 py-3 text-slate-100 font-medium sticky left-0 z-[5] bg-ocean-900">{parentData.name}</td>
                                                                 {parentData.amounts.map((a, i) => (
-                                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a)}</td>
+                                                                    <td key={i} className="px-3 py-3 text-right text-sky-400">{fmtPlanned(a, parentId)}</td>
                                                                 ))}
-                                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal)}</td>
+                                                                <td className="px-4 py-3 text-right text-teal-400 font-medium">{fmtPlanned(parentTotal, parentId)}</td>
                                                             </tr>
                                                             {children.map(([childId, childData]) => {
                                                                 const childTotal = sumAmounts(childData.amounts)
@@ -674,9 +676,9 @@ function AnnualView() {
                                                                     <tr key={childId} className="border-b border-ocean-700/50 bg-ocean-800/50 hover:bg-ocean-700/30 transition-colors">
                                                                         <td className="py-2.5 pl-8 pr-4 text-slate-300 text-sm border-l-2 border-teal-500 ml-4 sticky left-0 z-[5] bg-ocean-800">{childData.name}</td>
                                                                         {childData.amounts.map((a, i) => (
-                                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a)}</td>
+                                                                            <td key={i} className="px-3 py-2.5 text-right text-sky-400/80 text-sm">{fmtPlanned(a, childId)}</td>
                                                                         ))}
-                                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal)}</td>
+                                                                        <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">{fmtPlanned(childTotal, childId)}</td>
                                                                     </tr>
                                                                 )
                                                             })}

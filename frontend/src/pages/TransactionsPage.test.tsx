@@ -574,4 +574,38 @@ describe('TransactionsPage', () => {
             expect(screen.getByText('2500.00 GBP')).toBeInTheDocument()
         })
     })
+
+    // =========================================================================
+    // Payee search
+    // =========================================================================
+
+    it('filters displayed transactions by payee search', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', payee: 'Tesco' }),
+                makeTransaction({ id: 'tx-2', payee: 'Sainsburys' }),
+                makeTransaction({ id: 'tx-3', payee: 'Amazon' }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+        expect(screen.getByText('Sainsburys')).toBeInTheDocument()
+        expect(screen.getByText('Amazon')).toBeInTheDocument()
+
+        // Type in the search box
+        await userEvent.type(screen.getByPlaceholderText(/search by payee/i), 'tes')
+
+        // Only Tesco matches — others hidden
+        expect(screen.getByText('Tesco')).toBeInTheDocument()
+        expect(screen.queryByText('Sainsburys')).not.toBeInTheDocument()
+        expect(screen.queryByText('Amazon')).not.toBeInTheDocument()
+
+        // Clear button appears and clears the search
+        await userEvent.click(screen.getByLabelText(/clear payee search/i))
+        expect(screen.getByText('Sainsburys')).toBeInTheDocument()
+        expect(screen.getByText('Amazon')).toBeInTheDocument()
+    })
 })
