@@ -37,6 +37,16 @@ import { getApiBaseUrl } from '../lib/api'
 
 // --- TypeScript types ---
 
+type TransactionSplit = {
+    id: string
+    transaction_id: string
+    category_id: string | null
+    category_name: string | null
+    promotion_id: string | null
+    amount: string
+    note: string | null
+}
+
 type Transaction = {
     id: string
     account_id: string
@@ -52,6 +62,8 @@ type Transaction = {
     note: string | null
     parent_transaction_id: string | null
     promotion_id: string | null
+    is_split: boolean
+    splits: TransactionSplit[]
 }
 
 type Account = {
@@ -525,7 +537,9 @@ function TransactionsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-slate-300">
                                             {tx.category_icon && <span className="mr-1">{tx.category_icon}</span>}
-                                            {tx.category_name || '—'}
+                                            {tx.is_split ? (
+                                                <span className="badge bg-sky-500/20 text-sky-400 border border-sky-500/30">split</span>
+                                            ) : (tx.category_name || '—')}
                                         </td>
                                         <td className="px-4 py-3 text-slate-300">
                                             {accountById.get(tx.account_id) ?? '—'}

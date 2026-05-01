@@ -436,3 +436,142 @@ def test_delete_transaction_is_soft_delete(test_client) -> None:
         headers=_auth_headers(token),
     )
     assert get_response.status_code == 404
+
+
+
+# =============================================================================
+# Split transactions
+# =============================================================================
+
+
+def test_create_split_transaction(test_client) -> None:
+    """
+    Creating a transaction with splits should set is_split=True,
+    category_id=None on the parent, and create TransactionSplit rows.
+    """
+    token, account_id, _ = _setup(test_client)
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    cat_a = cats[0]["id"]
+    cat_b = cats[1]["id"]
+
+    response = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-01-15",
+            "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": cat_a, "amount": "60.00", "note": "groceries"},
+                {"category_id": cat_b, "amount": "40.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["is_split"] is True
+    assert body["category_id"] is None
+    assert len(body["splits"]) == 2
+    amounts = sorted([s["amount"] for s in body["splits"]])
+    assert amounts == ["40.00", "60.00"]
+
+
+def test_split_amounts_must_equal_transaction_total(test_client) -> None:
+    """Splits that don't sum to the transaction amount should return 422."""
+    token, account_id, category_id = _setup(test_client)
+
+    response = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-01-15",
+            "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": category_id, "amount": "50.00"},
+                {"category_id": category_id, "amount": "30.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+    assert "split amounts" in response.json()["detail"].lower()
+
+
+def test_split_transaction_actuals_appear_in_correct_categories(test_client) -> None:
+    """
+    A split transaction's amounts should appear in the plan view under
+    each split's category, not under the parent transaction's (null) category.
+    """
+    token, account_id, _ = _setup(test_client)
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    cat_a = cats[0]["id"]
+    cat_b = cats[1]["id"]
+
+    test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-01-15",
+            "amount": "100.00",
+            "transaction_type": "expense",
+            "status": "cleared",
+            "splits": [
+                {"category_id": cat_a, "amount": "60.00"},
+                {"category_id": cat_b, "amount": "40.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+
+    plan = test_client.get("/api/v1/plan/2026/1", headers=_auth_headers(token))
+    assert plan.status_code == 200
+    rows = plan.json()["rows"]
+    row_a = next((r for r in rows if r["category_id"] == cat_a), None)
+    row_b = next((r for r in rows if r["category_id"] == cat_b), None)
+    assert row_a is not None
+    assert row_a["actual"] == "60.00"
+    assert row_b is not None
+    assert row_b["actual"] == "40.00"
+
+
+def test_update_split_transaction(test_client) -> None:
+    """Updating splits should replace existing ones."""
+    token, account_id, _ = _setup(test_client)
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    cat_a = cats[0]["id"]
+    cat_b = cats[1]["id"]
+
+    # Create with 2 splits
+    create_resp = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "date": "2026-01-15",
+            "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": cat_a, "amount": "60.00"},
+                {"category_id": cat_b, "amount": "40.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    tx_id = create_resp.json()["id"]
+
+    # Update: change to single split
+    update_resp = test_client.put(
+        f"/api/v1/transactions/{tx_id}",
+        json={
+            "splits": [
+                {"category_id": cat_a, "amount": "100.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    assert update_resp.status_code == 200
+    body = update_resp.json()
+    assert body["is_split"] is True
+    assert len(body["splits"]) == 1
+    assert body["splits"][0]["amount"] == "100.00"

@@ -431,8 +431,10 @@ def get_monthly_plan(
         planned_by_category[r.to_category_id] += r.amount
 
     # --- Step 4: Transactions in the target month ---
+    from sqlalchemy.orm import selectinload as _selectinload  # local to avoid circular
     transactions = (
         db.query(Transaction)
+        .options(_selectinload(Transaction.splits))
         .filter(
             Transaction.user_id == user_id,
             Transaction.deleted_at.is_(None),
@@ -443,19 +445,30 @@ def get_monthly_plan(
     )
 
     # --- Step 5: Actual and pending by category ---
+    # For split transactions, allocate each split's amount to its category
+    # instead of the parent transaction's (null) category_id.
     actual_by_category: dict[uuid.UUID, Decimal] = {}
     pending_by_category: dict[uuid.UUID, Decimal] = {}
 
+    def _add_to_bucket(
+        bucket: dict[uuid.UUID, Decimal], cat_id: uuid.UUID | None, amount: Decimal
+    ) -> None:
+        if cat_id is None:
+            return
+        bucket[cat_id] = bucket.get(cat_id, Decimal("0")) + amount
+
     for txn in transactions:
-        cat_id = txn.category_id
-        if txn.status in ("cleared", "reconciled"):
-            actual_by_category[cat_id] = (
-                actual_by_category.get(cat_id, Decimal("0")) + txn.amount
-            )
-        elif txn.status == "pending":
-            pending_by_category[cat_id] = (
-                pending_by_category.get(cat_id, Decimal("0")) + txn.amount
-            )
+        if txn.is_split:
+            for split in txn.splits:
+                if txn.status in ("cleared", "reconciled"):
+                    _add_to_bucket(actual_by_category, split.category_id, Decimal(str(split.amount)))
+                elif txn.status == "pending":
+                    _add_to_bucket(pending_by_category, split.category_id, Decimal(str(split.amount)))
+        else:
+            if txn.status in ("cleared", "reconciled"):
+                _add_to_bucket(actual_by_category, txn.category_id, txn.amount)
+            elif txn.status == "pending":
+                _add_to_bucket(pending_by_category, txn.category_id, txn.amount)
 
     # --- Step 6: Union of all category IDs with any activity ---
     all_category_ids = (
