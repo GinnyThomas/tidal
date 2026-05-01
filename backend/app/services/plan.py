@@ -297,12 +297,16 @@ def get_monthly_plan(
     last_day = date(year, month, calendar.monthrange(year, month)[1])
 
     # --- Step 1: Schedules ---
+    # All non-deleted schedules are included regardless of active flag.
+    # The active flag controls UI display (show/hide on the Schedules page)
+    # but should never suppress a schedule from plan calculations — an
+    # inactive schedule still represents a financial commitment within its
+    # date range.
     schedules = (
         db.query(Schedule)
         .filter(
             Schedule.user_id == user_id,
             Schedule.deleted_at.is_(None),
-            Schedule.active.is_(True),
         )
         .all()
     )

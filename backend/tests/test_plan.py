@@ -545,3 +545,44 @@ def test_category_group_appears_in_plan_row(test_client) -> None:
     assert response.status_code == 200
     row = next(r for r in response.json()["rows"] if r["category_id"] == cat_id)
     assert row["group"] == "UK"
+
+
+def test_inactive_schedule_still_contributes_to_plan_within_date_range(test_client) -> None:
+    """
+    An inactive schedule should still contribute to planned amounts as long
+    as it falls within the month's date range. The active flag controls UI
+    visibility on the Schedules page, not plan calculations.
+
+    Schedule: Jan 2026 – May 2026, active=False, monthly £200.
+    - March 2026 (within range): planned should include £200.
+    - June 2026 (past end_date): planned should NOT include it.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    _create_schedule(
+        test_client, token, account_id, category_id,
+        amount="200.00",
+        frequency="monthly",
+        start_date="2026-01-01",
+        end_date="2026-05-31",
+        active=False,
+    )
+
+    # March: within date range — should still appear in planned totals
+    march_resp = test_client.get("/api/v1/plan/2026/3", headers=_auth_headers(token))
+    assert march_resp.status_code == 200
+    march_row = next(
+        (r for r in march_resp.json()["rows"] if r["category_id"] == category_id),
+        None,
+    )
+    assert march_row is not None, "Inactive schedule should still contribute to plan"
+    assert march_row["planned"] == "200.00"
+
+    # June: past end_date — should NOT appear
+    june_resp = test_client.get("/api/v1/plan/2026/6", headers=_auth_headers(token))
+    assert june_resp.status_code == 200
+    june_row = next(
+        (r for r in june_resp.json()["rows"] if r["category_id"] == category_id),
+        None,
+    )
+    assert june_row is None
