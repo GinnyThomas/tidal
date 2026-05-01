@@ -37,6 +37,7 @@ import { annualPlanCache } from '../lib/annualPlanCache'
 import { fmtCurrency, fmtAmount } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 import { getApiBaseUrl } from '../lib/api'
+import { buildCsvContent, downloadCsv } from '../lib/csvExport'
 
 // --- TypeScript types ---
 
@@ -358,12 +359,44 @@ function AnnualView() {
     // Grand total: sum of all monthly totals
     const grandTotal = sumAmounts(monthTotals)
 
+    // --- CSV export ---
+    // When group sections are active, the CSV mirrors the displayed grouping
+    // (group header → entries → subtotals per group). Otherwise, flat order.
+    const exportCsv = () => {
+        const header = ['Category', ...MONTH_ABBR, 'Total']
+        const csvRows: string[][] = []
+
+        const addEntry = ({ parent: [, parentData], children }: { parent: [string, CatData]; children: [string, CatData][] }) => {
+            csvRows.push([parentData.name, ...parentData.amounts, sumAmounts(parentData.amounts)])
+            for (const [, childData] of children) {
+                csvRows.push([`  ${childData.name}`, ...childData.amounts, sumAmounts(childData.amounts)])
+            }
+        }
+
+        if (showAnnualGroupSections) {
+            for (const { group: g, entries } of annualGroupSections) {
+                csvRows.push([`-- ${g} --`])
+                entries.forEach(addEntry)
+            }
+        } else {
+            for (const [parentId, parentData] of parentCats) {
+                csvRows.push([parentData.name, ...parentData.amounts, sumAmounts(parentData.amounts)])
+                for (const [, childData] of childrenOf(parentId)) {
+                    csvRows.push([`  ${childData.name}`, ...childData.amounts, sumAmounts(childData.amounts)])
+                }
+            }
+        }
+        csvRows.push(['Total', ...monthTotals, grandTotal])
+
+        downloadCsv(buildCsvContent([header, ...csvRows]), `tidal-annual-${year}.csv`)
+    }
+
     return (
         <Layout>
             <div className="w-full px-4">
 
                 {/* Year navigation */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 no-print">
                     <button
                         onClick={() => setYear((y) => y - 1)}
                         className="bg-ocean-800 hover:bg-ocean-700 border border-ocean-600 text-slate-300 hover:text-sky-400 px-4 py-2 rounded-lg transition-colors cursor-pointer text-sm font-medium"
@@ -379,8 +412,8 @@ function AnnualView() {
                     </button>
                 </div>
 
-                {/* Budget group filter */}
-                <div className="flex justify-end items-center gap-4 mb-4">
+                {/* Budget group filter + export buttons */}
+                <div className="flex justify-end items-center gap-4 mb-4 no-print">
                     <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                         <input
                             type="checkbox"
@@ -403,6 +436,20 @@ function AnnualView() {
                             <option value="España">España</option>
                         </select>
                     </div>
+                    <button
+                        onClick={() => window.print()}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Download PDF"
+                    >
+                        Download PDF
+                    </button>
+                    <button
+                        onClick={exportCsv}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Export CSV"
+                    >
+                        Export CSV
+                    </button>
                 </div>
 
                 {/* Empty state — shown when no categories have any planned amounts */}

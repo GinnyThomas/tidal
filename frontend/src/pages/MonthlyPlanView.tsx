@@ -28,6 +28,7 @@ import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 import { fmtCurrency } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
+import { buildCsvContent, downloadCsv } from '../lib/csvExport'
 
 
 // --- TypeScript types matching the backend MonthlyPlan response ---
@@ -471,12 +472,42 @@ function MonthlyPlanView() {
         )
     }
 
+    // --- CSV export ---
+    // CSV mirrors the displayed grouping when group sections are active.
+    const showGrouped = !filterGroup && groupedSections.length > 1
+    const exportCsv = () => {
+        const header = ['Category', 'Planned', 'Actual', 'Remaining', 'Pending']
+        const csvRows: string[][] = []
+        const addRow = (r: PlanRow, indent = false) =>
+            csvRows.push([`${indent ? '  ' : ''}${r.category_name}`, r.planned, r.actual, r.remaining, r.pending])
+
+        if (showGrouped) {
+            for (const { group: g, entries } of groupedSections) {
+                csvRows.push([`-- ${g} --`])
+                for (const { parent, children } of entries) {
+                    addRow(parent)
+                    children.forEach(c => addRow(c, true))
+                }
+            }
+        } else {
+            for (const pr of parentRows) {
+                addRow(pr)
+                childrenOf(pr.category_id).forEach(c => addRow(c, true))
+            }
+        }
+        if (totals) {
+            csvRows.push(['Total', totals.planned, totals.actual, totals.remaining, totals.pending])
+        }
+
+        downloadCsv(buildCsvContent([header, ...csvRows]), `tidal-plan-${month}-${year}.csv`)
+    }
+
     return (
         <Layout>
             <div className="max-w-5xl mx-auto">
 
                 {/* Month navigation — h2 required by tests (getByRole heading level 2) */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 no-print">
                     <button
                         onClick={handlePrev}
                         className="bg-ocean-800 hover:bg-ocean-700 border border-ocean-600 text-slate-300 hover:text-sky-400 px-4 py-2 rounded-lg transition-colors cursor-pointer text-sm font-medium"
@@ -494,8 +525,8 @@ function MonthlyPlanView() {
                     </button>
                 </div>
 
-                {/* Budget group filter */}
-                <div className="flex justify-end mb-4">
+                {/* Budget group filter + export buttons */}
+                <div className="flex justify-end items-center gap-4 mb-4 no-print">
                     <div>
                         <label htmlFor="filterGroup" className="label-base">Budget group</label>
                         <select
@@ -509,6 +540,20 @@ function MonthlyPlanView() {
                             <option value="España">España</option>
                         </select>
                     </div>
+                    <button
+                        onClick={() => window.print()}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Download PDF"
+                    >
+                        Download PDF
+                    </button>
+                    <button
+                        onClick={exportCsv}
+                        className="btn-ghost border border-ocean-600 rounded-lg px-3 py-2"
+                        aria-label="Export CSV"
+                    >
+                        Export CSV
+                    </button>
                 </div>
 
                 {/* Reallocation form — shown when a Reallocate button is clicked */}
