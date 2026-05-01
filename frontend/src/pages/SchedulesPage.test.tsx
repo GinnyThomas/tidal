@@ -12,7 +12,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import axios from 'axios'
 import SchedulesPage from './SchedulesPage'
@@ -484,5 +484,34 @@ describe('SchedulesPage', () => {
 
         const btn = await screen.findByRole('button', { name: /add transaction from monthly transfer/i })
         expect(btn).toBeDisabled()
+    })
+
+    // =========================================================================
+    // Category filter from URL
+    // =========================================================================
+
+    it('filters schedules by category_id from URL search params', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({
+                data: [
+                    makeSchedule({ id: 'sch-1', name: 'Netflix', category_id: 'cat-001' }),
+                    makeSchedule({ id: 'sch-2', name: 'Salary', category_id: 'cat-002', category_name: 'Income' }),
+                ],
+            })
+
+        render(
+            <MemoryRouter initialEntries={['/schedules?category_id=cat-001']}>
+                <Routes>
+                    <Route path="/schedules" element={<SchedulesPage />} />
+                </Routes>
+            </MemoryRouter>
+        )
+
+        // Netflix (cat-001) should appear; Salary (cat-002) should be hidden
+        expect(await screen.findByText('Netflix')).toBeInTheDocument()
+        expect(screen.queryByText('Salary')).not.toBeInTheDocument()
+        // Filter badge visible
+        expect(screen.getByText(/filtered by/i)).toBeInTheDocument()
     })
 })

@@ -20,6 +20,7 @@
 
 import axios from 'axios'
 import { useState, useRef, useEffect } from 'react'
+import { fmtCurrency } from '../lib/formatting'
 import { getApiBaseUrl } from '../lib/api'
 
 type Override = {
@@ -243,7 +244,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                     const isPending = pendingChanges.has(month)
 
                     return (
-                        <div key={month} className="text-center">
+                        <div key={month} className="text-center min-w-[80px]">
                             <div className="text-xs text-slate-500 mb-1">{name}</div>
                             {isEditing ? (
                                 <div className="flex flex-col gap-1">
@@ -287,7 +288,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                         }`}
                                         aria-label={`${hasOverride ? 'Edit override' : 'Set override'} for ${name}`}
                                     >
-                                        {displayAmount}
+                                        {(() => { const parsed = parseFloat(displayAmount); return isNaN(parsed) ? displayAmount : fmtCurrency(parsed) })()}
                                     </button>
                                     {hasOverride && (
                                         <button

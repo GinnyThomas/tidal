@@ -20,6 +20,7 @@
 
 import axios from 'axios'
 import React, { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddScheduleForm from '../components/AddScheduleForm'
 import AddTransactionForm from '../components/AddTransactionForm'
@@ -71,10 +72,13 @@ const ACTIVE_BADGE: Record<string, string> = {
 // =============================================================================
 
 function SchedulesPage() {
+    const [searchParams, setSearchParams] = useSearchParams()
     const [accounts, setAccounts] = useState<Account[]>([])
     const [schedules, setSchedules] = useState<Schedule[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    // Derived from URL — not state. Stays in sync when the URL changes.
+    const filterCategoryId = searchParams.get('category_id') ?? ''
     const [showAddForm, setShowAddForm] = useState(false)
     const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
     // "Add now" opens AddTransactionForm pre-populated from a schedule
@@ -174,10 +178,19 @@ function SchedulesPage() {
     // section headers when schedules span more than one group — a single
     // group would just add a redundant header row.
     // Same pattern as BudgetsPage group sections.
+    // Apply client-side category filter from URL (drill-down from plan views)
+    const displayedSchedules = filterCategoryId
+        ? schedules.filter(s => s.category_id === filterCategoryId)
+        : schedules
+    // Find category name for the filter badge
+    const filterCategoryName = filterCategoryId
+        ? displayedSchedules.find(s => s.category_id === filterCategoryId)?.category_name ?? filterCategoryId
+        : ''
+
     const groupedSchedules: { group: string; items: Schedule[] }[] = []
-    if (schedules.length > 0) {
+    if (displayedSchedules.length > 0) {
         const byGroup = new Map<string, Schedule[]>()
-        for (const s of schedules) {
+        for (const s of displayedSchedules) {
             const g = s.group ?? 'General'
             if (!byGroup.has(g)) byGroup.set(g, [])
             byGroup.get(g)!.push(s)
@@ -338,7 +351,28 @@ function SchedulesPage() {
                 )}
 
                 {/* Schedule list / empty state */}
-                {schedules.length === 0 ? (
+                {/* Category filter badge — shown when drill-down from plan view */}
+                {filterCategoryId && (
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className="text-sm text-slate-400">Filtered by:</span>
+                        <span className="badge bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                            {filterCategoryName}
+                        </span>
+                        <button
+                            onClick={() => {
+                                const next = new URLSearchParams(searchParams)
+                                next.delete('category_id')
+                                setSearchParams(next)
+                            }}
+                            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
+                            aria-label="Clear category filter"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
+
+                {displayedSchedules.length === 0 ? (
                     <div className="text-center py-20">
                         <p aria-hidden="true" className="text-5xl mb-4">🔁</p>
                         <p className="text-slate-400 text-lg">
