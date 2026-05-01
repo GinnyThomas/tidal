@@ -377,7 +377,7 @@ function MonthlyPlanView() {
                     </td>
                     <td className="px-4 py-3 text-right text-sky-400">
                         {parseFloat(parent.planned) !== 0 ? (
-                            <Link to={`/schedules?category_id=${parent.category_id}`} className="hover:underline">{fmtAmount(parent.planned)}</Link>
+                            <Link to={`/schedules?${new URLSearchParams({ category_id: parent.category_id }).toString()}`} className="hover:underline">{fmtAmount(parent.planned)}</Link>
                         ) : fmtAmount(parent.planned)}
                     </td>
                     <td className="px-4 py-3 text-right text-teal-400">
@@ -440,7 +440,7 @@ function MonthlyPlanView() {
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-sky-400/80 text-sm">
                                     {parseFloat(child.planned) !== 0 ? (
-                                        <Link to={`/schedules?category_id=${child.category_id}`} className="hover:underline">{fmtAmount(child.planned)}</Link>
+                                        <Link to={`/schedules?${new URLSearchParams({ category_id: child.category_id }).toString()}`} className="hover:underline">{fmtAmount(child.planned)}</Link>
                                     ) : fmtAmount(child.planned)}
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-teal-400/80 text-sm">

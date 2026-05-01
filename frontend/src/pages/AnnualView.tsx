@@ -90,7 +90,9 @@ const fmt = fmtAmount
 function fmtPlanned(amount: string, categoryId?: string): React.ReactNode {
     const n = parseFloat(amount)
     if (n === 0) return '—'
-    const to = categoryId ? `/schedules?category_id=${categoryId}` : '/schedules'
+    const to = categoryId
+        ? `/schedules?${new URLSearchParams({ category_id: categoryId }).toString()}`
+        : '/schedules'
     return <Link to={to} className="hover:underline">{fmtCurrency(n)}</Link>
 }
 

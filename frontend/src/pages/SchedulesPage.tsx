@@ -77,9 +77,8 @@ function SchedulesPage() {
     const [schedules, setSchedules] = useState<Schedule[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [filterCategoryId, setFilterCategoryId] = useState(
-        () => searchParams.get('category_id') ?? ''
-    )
+    // Derived from URL — not state. Stays in sync when the URL changes.
+    const filterCategoryId = searchParams.get('category_id') ?? ''
     const [showAddForm, setShowAddForm] = useState(false)
     const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
     // "Add now" opens AddTransactionForm pre-populated from a schedule
@@ -361,7 +360,6 @@ function SchedulesPage() {
                         </span>
                         <button
                             onClick={() => {
-                                setFilterCategoryId('')
                                 const next = new URLSearchParams(searchParams)
                                 next.delete('category_id')
                                 setSearchParams(next)

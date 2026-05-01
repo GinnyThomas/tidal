@@ -288,7 +288,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                         }`}
                                         aria-label={`${hasOverride ? 'Edit override' : 'Set override'} for ${name}`}
                                     >
-                                        {fmtCurrency(parseFloat(displayAmount))}
+                                        {(() => { const parsed = parseFloat(displayAmount); return isNaN(parsed) ? displayAmount : fmtCurrency(parsed) })()}
                                     </button>
                                     {hasOverride && (
                                         <button
