@@ -108,7 +108,7 @@ class TransactionCreate(BaseModel):
     # For transfers: set automatically by the transfer endpoint.
     parent_transaction_id: Optional[uuid.UUID] = None
     promotion_id: Optional[uuid.UUID] = None
-    splits: list[TransactionSplitCreate] = []
+    splits: list[TransactionSplitCreate] = Field(default_factory=list)
 
 
 class TransactionResponse(BaseModel):
@@ -148,7 +148,7 @@ class TransactionResponse(BaseModel):
     category_name: Optional[str]
     category_icon: Optional[str]
     is_split: bool = False
-    splits: list[TransactionSplitResponse] = []
+    splits: list[TransactionSplitResponse] = Field(default_factory=list)
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

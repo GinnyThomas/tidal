@@ -45,6 +45,7 @@ from typing import Optional
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -175,7 +176,7 @@ def _get_category_or_404(
     return category
 
 
-def _build_tx_response(tx: Transaction, category: Category | None, db: Session | None = None) -> dict:
+def _build_tx_response(tx: Transaction, category: Category | None) -> dict:
     """
     Build a dict matching TransactionResponse, adding category_name and
     category_icon from the related Category row.
@@ -210,24 +211,19 @@ def _build_tx_response(tx: Transaction, category: Category | None, db: Session |
         "category_name": category.name if category else None,
         "category_icon": category.icon if category else None,
         "is_split": tx.is_split,
-        "splits": _build_splits_response(tx, db) if tx.is_split and db else [],
+        "splits": _build_splits_response(tx) if tx.is_split else [],
     }
 
 
-def _build_splits_response(tx: Transaction, db: Session) -> list[dict]:
-    """Build split response dicts with category_name denormalised."""
+def _build_splits_response(tx: Transaction) -> list[dict]:
+    """Build split response dicts using the eager-loaded category relationship."""
     splits = tx.splits if hasattr(tx, 'splits') and tx.splits is not None else []
-    cat_ids = {s.category_id for s in splits if s.category_id}
-    cat_map: dict = {}
-    if cat_ids:
-        cats = db.query(Category).filter(Category.id.in_(cat_ids)).all()
-        cat_map = {c.id: c for c in cats}
     return [
         {
             "id": s.id,
             "transaction_id": s.transaction_id,
             "category_id": s.category_id,
-            "category_name": cat_map[s.category_id].name if s.category_id and s.category_id in cat_map else None,
+            "category_name": s.category.name if s.category else None,
             "promotion_id": s.promotion_id,
             "amount": s.amount,
             "note": s.note,
@@ -316,7 +312,7 @@ def create_transfer(
     db.commit()
     db.refresh(debit)
     db.refresh(credit)
-    return [_build_tx_response(debit, None, db), _build_tx_response(credit, None, db)]
+    return [_build_tx_response(debit, None), _build_tx_response(credit, None)]
 
 
 @router.post(
@@ -424,7 +420,7 @@ def create_transaction(
 
     db.commit()
     db.refresh(transaction)
-    return _build_tx_response(transaction, category, db)
+    return _build_tx_response(transaction, category)
 
 
 @router.get(
@@ -461,7 +457,17 @@ def list_transactions(
         query = query.filter(Transaction.account_id == account_id)
 
     if category_id is not None:
-        query = query.filter(Transaction.category_id == category_id)
+        # Include split transactions that have a split with the requested
+        # category, not just transactions with category_id directly set.
+        query = query.filter(
+            or_(
+                Transaction.category_id == category_id,
+                exists().where(
+                    TransactionSplit.transaction_id == Transaction.id,
+                    TransactionSplit.category_id == category_id,
+                )
+            )
+        )
 
     if status is not None:
         status_list = [s.strip() for s in status.split(",") if s.strip()]
@@ -470,7 +476,9 @@ def list_transactions(
     if parent_transaction_id is not None:
         query = query.filter(Transaction.parent_transaction_id == parent_transaction_id)
 
-    transactions = query.options(selectinload(Transaction.splits)).all()
+    transactions = query.options(
+        selectinload(Transaction.splits).selectinload(TransactionSplit.category)
+    ).all()
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
     category_ids = {tx.category_id for tx in transactions if tx.category_id is not None}
@@ -479,7 +487,7 @@ def list_transactions(
         cat_list = db.query(Category).filter(Category.id.in_(category_ids)).all()
         cat_map = {c.id: c for c in cat_list}
 
-    return [_build_tx_response(tx, cat_map.get(tx.category_id), db) for tx in transactions]
+    return [_build_tx_response(tx, cat_map.get(tx.category_id)) for tx in transactions]
 
 
 @router.get(
@@ -498,7 +506,7 @@ def get_transaction(
     """
     tx = _get_transaction_or_404(transaction_id, current_user.id, db)
     category = db.query(Category).filter(Category.id == tx.category_id).first() if tx.category_id else None
-    return _build_tx_response(tx, category, db)
+    return _build_tx_response(tx, category)
 
 
 @router.put(
@@ -567,6 +575,12 @@ def update_transaction(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"Split amounts ({split_total}) must equal transaction amount ({tx_amount}).",
                     )
+                # Validate ownership of each split's category and promotion
+                for s in splits_data:
+                    if s.get("category_id") is not None:
+                        _get_category_or_404(s["category_id"], current_user.id, db)
+                    if s.get("promotion_id") is not None:
+                        _get_promotion_or_404(s["promotion_id"], current_user.id, db)
                 for s in splits_data:
                     db.add(TransactionSplit(
                         transaction_id=transaction.id,
@@ -589,7 +603,7 @@ def update_transaction(
     db.commit()
     db.refresh(transaction)
     category = db.query(Category).filter(Category.id == transaction.category_id).first() if transaction.category_id else None
-    return _build_tx_response(transaction, category, db)
+    return _build_tx_response(transaction, category)
 
 
 @router.delete(

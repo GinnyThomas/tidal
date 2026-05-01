@@ -11,6 +11,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     DateTime,
@@ -48,7 +49,7 @@ class TransactionSplit(Base):
         Uuid(as_uuid=True), ForeignKey("promotions.id"), nullable=True,
     )
 
-    amount: Mapped[float] = mapped_column(
+    amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=12, scale=2), nullable=False,
     )
 
@@ -68,4 +69,7 @@ class TransactionSplit(Base):
     # --- Relationships ---
     transaction: Mapped["Transaction"] = relationship(  # noqa: F821
         "Transaction", back_populates="splits",
+    )
+    category: Mapped["Category | None"] = relationship(  # noqa: F821
+        "Category", foreign_keys=[category_id], lazy="select",
     )

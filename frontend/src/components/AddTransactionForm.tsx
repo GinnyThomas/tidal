@@ -144,9 +144,15 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
         setIsSubmitting(true)
         setError(null)
         const token = localStorage.getItem('access_token')
-        // Validate splits sum before submitting
+        // Validate splits before submitting
         if (isSplitMode && splits.length > 0) {
-            const splitTotal = splits.reduce((s, r) => s + parseFloat(r.amount || '0'), 0)
+            const invalidSplit = splits.some(r => isNaN(parseFloat(r.amount)) || r.amount.trim() === '')
+            if (invalidSplit) {
+                setError('All split amounts must be valid numbers.')
+                setIsSubmitting(false)
+                return
+            }
+            const splitTotal = splits.reduce((s, r) => s + parseFloat(r.amount), 0)
             const txTotal = parseFloat(amount || '0')
             if (Math.abs(splitTotal - txTotal) > 0.005) {
                 setError(`Split amounts (${splitTotal.toFixed(2)}) must equal transaction amount (${txTotal.toFixed(2)}).`)
@@ -302,9 +308,13 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     <button
                         type="button"
                         onClick={() => {
-                            setIsSplitMode(!isSplitMode)
-                            if (!isSplitMode && splits.length === 0) {
-                                setSplits([{ categoryId: '', amount: '', promotionId: '', note: '' }])
+                            const enabling = !isSplitMode
+                            setIsSplitMode(enabling)
+                            if (enabling) {
+                                setPromotionId('')
+                                if (splits.length === 0) {
+                                    setSplits([{ categoryId: '', amount: '', promotionId: '', note: '' }])
+                                }
                             }
                         }}
                         className={`text-xs px-3 py-1 rounded border cursor-pointer transition-colors ${
@@ -429,8 +439,8 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     </div>
                 )}
 
-                {/* Link to promotion — optional, only shown if promotions exist */}
-                {promotions.length > 0 && (
+                {/* Link to promotion — hidden in split mode (promotions are per-split) */}
+                {promotions.length > 0 && !isSplitMode && (
                     <div>
                         <label htmlFor="txPromotion" className="label-base">Link to Promotion (optional)</label>
                         <select
