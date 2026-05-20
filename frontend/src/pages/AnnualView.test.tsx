@@ -438,6 +438,70 @@ describe('AnnualView', () => {
         }
     })
 
+    it('closing balance includes actual spend from categories with no planned amount', async () => {
+        // Fix date to Feb 2026 — Jan is past
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-02-15'))
+        try {
+            // Two groups so grouped sections render.
+            // "Surprise" has zero planned but £200 actual in Jan (past month).
+            // This unplanned spend should reduce UK closing balance.
+            const rowsByMonth: Record<number, ReturnType<typeof makePlanRow>[]> = {}
+            for (let i = 0; i < 12; i++) {
+                rowsByMonth[i] = [
+                    makePlanRow({
+                        category_id: 'cat-uk-rent',
+                        category_name: 'Rent',
+                        planned: '500.00',
+                        actual: i === 0 ? '500.00' : '0.00',
+                        group: 'UK',
+                        is_income: false,
+                    }),
+                    makePlanRow({
+                        category_id: 'cat-uk-surprise',
+                        category_name: 'Surprise',
+                        planned: '0.00',
+                        actual: i === 0 ? '200.00' : '0.00',
+                        group: 'UK',
+                        is_income: false,
+                    }),
+                    makePlanRow({
+                        category_id: 'cat-es',
+                        category_name: 'Groceries ES',
+                        planned: '50.00',
+                        actual: '0.00',
+                        group: 'España',
+                        is_income: false,
+                    }),
+                ]
+            }
+
+            vi.mocked(axios.get).mockResolvedValueOnce({
+                data: makeAnnualPlan(2026, rowsByMonth, [
+                    { id: 'ob-1', user_id: 'u-1', group: 'UK', year: 2026, opening_balance: '2000.00', currency: 'GBP', created_at: '', updated_at: '' },
+                    { id: 'ob-2', user_id: 'u-1', group: 'España', year: 2026, opening_balance: '0.00', currency: 'EUR', created_at: '', updated_at: '' },
+                ]),
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Rent')
+
+            const closingRow = screen.getAllByText('Closing Balance')[0].closest('tr')!
+            const cells = closingRow.querySelectorAll('td')
+
+            // Jan (past): actual expense = 500 (Rent) + 200 (Surprise) = 700
+            // Closing Jan = 2000 - 700 = 1300
+            expect(cells[1].textContent).toBe('1,300.00')
+
+            // Feb (current, not past): planned expense = 500 (Rent) + 0 (Surprise) = 500
+            // Closing Feb = 1300 - 500 = 800
+            expect(cells[2].textContent).toBe('800.00')
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('shows separate income subtotal when a group has income rows', async () => {
         vi.mocked(axios.get).mockResolvedValueOnce({
             data: makeAnnualPlan(2026, {
