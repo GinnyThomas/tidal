@@ -252,7 +252,14 @@ function AnnualView() {
     // We only show "planned" — the annual view is forward-looking budget planning.
     // Actual and pending data is available on the monthly view.
 
-    type CatData = { name: string; parentId: string | null; amounts: string[]; group: string | null; isIncome: boolean }
+    // Determine which months are "past" for cash flow: use actuals for past, planned for current+future
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0-based
+    const isPastMonth = (monthIdx: number) =>
+        year < currentYear || (year === currentYear && monthIdx < currentMonth)
+
+    type CatData = { name: string; parentId: string | null; amounts: string[]; actuals: string[]; group: string | null; isIncome: boolean }
     const catMap = new Map<string, CatData>()
 
     annualPlan?.months.forEach((monthPlan, monthIdx) => {
@@ -262,12 +269,14 @@ function AnnualView() {
                     name: row.category_name,
                     parentId: row.parent_category_id,
                     amounts: Array(12).fill('0.00'),
+                    actuals: Array(12).fill('0.00'),
                     group: row.group ?? null,
                     isIncome: row.is_income ?? false,
                 })
             }
             // Overwrite the placeholder with the actual planned amount.
             catMap.get(row.category_id)!.amounts[monthIdx] = row.planned
+            catMap.get(row.category_id)!.actuals[monthIdx] = row.actual
             // Update group if not yet set (first non-null group from any month wins)
             if (row.group && !catMap.get(row.category_id)!.group) {
                 catMap.get(row.category_id)!.group = row.group
@@ -496,13 +505,14 @@ function AnnualView() {
                                         const openingAmount = ob ? parseFloat(ob.opening_balance) : 0
 
                                         // Compute monthly income and expense totals using is_income flag
+                                        // Past months use actual amounts; current + future use planned
                                         const monthlyIncome = Array.from({ length: 12 }, (_, i) =>
                                             allRows.filter(([, d]) => d.isIncome)
-                                                .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                                .reduce((s, [, d]) => s + parseFloat(isPastMonth(i) ? d.actuals[i] : d.amounts[i]), 0)
                                         )
                                         const monthlyExpense = Array.from({ length: 12 }, (_, i) =>
                                             allRows.filter(([, d]) => !d.isIncome)
-                                                .reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                                .reduce((s, [, d]) => s + parseFloat(isPastMonth(i) ? d.actuals[i] : d.amounts[i]), 0)
                                         )
 
                                         // Closing balance: running balance across months
@@ -635,10 +645,10 @@ function AnnualView() {
                                         const flatOpening = flatOb ? parseFloat(flatOb.opening_balance) : 0
                                         const allFlatRows = activeCats
                                         const flatMonthlyIncome = Array.from({ length: 12 }, (_, i) =>
-                                            allFlatRows.filter(([, d]) => d.isIncome).reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                            allFlatRows.filter(([, d]) => d.isIncome).reduce((s, [, d]) => s + parseFloat(isPastMonth(i) ? d.actuals[i] : d.amounts[i]), 0)
                                         )
                                         const flatMonthlyExpense = Array.from({ length: 12 }, (_, i) =>
-                                            allFlatRows.filter(([, d]) => !d.isIncome).reduce((s, [, d]) => s + parseFloat(d.amounts[i]), 0)
+                                            allFlatRows.filter(([, d]) => !d.isIncome).reduce((s, [, d]) => s + parseFloat(isPastMonth(i) ? d.actuals[i] : d.amounts[i]), 0)
                                         )
                                         const flatClosing: number[] = []
                                         let flatRunning = flatOpening
