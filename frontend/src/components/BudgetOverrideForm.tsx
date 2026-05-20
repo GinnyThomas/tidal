@@ -235,7 +235,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
     return (
         <div className="space-y-2">
             {/* Month grid */}
-            <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-2 p-3 bg-ocean-900/50 rounded-lg">
+            <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 p-3 bg-ocean-900/50 rounded-lg">
                 {MONTHS.map((name, i) => {
                     const month = i + 1
                     const hasOverride = hasEffectiveOverride(month)
@@ -244,7 +244,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                     const isPending = pendingChanges.has(month)
 
                     return (
-                        <div key={month} className="text-center min-w-[80px]">
+                        <div key={month} className="text-center min-w-[85px]">
                             <div className="text-xs text-slate-500 mb-1">{name}</div>
                             {isEditing ? (
                                 <div className="flex flex-col gap-1">
@@ -281,7 +281,7 @@ function BudgetOverrideForm({ budgetId, overrides, defaultAmount, onChanged }: P
                                             setEditingMonth(month)
                                             setEditValue(displayAmount)
                                         }}
-                                        className={`text-sm cursor-pointer hover:text-sky-400 transition-colors rounded px-1 ${
+                                        className={`w-full text-center text-sm cursor-pointer hover:text-sky-400 transition-colors rounded px-1 ${
                                             isPending
                                                 ? 'ring-1 ring-amber-500/60 text-amber-400 font-medium'
                                                 : hasOverride ? 'text-sky-400 font-medium' : 'text-slate-400'
