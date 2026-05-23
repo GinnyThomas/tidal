@@ -105,8 +105,9 @@ function AddReallocationForm({
 
                 {/* To category — dropdown */}
                 <div>
-                    <label className="label-base">To</label>
+                    <label htmlFor="reallocTo" className="label-base">To</label>
                     <CategoryCombobox
+                        id="reallocTo"
                         categories={categories}
                         value={toCategoryId || null}
                         onChange={(id) => setToCategoryId(id ?? '')}

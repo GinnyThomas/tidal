@@ -67,7 +67,7 @@ describe('CategoryCombobox', () => {
         )
 
         // Click the dropdown button to open
-        await userEvent.click(screen.getByRole('button'))
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
 
         // Options should be visible
         expect(screen.getByRole('option', { name: /travel/i })).toBeInTheDocument()
@@ -140,7 +140,7 @@ describe('CategoryCombobox', () => {
             />
         )
 
-        await userEvent.click(screen.getByRole('button'))
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
         expect(screen.getByRole('option', { name: /no category/i })).toBeInTheDocument()
     })
 
@@ -155,7 +155,7 @@ describe('CategoryCombobox', () => {
             />
         )
 
-        await userEvent.click(screen.getByRole('button'))
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
         expect(screen.queryByRole('option', { name: /no category/i })).not.toBeInTheDocument()
     })
 

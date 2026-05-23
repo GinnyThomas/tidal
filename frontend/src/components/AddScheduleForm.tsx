@@ -202,8 +202,9 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                 </div>
 
                 <div>
-                    <label className="label-base">Category</label>
+                    <label htmlFor="schedCategory" className="label-base">Category</label>
                     <CategoryCombobox
+                        id="schedCategory"
                         categories={categories}
                         value={categoryId || null}
                         onChange={(id) => setCategoryId(id ?? '')}

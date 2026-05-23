@@ -43,7 +43,7 @@ describe('AddBudgetForm', () => {
         // Wait for category dropdown to populate
         await screen.findByDisplayValue('Groceries UK')
 
-        expect(screen.getByLabelText(/category/i)).toBeInTheDocument()
+        expect(screen.getByRole('combobox', { name: /category/i })).toBeInTheDocument()
         expect(screen.getByLabelText(/year/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/default monthly amount/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/^currency$/i)).toBeInTheDocument()

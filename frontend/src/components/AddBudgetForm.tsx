@@ -112,8 +112,9 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
                 {!isEditMode && (
                     <>
                         <div>
-                            <label className="label-base">Category</label>
+                            <label htmlFor="budgetCategory" className="label-base">Category</label>
                             <CategoryCombobox
+                                id="budgetCategory"
                                 categories={categories}
                                 value={categoryId || null}
                                 onChange={(id) => setCategoryId(id ?? '')}

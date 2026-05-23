@@ -237,8 +237,9 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
 
                 {!isSplitMode && (
                     <div>
-                        <label className="label-base">Category</label>
+                        <label htmlFor="txCategory" className="label-base">Category</label>
                         <CategoryCombobox
+                            id="txCategory"
                             categories={categories}
                             value={categoryId || null}
                             onChange={(id) => setCategoryId(id ?? '')}
@@ -343,6 +344,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                             <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1">
                                     <CategoryCombobox
+                                        id={`txSplitCategory-${idx}`}
                                         categories={categories}
                                         value={split.categoryId || null}
                                         onChange={(id) => {

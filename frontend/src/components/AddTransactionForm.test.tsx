@@ -101,9 +101,7 @@ describe('AddTransactionForm', () => {
         // Account dropdown still uses native select
         expect(await screen.findByRole('option', { name: 'Nationwide' })).toBeInTheDocument()
         // Category uses combobox — open it and check the option is available
-        const catButtons = screen.getAllByRole('button')
-        const comboboxBtn = catButtons.find(b => b.textContent === '▼')!
-        await userEvent.click(comboboxBtn)
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
         expect(screen.getByRole('option', { name: /groceries/i })).toBeInTheDocument()
     })
 
@@ -151,9 +149,7 @@ describe('AddTransactionForm', () => {
         await screen.findByRole('option', { name: 'Current Account' })
 
         // Select a category via the combobox
-        const comboboxBtns = screen.getAllByRole('button')
-        const catBtn = comboboxBtns.find(b => b.textContent === '▼')!
-        await userEvent.click(catBtn)
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
         await userEvent.click(screen.getByRole('option', { name: /groceries/i }))
 
         await userEvent.type(screen.getByLabelText(/amount/i), '25.00')
