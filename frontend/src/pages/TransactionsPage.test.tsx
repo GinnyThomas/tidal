@@ -68,11 +68,14 @@ const makeTransaction = (overrides = {}) => ({
     ...overrides,
 })
 
+const emptyTotals = { expenses: [], income: [], transfers: [], net: [] }
+
 // Wrap a list of transactions into the paginated response envelope
 function paginate(
     items: ReturnType<typeof makeTransaction>[],
     page = 1,
     page_size = 50,
+    totals = emptyTotals,
 ) {
     return {
         items,
@@ -80,6 +83,7 @@ function paginate(
         page,
         page_size,
         total_pages: Math.max(1, Math.ceil(items.length / page_size)),
+        totals,
     }
 }
 
@@ -789,5 +793,196 @@ describe('TransactionsPage', () => {
         // Click again to collapse
         await userEvent.click(screen.getByRole('button', { name: /toggle note/i }))
         expect(screen.queryByText('Weekly shop')).not.toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Transaction totals
+    // =========================================================================
+
+    it('totals card row renders when category filter is active', async () => {
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '100.00' }],
+            income: [], transfers: [], net: [{ currency: 'GBP', amount: '-100.00' }],
+        }
+        // Mount with category filter via URL
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+        expect(screen.getByLabelText('Transaction totals')).toBeInTheDocument()
+        expect(screen.getByText('Expenses')).toBeInTheDocument()
+    })
+
+    it('totals card row does NOT render when no filter is active', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        // Re-fetch after clicking "All" preset
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+
+        // Default is "This Month" which sets dateFrom — totals visible.
+        // Click "All" to clear the date filter.
+        await userEvent.click(screen.getByLabelText(/date filter: all/i))
+
+        await waitFor(() => {
+            expect(screen.queryByLabelText('Transaction totals')).not.toBeInTheDocument()
+        })
+    })
+
+    it('totals card row renders when only date filter is active', async () => {
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '50.00' }],
+            income: [], transfers: [], net: [{ currency: 'GBP', amount: '-50.00' }],
+        }
+        // Default mount has "This Month" preset which sets dateFrom/dateTo
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+        // "This Month" sets dateFrom, so totals should show
+        expect(screen.getByLabelText('Transaction totals')).toBeInTheDocument()
+    })
+
+    it('four cards appear with correct labels', async () => {
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '200.00' }],
+            income: [{ currency: 'GBP', amount: '500.00' }],
+            transfers: [{ currency: 'GBP', amount: '50.00' }],
+            net: [{ currency: 'GBP', amount: '300.00' }],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+        expect(screen.getByText('Expenses')).toBeInTheDocument()
+        expect(screen.getByText('Income')).toBeInTheDocument()
+        expect(screen.getByText('Transfers')).toBeInTheDocument()
+        expect(screen.getByText('Net')).toBeInTheDocument()
+    })
+
+    it('multi-currency totals display stacked lines', async () => {
+        const totals = {
+            expenses: [
+                { currency: 'EUR', amount: '45.00' },
+                { currency: 'GBP', amount: '100.00' },
+            ],
+            income: [], transfers: [], net: [
+                { currency: 'EUR', amount: '-45.00' },
+                { currency: 'GBP', amount: '-100.00' },
+            ],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+        // Both currency lines present — EUR and GBP amounts both appear
+        expect(screen.getAllByText(/45\.00/).length).toBeGreaterThanOrEqual(1)
+        expect(screen.getAllByText(/100\.00/).length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('empty totals show em-dash', async () => {
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '100.00' }],
+            income: [],
+            transfers: [],
+            net: [{ currency: 'GBP', amount: '-100.00' }],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+        // Income and Transfers are empty — should show em-dash
+        const dashes = screen.getAllByText('—')
+        expect(dashes.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('net negative displays in red, positive in green', async () => {
+        const totals = {
+            expenses: [],
+            income: [{ currency: 'GBP', amount: '500.00' }],
+            transfers: [],
+            net: [{ currency: 'GBP', amount: '500.00' }],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+        // Find the net value — positive should have success color
+        const netValue = screen.getByText(/\+/)
+        expect(netValue).toHaveClass('text-success')
+    })
+
+    it('account balance display and totals row coexist when account filter is active', async () => {
+        const acct = makeAccount({ id: 'acc-001', name: 'Current', calculated_balance: '2500.00', currency: 'GBP' })
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '100.00' }],
+            income: [], transfers: [],
+            net: [{ currency: 'GBP', amount: '-100.00' }],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [acct] })
+            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+            // Re-fetch after filter change
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?account_id=acc-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+
+        // Both should be visible
+        expect(screen.getByText(/Balance:/)).toBeInTheDocument()
+        expect(screen.getByLabelText('Transaction totals')).toBeInTheDocument()
     })
 })

@@ -726,3 +726,160 @@ def test_list_transactions_search_by_note(test_client) -> None:
     )
     assert resp3.json()["total"] == 1
     assert resp3.json()["items"][0]["payee"] == "Amazon"
+
+
+# =============================================================================
+# Totals
+# =============================================================================
+
+
+def test_totals_single_currency_expenses_only(test_client) -> None:
+    """Single currency, expenses only — net is negative expenses."""
+    token, account_id, category_id = _setup(test_client)
+    base = {"account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "transaction_type": "expense"}
+
+    test_client.post("/api/v1/transactions",
+                     json={**base, "amount": "100.00"}, headers=_auth_headers(token))
+    test_client.post("/api/v1/transactions",
+                     json={**base, "amount": "50.00"}, headers=_auth_headers(token))
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    assert totals["expenses"] == [{"currency": "GBP", "amount": "150.00"}]
+    assert totals["income"] == []
+    assert totals["transfers"] == []
+    assert totals["net"] == [{"currency": "GBP", "amount": "-150.00"}]
+
+
+def test_totals_mixed_types(test_client) -> None:
+    """Mixed types — all four totals correct, transfers excluded from net."""
+    token, account_id, category_id = _setup(test_client)
+    base = {"account_id": account_id, "category_id": category_id, "date": "2026-01-15"}
+
+    test_client.post("/api/v1/transactions",
+                     json={**base, "amount": "200.00", "transaction_type": "expense"},
+                     headers=_auth_headers(token))
+    test_client.post("/api/v1/transactions",
+                     json={**base, "amount": "500.00", "transaction_type": "income"},
+                     headers=_auth_headers(token))
+
+    # Create a transfer (two legs)
+    account_b = _create_account(test_client, token, name="Savings")
+    test_client.post("/api/v1/transactions/transfer",
+                     json={"from_account_id": account_id, "to_account_id": account_b,
+                           "date": "2026-01-15", "amount": "50.00"},
+                     headers=_auth_headers(token))
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    assert totals["expenses"] == [{"currency": "GBP", "amount": "200.00"}]
+    assert totals["income"] == [{"currency": "GBP", "amount": "500.00"}]
+    assert totals["transfers"] == [{"currency": "GBP", "amount": "100.00"}]  # two legs
+    assert totals["net"] == [{"currency": "GBP", "amount": "300.00"}]
+
+
+def test_totals_multi_currency(test_client) -> None:
+    """Multi-currency — multiple currency rows per total."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "category_id": category_id,
+                           "date": "2026-01-15", "amount": "100.00",
+                           "transaction_type": "expense", "currency": "GBP"},
+                     headers=_auth_headers(token))
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "category_id": category_id,
+                           "date": "2026-01-15", "amount": "45.00",
+                           "transaction_type": "expense", "currency": "EUR"},
+                     headers=_auth_headers(token))
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    # Sorted by currency code
+    assert totals["expenses"] == [
+        {"currency": "EUR", "amount": "45.00"},
+        {"currency": "GBP", "amount": "100.00"},
+    ]
+
+
+def test_totals_with_splits(test_client) -> None:
+    """Split transaction — split amounts used, not parent amount."""
+    token, account_id, _ = _setup(test_client)
+    categories = test_client.get("/api/v1/categories",
+                                 headers=_auth_headers(token)).json()
+    cat_a = categories[0]["id"]
+    cat_b = categories[1]["id"]
+
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "date": "2026-01-15",
+                           "amount": "100.00", "transaction_type": "expense",
+                           "splits": [
+                               {"category_id": cat_a, "amount": "60.00"},
+                               {"category_id": cat_b, "amount": "40.00"},
+                           ]},
+                     headers=_auth_headers(token))
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    # Split amounts sum to 100 (60+40), same as parent — but derived from splits
+    assert totals["expenses"] == [{"currency": "GBP", "amount": "100.00"}]
+
+
+def test_totals_category_filter_with_splits(test_client) -> None:
+    """Category filter matches split categories, not parent."""
+    token, account_id, _ = _setup(test_client)
+    categories = test_client.get("/api/v1/categories",
+                                 headers=_auth_headers(token)).json()
+    cat_a = categories[0]["id"]
+    cat_b = categories[1]["id"]
+
+    # Split transaction: 60 in cat_a, 40 in cat_b
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "date": "2026-01-15",
+                           "amount": "100.00", "transaction_type": "expense",
+                           "splits": [
+                               {"category_id": cat_a, "amount": "60.00"},
+                               {"category_id": cat_b, "amount": "40.00"},
+                           ]},
+                     headers=_auth_headers(token))
+
+    # Filter by cat_a — the split transaction matches, totals use split amounts
+    resp = test_client.get(f"/api/v1/transactions?category_id={cat_a}",
+                           headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    # The full split transaction is included (100 total from splits)
+    assert totals["expenses"] == [{"currency": "GBP", "amount": "100.00"}]
+
+
+def test_totals_pagination_does_not_affect(test_client) -> None:
+    """Same totals on page 1 and page 2 of same filter."""
+    token, account_id, category_id = _setup(test_client)
+    base = {"account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "transaction_type": "expense"}
+
+    for i in range(3):
+        test_client.post("/api/v1/transactions",
+                         json={**base, "amount": "10.00"},
+                         headers=_auth_headers(token))
+
+    resp1 = test_client.get("/api/v1/transactions?page=1&page_size=2",
+                            headers=_auth_headers(token))
+    resp2 = test_client.get("/api/v1/transactions?page=2&page_size=2",
+                            headers=_auth_headers(token))
+
+    assert resp1.json()["totals"] == resp2.json()["totals"]
+    assert resp1.json()["totals"]["expenses"] == [{"currency": "GBP", "amount": "30.00"}]
+
+
+def test_totals_no_matching_transactions(test_client) -> None:
+    """No transactions match filter — all totals are empty arrays."""
+    token, account_id, category_id = _setup(test_client)
+
+    resp = test_client.get("/api/v1/transactions?status=cleared",
+                           headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    assert totals["expenses"] == []
+    assert totals["income"] == []
+    assert totals["transfers"] == []
+    assert totals["net"] == []

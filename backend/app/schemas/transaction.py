@@ -186,6 +186,26 @@ class TransactionUpdate(BaseModel):
     splits: Optional[list[TransactionSplitCreate]] = None
 
 
+class CurrencyAmount(BaseModel):
+    """A single currency's aggregated amount."""
+
+    currency: str
+    amount: Decimal
+
+    @field_serializer("amount")
+    def serialize_amount(self, value: Decimal) -> str:
+        return str(value.quantize(Decimal("0.01")))
+
+
+class TransactionTotals(BaseModel):
+    """Aggregated totals by transaction type, per currency."""
+
+    expenses: list[CurrencyAmount]
+    income: list[CurrencyAmount]
+    transfers: list[CurrencyAmount]
+    net: list[CurrencyAmount]
+
+
 class PaginatedTransactions(BaseModel):
     """Paginated envelope for GET /api/v1/transactions."""
 
@@ -194,6 +214,7 @@ class PaginatedTransactions(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    totals: TransactionTotals
 
 
 class TransferCreate(BaseModel):
