@@ -39,7 +39,8 @@
 #   transaction into another user's account by guessing account UUIDs).
 
 import uuid
-from datetime import datetime, timezone
+import math
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from decimal import Decimal
@@ -56,6 +57,7 @@ from app.models.transaction import Transaction
 from app.models.transaction_split import TransactionSplit
 from app.models.user import User
 from app.schemas.transaction import (
+    PaginatedTransactions,
     TransactionCreate,
     TransactionResponse,
     TransactionType,
@@ -425,7 +427,7 @@ def create_transaction(
 
 @router.get(
     "",
-    response_model=list[TransactionResponse],
+    response_model=PaginatedTransactions,
 )
 def list_transactions(
     db: Session = Depends(get_db),
@@ -434,9 +436,13 @@ def list_transactions(
     category_id: Optional[uuid.UUID] = Query(default=None),
     status: Optional[str] = Query(default=None),
     parent_transaction_id: Optional[uuid.UUID] = Query(default=None),
-) -> list[dict]:
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+) -> dict:
     """
-    Returns all non-deleted transactions for the current user.
+    Returns paginated, non-deleted transactions for the current user.
 
     Optional filters:
       account_id  — return only transactions for a specific account.
@@ -447,6 +453,10 @@ def list_transactions(
                     e.g. "cleared,reconciled" returns only settled transactions.
                     This is the query the budget engine uses to compute
                     "actual spend" — pending transactions are deliberately excluded.
+      date_from   — include transactions on or after this date.
+      date_to     — include transactions on or before this date.
+      page        — page number (1-based, default 1).
+      page_size   — items per page (1-500, default 50).
     """
     query = db.query(Transaction).filter(
         Transaction.user_id == current_user.id,
@@ -476,9 +486,26 @@ def list_transactions(
     if parent_transaction_id is not None:
         query = query.filter(Transaction.parent_transaction_id == parent_transaction_id)
 
-    transactions = query.options(
-        selectinload(Transaction.splits).selectinload(TransactionSplit.category)
-    ).all()
+    if date_from is not None:
+        query = query.filter(Transaction.date >= date_from)
+
+    if date_to is not None:
+        query = query.filter(Transaction.date <= date_to)
+
+    # Count before pagination
+    total = query.count()
+    total_pages = max(1, math.ceil(total / page_size))
+
+    transactions = (
+        query
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .options(
+            selectinload(Transaction.splits).selectinload(TransactionSplit.category)
+        )
+        .all()
+    )
 
     # Batch-fetch all referenced categories in a single query to avoid N+1.
     category_ids = {tx.category_id for tx in transactions if tx.category_id is not None}
@@ -487,7 +514,13 @@ def list_transactions(
         cat_list = db.query(Category).filter(Category.id.in_(category_ids)).all()
         cat_map = {c.id: c for c in cat_list}
 
-    return [_build_tx_response(tx, cat_map.get(tx.category_id)) for tx in transactions]
+    return {
+        "items": [_build_tx_response(tx, cat_map.get(tx.category_id)) for tx in transactions],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @router.get(

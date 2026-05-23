@@ -9,17 +9,22 @@
 //     Categories are fetched once on mount in a separate useEffect (empty deps)
 //     so that the filter dropdown is populated without re-fetching on every
 //     filter change.
+//   - Date filters: quick-select buttons (This Month, Last Month, etc.) plus
+//     custom date range inputs. Defaults to "This Month".
+//   - Pagination: server-side via page/page_size params. Controls below table.
 //   - Filters: account dropdown, category dropdown, and status dropdown.
 //     Category filter also reads ?category_id from the URL on mount so
 //     clicking a category link in CategoriesPage or MonthlyPlanView
 //     pre-selects the filter automatically (category drill-down).
 //   - Active filter badge: when a category is selected a "Filtered by: Name"
-//     pill with an × clear button appears above the table. Clicking × also
+//     pill with an x clear button appears above the table. Clicking x also
 //     calls setSearchParams({}) to keep the URL in sync.
 //   - Inline status toggle: clicking the status badge cycles
-//     pending → cleared → reconciled → pending via PUT /api/v1/transactions/{id}.
+//     pending -> cleared -> reconciled -> pending via PUT /api/v1/transactions/{id}.
 //     State is updated optimistically so the badge reflects the new value
 //     immediately without waiting for a re-fetch.
+//   - Notes: rows with a non-null note show a note icon in the Actions column.
+//     Clicking toggles an expanded row showing the note text.
 //   - Forms: "Add Transaction" opens AddTransactionForm (expense/income/refund).
 //            "Add Transfer" opens AddTransferForm (two-account transfer).
 //     Only one form is shown at a time; opening one closes the other.
@@ -66,6 +71,14 @@ type Transaction = {
     splits: TransactionSplit[]
 }
 
+type PaginatedResponse = {
+    items: Transaction[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+}
+
 type Account = {
     id: string
     name: string
@@ -80,7 +93,7 @@ type Category = {
 }
 
 // --- Status cycle ---
-// pending → cleared → reconciled → pending.
+// pending -> cleared -> reconciled -> pending.
 // Only cleared and reconciled count toward budget actual spend.
 
 function nextStatus(current: string): string {
@@ -104,6 +117,62 @@ const TYPE_BADGE: Record<string, string> = {
     income:   'bg-success/20 text-success',
     transfer: 'bg-sky-500/20 text-sky-400',
     refund:   'bg-slate-500/20 text-slate-300',
+}
+
+// --- Date range helpers ---
+
+type DatePreset = 'this_month' | 'last_month' | 'this_quarter' | 'last_quarter' | 'this_year' | 'custom' | 'all'
+
+// Format a Date as YYYY-MM-DD using local date parts (avoids UTC timezone shift)
+function fmtDate(d: Date): string {
+    const yy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yy}-${mm}-${dd}`
+}
+
+function getDateRange(preset: DatePreset): { from: string; to: string } | null {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() // 0-based
+
+    switch (preset) {
+        case 'this_month':
+            return {
+                from: `${y}-${String(m + 1).padStart(2, '0')}-01`,
+                to: fmtDate(new Date(y, m + 1, 0)),
+            }
+        case 'last_month': {
+            const lm = m === 0 ? 11 : m - 1
+            const ly = m === 0 ? y - 1 : y
+            return {
+                from: `${ly}-${String(lm + 1).padStart(2, '0')}-01`,
+                to: fmtDate(new Date(ly, lm + 1, 0)),
+            }
+        }
+        case 'this_quarter': {
+            const qStart = Math.floor(m / 3) * 3
+            return {
+                from: `${y}-${String(qStart + 1).padStart(2, '0')}-01`,
+                to: fmtDate(new Date(y, qStart + 3, 0)),
+            }
+        }
+        case 'last_quarter': {
+            let qStart = Math.floor(m / 3) * 3 - 3
+            let qy = y
+            if (qStart < 0) { qStart += 12; qy -= 1 }
+            return {
+                from: `${qy}-${String(qStart + 1).padStart(2, '0')}-01`,
+                to: fmtDate(new Date(qy, qStart + 3, 0)),
+            }
+        }
+        case 'this_year':
+            return { from: `${y}-01-01`, to: `${y}-12-31` }
+        case 'all':
+            return null
+        case 'custom':
+            return null // handled by custom inputs
+    }
 }
 
 // =============================================================================
@@ -146,6 +215,34 @@ function TransactionsPage() {
     const [sortField, setSortField] = useState<'date' | 'payee' | 'category_name' | 'account_name' | 'amount' | 'status'>('date')
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
+    // Date filter state
+    const initDatePreset = (): DatePreset => {
+        if (searchParams.get('date_from') || searchParams.get('date_to')) return 'custom'
+        return 'this_month'
+    }
+    const [datePreset, setDatePreset] = useState<DatePreset>(initDatePreset)
+    const [dateFrom, setDateFrom] = useState(() => {
+        const urlFrom = searchParams.get('date_from')
+        if (urlFrom) return urlFrom
+        const range = getDateRange('this_month')
+        return range?.from ?? ''
+    })
+    const [dateTo, setDateTo] = useState(() => {
+        const urlTo = searchParams.get('date_to')
+        if (urlTo) return urlTo
+        const range = getDateRange('this_month')
+        return range?.to ?? ''
+    })
+
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(50)
+    const [totalItems, setTotalItems] = useState(0)
+    const [totalPages, setTotalPages] = useState(1)
+
+    // Notes expand state
+    const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null)
+
     // Main filter effect: fetches accounts and transactions.
     // Re-runs whenever any filter changes or after a form submission (refreshKey).
     // Categories are NOT re-fetched here — they live in a separate effect below.
@@ -159,20 +256,27 @@ function TransactionsPage() {
         if (filterAccountId) params.account_id = filterAccountId
         if (filterCategoryId) params.category_id = filterCategoryId
         if (filterStatus) params.status = filterStatus
+        if (dateFrom) params.date_from = dateFrom
+        if (dateTo) params.date_to = dateTo
+        params.page = String(page)
+        params.page_size = String(pageSize)
 
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
             axios.get(`${getApiBaseUrl()}/api/v1/transactions`, { headers, params }),
         ]).then(([accountsRes, txRes]) => {
             setAccounts(accountsRes.data)
-            setTransactions(txRes.data)
+            const data = txRes.data as PaginatedResponse
+            setTransactions(data.items)
+            setTotalItems(data.total)
+            setTotalPages(data.total_pages)
         }).catch(() => {
             setError('Could not load transactions. Please try again.')
         }).finally(() => {
             setLoading(false)
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterAccountId, filterCategoryId, filterStatus, refreshKey])
+    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, page, pageSize, refreshKey])
 
     // Categories effect: runs once on mount.
     // Fetching categories separately means filter dropdowns are populated
@@ -245,6 +349,17 @@ function TransactionsPage() {
         }
     }
 
+    // --- Date preset handler ---
+
+    const handleDatePreset = (preset: DatePreset) => {
+        setDatePreset(preset)
+        setPage(1)
+        if (preset === 'custom') return // user sets dates manually
+        const range = getDateRange(preset)
+        setDateFrom(range?.from ?? '')
+        setDateTo(range?.to ?? '')
+    }
+
     // --- Client-side sorting ---
 
     const handleSort = (field: typeof sortField) => {
@@ -282,6 +397,10 @@ function TransactionsPage() {
         // Client-side payee search — applied after sort
         !payeeSearch || (tx.payee ?? '').toLowerCase().includes(payeeSearch.toLowerCase())
     )
+
+    // Pagination display info
+    const rangeStart = totalItems === 0 ? 0 : (page - 1) * pageSize + 1
+    const rangeEnd = Math.min(page * pageSize, totalItems)
 
     // --- Early returns ---
 
@@ -372,6 +491,51 @@ function TransactionsPage() {
                     )}
                 </div>
 
+                {/* Date filter bar */}
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                    {([
+                        ['this_month', 'This Month'],
+                        ['last_month', 'Last Month'],
+                        ['this_quarter', 'This Quarter'],
+                        ['last_quarter', 'Last Quarter'],
+                        ['this_year', 'This Year'],
+                        ['custom', 'Custom'],
+                        ['all', 'All'],
+                    ] as [DatePreset, string][]).map(([preset, label]) => (
+                        <button
+                            key={preset}
+                            onClick={() => handleDatePreset(preset)}
+                            className={`text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                                datePreset === preset
+                                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                                    : 'text-slate-400 hover:text-slate-200 border border-ocean-600 hover:border-sky-500'
+                            }`}
+                            aria-label={`Date filter: ${label}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                    {datePreset === 'custom' && (
+                        <div className="flex items-center gap-2 ml-2">
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                                className="input-base text-xs px-2 py-1"
+                                aria-label="Date from"
+                            />
+                            <span className="text-slate-500 text-xs">to</span>
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                                className="input-base text-xs px-2 py-1"
+                                aria-label="Date to"
+                            />
+                        </div>
+                    )}
+                </div>
+
                 {/* Payee search */}
                 <div className="flex items-center gap-2 mb-4">
                     <div className="relative">
@@ -404,6 +568,7 @@ function TransactionsPage() {
                             value={filterAccountId}
                             onChange={(e) => {
                                 setFilterAccountId(e.target.value)
+                                setPage(1)
                                 const next = new URLSearchParams(searchParams)
                                 if (e.target.value) next.set('account_id', e.target.value)
                                 else next.delete('account_id')
@@ -430,7 +595,7 @@ function TransactionsPage() {
                         <select
                             id="filterCategory"
                             value={filterCategoryId}
-                            onChange={(e) => setFilterCategoryId(e.target.value)}
+                            onChange={(e) => { setFilterCategoryId(e.target.value); setPage(1) }}
                             className="input-base"
                         >
                             <option value="">All categories</option>
@@ -446,6 +611,7 @@ function TransactionsPage() {
                             value={filterStatus}
                             onChange={(e) => {
                                 setFilterStatus(e.target.value)
+                                setPage(1)
                                 // Sync URL
                                 const next = new URLSearchParams(searchParams)
                                 if (e.target.value) next.set('status', e.target.value)
@@ -463,7 +629,7 @@ function TransactionsPage() {
                 </div>
 
                 {/* Active category filter badge — shown when a category is pre-selected
-                    (e.g. from a drill-down link). × clears the filter. */}
+                    (e.g. from a drill-down link). x clears the filter. */}
                 {filterCategoryId && (
                     <div className="flex items-center gap-2 mb-4">
                         <span className="text-sm text-slate-400">Filtered by:</span>
@@ -473,6 +639,7 @@ function TransactionsPage() {
                         <button
                             onClick={() => {
                                 setFilterCategoryId('')
+                                setPage(1)
                                 // Remove category_id from URL, keep status if set
                                 const next = new URLSearchParams(searchParams)
                                 next.delete('category_id')
@@ -495,86 +662,154 @@ function TransactionsPage() {
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
-                        <table className="w-full text-sm min-w-[640px]">
-                            <thead>
-                                <tr className="border-b border-ocean-700 bg-ocean-950">
-                                    <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('date')}>
-                                        <button onClick={() => handleSort('date')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Date{sortIndicator('date')}</button>
-                                    </th>
-                                    <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('payee')}>
-                                        <button onClick={() => handleSort('payee')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Payee{sortIndicator('payee')}</button>
-                                    </th>
-                                    <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('category_name')}>
-                                        <button onClick={() => handleSort('category_name')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Category{sortIndicator('category_name')}</button>
-                                    </th>
-                                    <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('account_name')}>
-                                        <button onClick={() => handleSort('account_name')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Account{sortIndicator('account_name')}</button>
-                                    </th>
-                                    <th className="text-right px-4 py-3 font-medium" aria-sort={ariaSort('amount')}>
-                                        <button onClick={() => handleSort('amount')} className="text-sky-400 hover:text-sky-300 transition-colors cursor-pointer select-none">Amount{sortIndicator('amount')}</button>
-                                    </th>
-                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Type</th>
-                                    <th className="text-center px-4 py-3 font-medium" aria-sort={ariaSort('status')}>
-                                        <button onClick={() => handleSort('status')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Status{sortIndicator('status')}</button>
-                                    </th>
-                                    <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sortedTransactions.map((tx) => (
-                                    <tr
-                                        key={tx.id}
-                                        className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
-                                        onClick={() => handleEditTransaction(tx)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditTransaction(tx) } }}
-                                        tabIndex={0}
-                                        aria-label="Click to edit"
-                                    >
-                                        <td className="px-4 py-3 text-slate-300">{tx.date}</td>
-                                        <td className="px-4 py-3 text-slate-100">
-                                            {tx.payee ?? <span className="text-slate-500 italic">—</span>}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-300">
-                                            {tx.category_icon && <span className="mr-1">{tx.category_icon}</span>}
-                                            {tx.is_split ? (
-                                                <span className="badge bg-sky-500/20 text-sky-400 border border-sky-500/30">split</span>
-                                            ) : (tx.category_name || '—')}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-300">
-                                            {accountById.get(tx.account_id) ?? '—'}
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-sky-400 font-medium">
-                                            {tx.amount} {tx.currency}
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <span className={`badge ${TYPE_BADGE[tx.transaction_type] ?? 'bg-ocean-700 text-slate-400'}`}>
-                                                {tx.transaction_type}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {/* Button enables keyboard access and the click-to-cycle behaviour */}
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleStatusToggle(tx) }}
-                                                className={`badge cursor-pointer hover:opacity-80 transition-opacity ${STATUS_BADGE[tx.status] ?? 'bg-ocean-700 text-slate-400'}`}
-                                            >
-                                                {tx.status}
-                                            </button>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleEditTransaction(tx) }}
-                                                aria-label={`Edit transaction ${tx.payee ?? tx.id}`}
-                                                className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
-                                            >
-                                                Edit
-                                            </button>
-                                        </td>
+                    <>
+                        <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">
+                            <table className="w-full text-sm min-w-[640px]">
+                                <thead>
+                                    <tr className="border-b border-ocean-700 bg-ocean-950">
+                                        <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('date')}>
+                                            <button onClick={() => handleSort('date')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Date{sortIndicator('date')}</button>
+                                        </th>
+                                        <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('payee')}>
+                                            <button onClick={() => handleSort('payee')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Payee{sortIndicator('payee')}</button>
+                                        </th>
+                                        <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('category_name')}>
+                                            <button onClick={() => handleSort('category_name')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Category{sortIndicator('category_name')}</button>
+                                        </th>
+                                        <th className="text-left px-4 py-3 font-medium" aria-sort={ariaSort('account_name')}>
+                                            <button onClick={() => handleSort('account_name')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Account{sortIndicator('account_name')}</button>
+                                        </th>
+                                        <th className="text-right px-4 py-3 font-medium" aria-sort={ariaSort('amount')}>
+                                            <button onClick={() => handleSort('amount')} className="text-sky-400 hover:text-sky-300 transition-colors cursor-pointer select-none">Amount{sortIndicator('amount')}</button>
+                                        </th>
+                                        <th className="text-center px-4 py-3 text-slate-400 font-medium">Type</th>
+                                        <th className="text-center px-4 py-3 font-medium" aria-sort={ariaSort('status')}>
+                                            <button onClick={() => handleSort('status')} className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer select-none">Status{sortIndicator('status')}</button>
+                                        </th>
+                                        <th className="text-center px-4 py-3 text-slate-400 font-medium">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    {sortedTransactions.map((tx) => (
+                                        <>
+                                            <tr
+                                                key={tx.id}
+                                                className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
+                                                onClick={() => handleEditTransaction(tx)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditTransaction(tx) } }}
+                                                tabIndex={0}
+                                                aria-label="Click to edit"
+                                            >
+                                                <td className="px-4 py-3 text-slate-300">{tx.date}</td>
+                                                <td className="px-4 py-3 text-slate-100">
+                                                    {tx.payee ?? <span className="text-slate-500 italic">—</span>}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-300">
+                                                    {tx.category_icon && <span className="mr-1">{tx.category_icon}</span>}
+                                                    {tx.is_split ? (
+                                                        <span className="badge bg-sky-500/20 text-sky-400 border border-sky-500/30">split</span>
+                                                    ) : (tx.category_name || '—')}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-300">
+                                                    {accountById.get(tx.account_id) ?? '—'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-sky-400 font-medium">
+                                                    {tx.amount} {tx.currency}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`badge ${TYPE_BADGE[tx.transaction_type] ?? 'bg-ocean-700 text-slate-400'}`}>
+                                                        {tx.transaction_type}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {/* Button enables keyboard access and the click-to-cycle behaviour */}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleStatusToggle(tx) }}
+                                                        className={`badge cursor-pointer hover:opacity-80 transition-opacity ${STATUS_BADGE[tx.status] ?? 'bg-ocean-700 text-slate-400'}`}
+                                                    >
+                                                        {tx.status}
+                                                    </button>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleEditTransaction(tx) }}
+                                                            aria-label={`Edit transaction ${tx.payee ?? tx.id}`}
+                                                            className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        {tx.note && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    setExpandedNoteId(prev => prev === tx.id ? null : tx.id)
+                                                                }}
+                                                                aria-label={`Toggle note for ${tx.payee ?? tx.id}`}
+                                                                className={`text-xs px-1.5 py-1 rounded border transition-colors cursor-pointer ${
+                                                                    expandedNoteId === tx.id
+                                                                        ? 'border-sky-500 text-sky-400'
+                                                                        : 'border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500'
+                                                                }`}
+                                                            >
+                                                                📝
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {expandedNoteId === tx.id && tx.note && (
+                                                <tr key={`${tx.id}-note`} className="bg-ocean-900/50">
+                                                    <td colSpan={8} className="px-8 py-2 text-sm text-slate-300 italic">
+                                                        {tx.note}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination controls */}
+                        <div className="flex items-center justify-between mt-4" aria-label="Pagination">
+                            <span className="text-sm text-slate-400">
+                                Showing {rangeStart}-{rangeEnd} of {totalItems} transactions
+                            </span>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page <= 1}
+                                    className="text-sm px-3 py-1.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                    aria-label="Previous page"
+                                >
+                                    {'< Prev'}
+                                </button>
+                                <span className="text-sm text-slate-300">
+                                    Page {page} of {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page >= totalPages}
+                                    className="text-sm px-3 py-1.5 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                    aria-label="Next page"
+                                >
+                                    {'Next >'}
+                                </button>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                                    className="input-base text-sm px-2 py-1"
+                                    aria-label="Page size"
+                                >
+                                    <option value={25}>25</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                                <span className="text-xs text-slate-500">per page</span>
+                            </div>
+                        </div>
+                    </>
                 )}
             </div>
         </Layout>
