@@ -501,6 +501,8 @@ def list_transactions(
         query = query.filter(Transaction.date <= date_to)
 
     if search is not None:
+        search = search.strip()
+    if search:
         term = f"%{search}%"
         query = query.filter(
             or_(
