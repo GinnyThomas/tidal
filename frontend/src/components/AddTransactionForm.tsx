@@ -22,7 +22,8 @@
 import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
-import { sortCategoriesByName, buildCategoryOptions } from '../lib/categories'
+import { sortCategoriesByName } from '../lib/categories'
+import CategoryCombobox from './CategoryCombobox'
 import { getApiBaseUrl } from '../lib/api'
 import { CURRENCIES } from '../lib/currencies'
 
@@ -237,17 +238,13 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                 {!isSplitMode && (
                     <div>
                         <label htmlFor="txCategory" className="label-base">Category</label>
-                        <select
+                        <CategoryCombobox
                             id="txCategory"
-                            value={categoryId}
-                            onChange={(e) => setCategoryId(e.target.value)}
-                            className="input-base"
-                        >
-                            <option value="">— No category —</option>
-                            {buildCategoryOptions(categories).map((opt) => (
-                                <option key={opt.id} value={opt.id}>{opt.label}</option>
-                            ))}
-                        </select>
+                            categories={categories}
+                            value={categoryId || null}
+                            onChange={(id) => setCategoryId(id ?? '')}
+                            includeNoCategory={true}
+                        />
                     </div>
                 )}
 
@@ -344,21 +341,20 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                         </div>
                         {splits.map((split, idx) => (
                             <div key={idx} className="flex items-center gap-2">
-                                <select
-                                    value={split.categoryId}
-                                    onChange={(e) => {
-                                        const next = [...splits]
-                                        next[idx] = { ...next[idx], categoryId: e.target.value }
-                                        setSplits(next)
-                                    }}
-                                    className="input-base text-xs flex-1"
-                                    aria-label={`Split ${idx + 1} category`}
-                                >
-                                    <option value="">— No category —</option>
-                                    {buildCategoryOptions(categories).map(opt => (
-                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                    ))}
-                                </select>
+                                <div className="flex-1">
+                                    <CategoryCombobox
+                                        id={`txSplitCategory-${idx}`}
+                                        categories={categories}
+                                        value={split.categoryId || null}
+                                        onChange={(id) => {
+                                            const next = [...splits]
+                                            next[idx] = { ...next[idx], categoryId: id ?? '' }
+                                            setSplits(next)
+                                        }}
+                                        includeNoCategory={true}
+                                        ariaLabel={`Split ${idx + 1} category`}
+                                    />
+                                </div>
                                 <input
                                     type="number"
                                     step="0.01"

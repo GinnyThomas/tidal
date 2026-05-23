@@ -41,9 +41,9 @@ describe('AddBudgetForm', () => {
         render(<MemoryRouter><AddBudgetForm onBudgetSaved={mockOnSaved} /></MemoryRouter>)
 
         // Wait for category dropdown to populate
-        await screen.findByRole('option', { name: 'Groceries UK' })
+        await screen.findByDisplayValue('Groceries UK')
 
-        expect(screen.getByLabelText(/category/i)).toBeInTheDocument()
+        expect(screen.getByRole('combobox', { name: /category/i })).toBeInTheDocument()
         expect(screen.getByLabelText(/year/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/default monthly amount/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/^currency$/i)).toBeInTheDocument()
@@ -56,7 +56,7 @@ describe('AddBudgetForm', () => {
 
         render(<MemoryRouter><AddBudgetForm onBudgetSaved={mockOnSaved} defaultYear={2026} /></MemoryRouter>)
 
-        await screen.findByRole('option', { name: 'Groceries UK' })
+        await screen.findByDisplayValue('Groceries UK')
         await userEvent.type(screen.getByLabelText(/default monthly amount/i), '300')
         await userEvent.click(screen.getByRole('button', { name: /save budget/i }))
 
@@ -141,7 +141,7 @@ describe('AddBudgetForm', () => {
 
         render(<MemoryRouter><AddBudgetForm onBudgetSaved={mockOnSaved} /></MemoryRouter>)
 
-        await screen.findByRole('option', { name: 'Groceries UK' })
+        await screen.findByDisplayValue('Groceries UK')
         await userEvent.type(screen.getByLabelText(/default monthly amount/i), '100')
         await userEvent.click(screen.getByRole('button', { name: /save budget/i }))
 

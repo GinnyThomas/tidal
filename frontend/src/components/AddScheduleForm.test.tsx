@@ -121,8 +121,10 @@ describe('AddScheduleForm', () => {
 
         render(<MemoryRouter><AddScheduleForm onScheduleAdded={mockOnScheduleAdded} /></MemoryRouter>)
 
+        // Account dropdown (native select)
         expect(await screen.findByRole('option', { name: 'Nationwide' })).toBeInTheDocument()
-        expect(await screen.findByRole('option', { name: 'Groceries' })).toBeInTheDocument()
+        // Category combobox — auto-selects first category, shown in input
+        expect(await screen.findByDisplayValue('Groceries')).toBeInTheDocument()
     })
 
     // =========================================================================
