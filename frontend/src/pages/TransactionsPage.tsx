@@ -209,8 +209,10 @@ function TransactionsPage() {
     const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
-    // Client-side payee search — filters displayed transactions after fetch
-    const [payeeSearch, setPayeeSearch] = useState('')
+    // Server-side search — searches payee and note fields
+    // Input is controlled by `search`; API calls use `debouncedSearch` (300ms delay)
+    const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
+    const [debouncedSearch, setDebouncedSearch] = useState(search)
     // Server-side sorting — triggers re-fetch
     const [sortField, setSortField] = useState<'date' | 'payee' | 'category_name' | 'account_name' | 'amount' | 'status'>('date')
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -243,42 +245,39 @@ function TransactionsPage() {
     // Notes expand state
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null)
 
-    // Main filter effect: fetches accounts and transactions.
-    // Re-runs whenever any filter changes or after a form submission (refreshKey).
-    // Categories are NOT re-fetched here — they live in a separate effect below.
+    // Debounce search: wait 300ms after typing stops before triggering API fetch.
+    // The input stays responsive (controlled by `search`), but the effect only
+    // fires when `debouncedSearch` settles.
+    const isFirstRender = useRef(true)
+    useEffect(() => {
+        // Skip the initial mount — debouncedSearch is already initialised to search
+        if (isFirstRender.current) {
+            isFirstRender.current = false
+            return
+        }
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search)
+            setPage(1)
+            const next = new URLSearchParams(searchParams)
+            if (search) next.set('search', search)
+            else next.delete('search')
+            setSearchParams(next)
+        }, 300)
+        return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search])
+
+    // Accounts effect: runs once on mount.
+    // Accounts rarely change during a session — fetching separately avoids
+    // re-fetching on every filter/search/sort/page change.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
-        const headers = { Authorization: `Bearer ${token}` }
-        setLoading(true)
-        setError(null)
-
-        const params: Record<string, string> = {}
-        if (filterAccountId) params.account_id = filterAccountId
-        if (filterCategoryId) params.category_id = filterCategoryId
-        if (filterStatus) params.status = filterStatus
-        if (dateFrom) params.date_from = dateFrom
-        if (dateTo) params.date_to = dateTo
-        params.page = String(page)
-        params.page_size = String(pageSize)
-        params.sort_by = sortField
-        params.sort_dir = sortDirection
-
-        Promise.all([
-            axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
-            axios.get(`${getApiBaseUrl()}/api/v1/transactions`, { headers, params }),
-        ]).then(([accountsRes, txRes]) => {
-            setAccounts(accountsRes.data)
-            const data = txRes.data as PaginatedResponse
-            setTransactions(data.items)
-            setTotalItems(data.total)
-            setTotalPages(data.total_pages)
-        }).catch(() => {
-            setError('Could not load transactions. Please try again.')
-        }).finally(() => {
-            setLoading(false)
-        })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, page, pageSize, sortField, sortDirection, refreshKey])
+        axios.get(`${getApiBaseUrl()}/api/v1/accounts`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(res => {
+            setAccounts(res.data)
+        }).catch(() => {})
+    }, [])
 
     // Categories effect: runs once on mount.
     // Fetching categories separately means filter dropdowns are populated
@@ -293,6 +292,40 @@ function TransactionsPage() {
             // Silent failure — the category filter dropdown is non-critical
         })
     }, [])
+
+    // Main filter effect: fetches transactions.
+    // Re-runs whenever any filter changes or after a form submission (refreshKey).
+    useEffect(() => {
+        const token = localStorage.getItem('access_token')
+        const headers = { Authorization: `Bearer ${token}` }
+        setLoading(true)
+        setError(null)
+
+        const params: Record<string, string> = {}
+        if (filterAccountId) params.account_id = filterAccountId
+        if (filterCategoryId) params.category_id = filterCategoryId
+        if (filterStatus) params.status = filterStatus
+        if (dateFrom) params.date_from = dateFrom
+        if (dateTo) params.date_to = dateTo
+        if (debouncedSearch) params.search = debouncedSearch
+        params.page = String(page)
+        params.page_size = String(pageSize)
+        params.sort_by = sortField
+        params.sort_dir = sortDirection
+
+        axios.get(`${getApiBaseUrl()}/api/v1/transactions`, { headers, params })
+        .then((txRes) => {
+            const data = txRes.data as PaginatedResponse
+            setTransactions(data.items)
+            setTotalItems(data.total)
+            setTotalPages(data.total_pages)
+        }).catch(() => {
+            setError('Could not load transactions. Please try again.')
+        }).finally(() => {
+            setLoading(false)
+        })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, debouncedSearch, page, pageSize, sortField, sortDirection, refreshKey])
 
     // Build lookup Map so each table row can resolve the account name in O(1).
     const accountById = new Map(accounts.map(a => [a.id, a.name]))
@@ -380,10 +413,8 @@ function TransactionsPage() {
     const ariaSort = (field: string) =>
         sortField === field ? (sortDirection === 'asc' ? 'ascending' as const : 'descending' as const) : undefined
 
-    // Client-side payee search — applied after server sort
-    const displayedTransactions = transactions.filter(tx =>
-        !payeeSearch || (tx.payee ?? '').toLowerCase().includes(payeeSearch.toLowerCase())
-    )
+    // Transactions are already filtered server-side (including search)
+    const displayedTransactions = transactions
 
     // Pagination display info
     const rangeStart = totalItems === 0 ? 0 : (page - 1) * pageSize + 1
@@ -523,22 +554,22 @@ function TransactionsPage() {
                     )}
                 </div>
 
-                {/* Payee search */}
+                {/* Search */}
                 <div className="flex items-center gap-2 mb-4">
                     <div className="relative">
                         <input
                             type="text"
-                            value={payeeSearch}
-                            onChange={(e) => setPayeeSearch(e.target.value)}
-                            placeholder="Search by payee..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search payee or notes..."
                             className="input-base w-64 pr-8"
-                            aria-label="Search by payee"
+                            aria-label="Search payee or notes"
                         />
-                        {payeeSearch && (
+                        {search && (
                             <button
-                                onClick={() => setPayeeSearch('')}
+                                onClick={() => setSearch('')}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
-                                aria-label="Clear payee search"
+                                aria-label="Clear search"
                             >
                                 ×
                             </button>

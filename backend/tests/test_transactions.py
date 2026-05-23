@@ -668,3 +668,61 @@ def test_list_transactions_date_filter(test_client) -> None:
         headers=_auth_headers(token),
     )
     assert resp2.json()["total"] == 2
+
+
+# =============================================================================
+# Search
+# =============================================================================
+
+
+def test_list_transactions_search_by_note(test_client) -> None:
+    """
+    GET /api/v1/transactions?search=... matches against both payee and note
+    fields (case-insensitive).
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    base = {"account_id": account_id, "category_id": category_id,
+            "amount": "10.00", "transaction_type": "expense", "date": "2026-01-15"}
+
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "payee": "Tesco", "note": "Weekly shop"},
+        headers=_auth_headers(token),
+    )
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "payee": "Amazon", "note": "Birthday gift"},
+        headers=_auth_headers(token),
+    )
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "payee": "Sainsburys", "note": None},
+        headers=_auth_headers(token),
+    )
+
+    # Search by note content — only Tesco has "weekly" in its note
+    resp = test_client.get(
+        "/api/v1/transactions?search=weekly",
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["payee"] == "Tesco"
+
+    # Search by payee — "zon" matches Amazon
+    resp2 = test_client.get(
+        "/api/v1/transactions?search=zon",
+        headers=_auth_headers(token),
+    )
+    assert resp2.json()["total"] == 1
+    assert resp2.json()["items"][0]["payee"] == "Amazon"
+
+    # Search matches note OR payee — "gift" is in Amazon's note
+    resp3 = test_client.get(
+        "/api/v1/transactions?search=gift",
+        headers=_auth_headers(token),
+    )
+    assert resp3.json()["total"] == 1
+    assert resp3.json()["items"][0]["payee"] == "Amazon"
