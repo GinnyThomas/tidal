@@ -158,8 +158,8 @@ function BudgetsPage() {
                     {hasCustomOverrides(budget) && (
                         <span
                             className="inline-block w-1.5 h-1.5 rounded-full bg-sky-400"
-                            title="Has monthly overrides"
-                            aria-label="Has monthly overrides"
+                            title="Has custom monthly overrides"
+                            aria-label="Has custom monthly overrides"
                         />
                     )}
                 </span>

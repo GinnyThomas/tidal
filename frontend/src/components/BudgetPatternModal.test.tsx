@@ -230,9 +230,9 @@ describe('BudgetPatternModal', () => {
         expect(screen.getByLabelText(/override for mar/i)).toHaveValue(null)
     })
 
-    it('Save calls correct endpoints with the right payload', async () => {
-        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+    it('Save calls both endpoints when default and overrides changed', async () => {
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
 
         render(
             <MemoryRouter>
@@ -245,30 +245,22 @@ describe('BudgetPatternModal', () => {
             </MemoryRouter>
         )
 
-        // Change default amount
+        // Change default amount (budgetDirty)
         const input = screen.getByLabelText(/default monthly amount/i)
         await userEvent.clear(input)
         await userEvent.type(input, '200')
 
-        // Change notes
+        // Change notes (budgetDirty)
         const notesInput = screen.getByLabelText(/budget notes/i)
         await userEvent.clear(notesInput)
         await userEvent.type(notesInput, 'new note')
 
+        // Change an override (overridesDirty)
+        await userEvent.click(screen.getByText('Apply to all'))
+
         await userEvent.click(screen.getByText('Save'))
 
         await waitFor(() => {
-            // PUT to update budget
-            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
-                expect.stringContaining('/api/v1/budgets/bud-001'),
-                expect.objectContaining({
-                    default_amount: '200',
-                    notes: 'new note',
-                }),
-                expect.anything()
-            )
-
-            // POST to batch overrides
             expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
                 expect.stringContaining('/overrides/batch'),
                 expect.objectContaining({
@@ -278,9 +270,91 @@ describe('BudgetPatternModal', () => {
                 }),
                 expect.anything()
             )
+            expect(vi.mocked(axios.put)).toHaveBeenCalledWith(
+                expect.stringContaining('/api/v1/budgets/bud-001'),
+                expect.objectContaining({
+                    default_amount: '200',
+                    notes: 'new note',
+                }),
+                expect.anything()
+            )
         })
 
         expect(onSaved).toHaveBeenCalled()
+    })
+
+    it('does not call overrides endpoint when only default amount changed', async () => {
+        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <BudgetPatternModal
+                    budget={makeBudget()}
+                    categoryName="Test"
+                    onClose={onClose}
+                    onSaved={onSaved}
+                />
+            </MemoryRouter>
+        )
+
+        const input = screen.getByLabelText(/default monthly amount/i)
+        await userEvent.clear(input)
+        await userEvent.type(input, '999')
+
+        await userEvent.click(screen.getByText('Save'))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.put)).toHaveBeenCalledTimes(1)
+        })
+        expect(vi.mocked(axios.post)).not.toHaveBeenCalled()
+        expect(onSaved).toHaveBeenCalled()
+    })
+
+    it('does not call budget endpoint when only overrides changed', async () => {
+        vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
+
+        render(
+            <MemoryRouter>
+                <BudgetPatternModal
+                    budget={makeBudget()}
+                    categoryName="Test"
+                    onClose={onClose}
+                    onSaved={onSaved}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByText('Apply to all'))
+        await userEvent.click(screen.getByText('Save'))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.post)).toHaveBeenCalledTimes(1)
+        })
+        expect(vi.mocked(axios.put)).not.toHaveBeenCalled()
+        expect(onSaved).toHaveBeenCalled()
+    })
+
+    it('shows error when default amount is empty on save', async () => {
+        render(
+            <MemoryRouter>
+                <BudgetPatternModal
+                    budget={makeBudget()}
+                    categoryName="Test"
+                    onClose={onClose}
+                    onSaved={onSaved}
+                />
+            </MemoryRouter>
+        )
+
+        // Clear the default amount
+        const input = screen.getByLabelText(/default monthly amount/i)
+        await userEvent.clear(input)
+
+        await userEvent.click(screen.getByText('Save'))
+
+        expect(screen.getByText(/default monthly amount is required/i)).toBeInTheDocument()
+        expect(vi.mocked(axios.put)).not.toHaveBeenCalled()
+        expect(vi.mocked(axios.post)).not.toHaveBeenCalled()
     })
 
     it('Save is disabled when nothing has changed', () => {
@@ -318,7 +392,6 @@ describe('BudgetPatternModal', () => {
     })
 
     it('closes on successful save and parent refreshes', async () => {
-        vi.mocked(axios.put).mockResolvedValueOnce({ data: {} })
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
 
         render(

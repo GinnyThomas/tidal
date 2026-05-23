@@ -11,7 +11,7 @@
 //   5. Footer: Cancel + Save
 
 import axios from 'axios'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getApiBaseUrl } from '../lib/api'
 
 type Override = {
@@ -69,10 +69,18 @@ function BudgetPatternModal({ budget, categoryName, onClose, onSaved }: Props) {
         })(),
     }))
 
-    const isDirty =
+    const budgetDirty =
         defaultAmount !== initialState.defaultAmount ||
-        notes !== initialState.notes ||
+        notes !== initialState.notes
+    const overridesDirty =
         monthAmounts.some((v, i) => v !== initialState.monthAmounts[i])
+    const isDirty = budgetDirty || overridesDirty
+
+    // Guard against state updates after unmount (e.g. user closes modal mid-save)
+    const isMountedRef = useRef(true)
+    useEffect(() => {
+        return () => { isMountedRef.current = false }
+    }, [])
 
     // Close on Escape
     useEffect(() => {
@@ -123,6 +131,13 @@ function BudgetPatternModal({ budget, categoryName, onClose, onSaved }: Props) {
 
     const handleSave = async () => {
         if (!isDirty || saving) return
+
+        // Validate default amount
+        if (!defaultAmount || isNaN(parseFloat(defaultAmount))) {
+            setError('Default monthly amount is required.')
+            return
+        }
+
         setSaving(true)
         setError(null)
         const token = localStorage.getItem('access_token')
@@ -130,17 +145,17 @@ function BudgetPatternModal({ budget, categoryName, onClose, onSaved }: Props) {
         const base = `${getApiBaseUrl()}/api/v1/budgets/${budget.id}`
 
         try {
-            // Save overrides first — this is the riskier call and the primary
-            // reason the user opened the modal. If it fails, nothing has
-            // changed on the server so the user can retry safely.
-            const overrideItems = monthAmounts.map((amount, i) => ({
-                month: i + 1,
-                amount,
-            }))
-            await axios.post(`${base}/overrides/batch`, { overrides: overrideItems }, { headers })
+            // Only POST overrides when month amounts actually changed
+            if (overridesDirty) {
+                const overrideItems = monthAmounts.map((amount, i) => ({
+                    month: i + 1,
+                    amount,
+                }))
+                await axios.post(`${base}/overrides/batch`, { overrides: overrideItems }, { headers })
+            }
 
-            // Update budget if default amount or notes changed
-            if (defaultAmount !== initialState.defaultAmount || notes !== initialState.notes) {
+            // Only PUT budget when default amount or notes changed
+            if (budgetDirty) {
                 await axios.put(base, {
                     default_amount: defaultAmount,
                     notes: notes || null,
@@ -149,9 +164,13 @@ function BudgetPatternModal({ budget, categoryName, onClose, onSaved }: Props) {
 
             onSaved()
         } catch {
-            setError('Could not save changes. Please try again.')
+            if (isMountedRef.current) {
+                setError('Could not save changes. Please try again.')
+            }
         } finally {
-            setSaving(false)
+            if (isMountedRef.current) {
+                setSaving(false)
+            }
         }
     }
 

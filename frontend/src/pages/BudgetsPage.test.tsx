@@ -193,7 +193,7 @@ describe('BudgetsPage', () => {
         render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
 
         await screen.findByText('Groceries UK')
-        expect(screen.getByLabelText('Has monthly overrides')).toBeInTheDocument()
+        expect(screen.getByLabelText('Has custom monthly overrides')).toBeInTheDocument()
     })
 
     it('does not show dot indicator when overrides match default', async () => {
@@ -205,7 +205,7 @@ describe('BudgetsPage', () => {
         render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
 
         await screen.findByText('Groceries UK')
-        expect(screen.queryByLabelText('Has monthly overrides')).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('Has custom monthly overrides')).not.toBeInTheDocument()
     })
 
     // =========================================================================
