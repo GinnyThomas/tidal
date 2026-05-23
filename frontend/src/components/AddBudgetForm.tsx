@@ -120,7 +120,6 @@ function AddBudgetForm({ onBudgetSaved, editingBudget, defaultYear }: Props) {
                                 onChange={(id) => setCategoryId(id ?? '')}
                                 includeNoCategory={false}
                                 required={true}
-                                ariaLabel="Category"
                             />
                         </div>
                         <div>

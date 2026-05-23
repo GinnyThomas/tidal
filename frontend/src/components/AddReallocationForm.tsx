@@ -113,7 +113,6 @@ function AddReallocationForm({
                         onChange={(id) => setToCategoryId(id ?? '')}
                         includeNoCategory={false}
                         required={true}
-                        ariaLabel="To"
                     />
                 </div>
 

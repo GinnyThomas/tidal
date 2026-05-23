@@ -244,7 +244,6 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                             value={categoryId || null}
                             onChange={(id) => setCategoryId(id ?? '')}
                             includeNoCategory={true}
-                            ariaLabel="Category"
                         />
                     </div>
                 )}

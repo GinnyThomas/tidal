@@ -173,6 +173,35 @@ describe('CategoryCombobox', () => {
         expect(screen.getByText('No matching categories')).toBeInTheDocument()
     })
 
+    it('query state is cleared after selection — reopening shows full list', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value={null}
+                onChange={onChange}
+                includeNoCategory={false}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        // Open and filter to narrow the list
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
+        await userEvent.type(input, 'dog')
+
+        // Only dog-related options visible
+        let options = screen.getAllByRole('option')
+        expect(options.length).toBe(2) // Dog food + Dog Food (España)
+
+        // Select one
+        await userEvent.click(options[0])
+
+        // Reopen — full list should be visible (query cleared)
+        await userEvent.click(screen.getByRole('button', { name: /open category options/i }))
+        options = screen.getAllByRole('option')
+        // All 5 categories should be available (no "No category" since includeNoCategory=false)
+        expect(options.length).toBe(5)
+    })
+
     it('disabled prop prevents interaction', () => {
         render(
             <CategoryCombobox

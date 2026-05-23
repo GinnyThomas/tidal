@@ -115,7 +115,11 @@ function CategoryCombobox({
     return (
         <Combobox
             value={selectedItem}
-            onChange={(item: ComboboxItem | null) => onChange(item?.id ?? null)}
+            onChange={(item: ComboboxItem | null) => {
+                onChange(item?.id ?? null)
+                setQuery('')
+            }}
+            onClose={() => setQuery('')}
             disabled={disabled}
         >
             <div className="relative">
@@ -126,6 +130,8 @@ function CategoryCombobox({
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={placeholder}
                     aria-label={ariaLabel}
+                    required={required}
+                    aria-required={required || undefined}
                 />
                 <ComboboxButton
                     className="absolute inset-y-0 right-0 flex items-center pr-2"

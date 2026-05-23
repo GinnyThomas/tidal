@@ -210,7 +210,6 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                         onChange={(id) => setCategoryId(id ?? '')}
                         includeNoCategory={false}
                         required={true}
-                        ariaLabel="Category"
                     />
                 </div>
 
