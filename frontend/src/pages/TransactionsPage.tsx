@@ -32,7 +32,7 @@
 //     triggers the useEffect dependency to re-run the full fetch.
 
 import axios from 'axios'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
@@ -211,7 +211,7 @@ function TransactionsPage() {
     const [refreshKey, setRefreshKey] = useState(0)
     // Client-side payee search — filters displayed transactions after fetch
     const [payeeSearch, setPayeeSearch] = useState('')
-    // Client-side sorting — applied to the fetched data
+    // Server-side sorting — triggers re-fetch
     const [sortField, setSortField] = useState<'date' | 'payee' | 'category_name' | 'account_name' | 'amount' | 'status'>('date')
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
 
@@ -260,6 +260,8 @@ function TransactionsPage() {
         if (dateTo) params.date_to = dateTo
         params.page = String(page)
         params.page_size = String(pageSize)
+        params.sort_by = sortField
+        params.sort_dir = sortDirection
 
         Promise.all([
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, { headers }),
@@ -276,7 +278,7 @@ function TransactionsPage() {
             setLoading(false)
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, page, pageSize, refreshKey])
+    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, page, pageSize, sortField, sortDirection, refreshKey])
 
     // Categories effect: runs once on mount.
     // Fetching categories separately means filter dropdowns are populated
@@ -360,7 +362,7 @@ function TransactionsPage() {
         setDateTo(range?.to ?? '')
     }
 
-    // --- Client-side sorting ---
+    // --- Server-side sorting ---
 
     const handleSort = (field: typeof sortField) => {
         if (sortField === field) {
@@ -369,6 +371,7 @@ function TransactionsPage() {
             setSortField(field)
             setSortDirection('asc')
         }
+        setPage(1)
     }
 
     const sortIndicator = (field: string) =>
@@ -377,24 +380,8 @@ function TransactionsPage() {
     const ariaSort = (field: string) =>
         sortField === field ? (sortDirection === 'asc' ? 'ascending' as const : 'descending' as const) : undefined
 
-    const sortedTransactions = [...transactions].sort((a, b) => {
-        let cmp = 0
-        if (sortField === 'date') {
-            cmp = a.date.localeCompare(b.date)
-        } else if (sortField === 'payee') {
-            cmp = (a.payee ?? '').localeCompare(b.payee ?? '')
-        } else if (sortField === 'category_name') {
-            cmp = (a.category_name ?? '').localeCompare(b.category_name ?? '')
-        } else if (sortField === 'account_name') {
-            cmp = (accountById.get(a.account_id) ?? '').localeCompare(accountById.get(b.account_id) ?? '')
-        } else if (sortField === 'amount') {
-            cmp = parseFloat(a.amount) - parseFloat(b.amount)
-        } else if (sortField === 'status') {
-            cmp = a.status.localeCompare(b.status)
-        }
-        return sortDirection === 'asc' ? cmp : -cmp
-    }).filter(tx =>
-        // Client-side payee search — applied after sort
+    // Client-side payee search — applied after server sort
+    const displayedTransactions = transactions.filter(tx =>
         !payeeSearch || (tx.payee ?? '').toLowerCase().includes(payeeSearch.toLowerCase())
     )
 
@@ -690,10 +677,9 @@ function TransactionsPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sortedTransactions.map((tx) => (
-                                        <>
+                                    {displayedTransactions.map((tx) => (
+                                        <Fragment key={tx.id}>
                                             <tr
-                                                key={tx.id}
                                                 className="border-b border-ocean-700/50 hover:bg-ocean-700/30 transition-colors cursor-pointer"
                                                 onClick={() => handleEditTransaction(tx)}
                                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleEditTransaction(tx) } }}
@@ -759,13 +745,13 @@ function TransactionsPage() {
                                                 </td>
                                             </tr>
                                             {expandedNoteId === tx.id && tx.note && (
-                                                <tr key={`${tx.id}-note`} className="bg-ocean-900/50">
+                                                <tr className="bg-ocean-900/50">
                                                     <td colSpan={8} className="px-8 py-2 text-sm text-slate-300 italic">
                                                         {tx.note}
                                                     </td>
                                                 </tr>
                                             )}
-                                        </>
+                                        </Fragment>
                                     ))}
                                 </tbody>
                             </table>

@@ -48,6 +48,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import exists, or_
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.sql.expression import asc, desc
 
 from app.database import get_db
 from app.models.account import Account
@@ -440,6 +441,8 @@ def list_transactions(
     date_to: Optional[date] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
+    sort_by: str = Query(default="date"),
+    sort_dir: str = Query(default="desc"),
 ) -> dict:
     """
     Returns paginated, non-deleted transactions for the current user.
@@ -457,6 +460,9 @@ def list_transactions(
       date_to     — include transactions on or before this date.
       page        — page number (1-based, default 1).
       page_size   — items per page (1-500, default 50).
+      sort_by     — field to sort by: date, payee, amount, status,
+                    category_name, account_name. Default: date.
+      sort_dir    — sort direction: asc or desc. Default: desc.
     """
     query = db.query(Transaction).filter(
         Transaction.user_id == current_user.id,
@@ -495,10 +501,29 @@ def list_transactions(
     # Count before pagination
     total = query.count()
     total_pages = max(1, math.ceil(total / page_size))
+    # Clamp page so requesting beyond the last page returns the last page
+    page = min(page, total_pages) if total > 0 else 1
+
+    # Build sort clause
+    direction = desc if sort_dir == "desc" else asc
+    SORT_COLUMNS = {
+        "date": Transaction.date,
+        "payee": Transaction.payee,
+        "amount": Transaction.amount,
+        "status": Transaction.status,
+        "category_name": Category.name,
+        "account_name": Account.name,
+    }
+    sort_col = SORT_COLUMNS.get(sort_by, Transaction.date)
+
+    if sort_by == "category_name":
+        query = query.outerjoin(Category, Transaction.category_id == Category.id)
+    elif sort_by == "account_name":
+        query = query.outerjoin(Account, Transaction.account_id == Account.id)
 
     transactions = (
         query
-        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+        .order_by(direction(sort_col), desc(Transaction.created_at))
         .offset((page - 1) * page_size)
         .limit(page_size)
         .options(

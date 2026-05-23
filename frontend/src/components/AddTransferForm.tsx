@@ -66,7 +66,8 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
             // In edit mode, find the linked leg via targeted query
             if (isEditMode && editingTransfer) {
                 const headers2 = { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
-                let linkedPromise: Promise<{ data: { account_id: string } | { account_id: string }[] }>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let linkedPromise: Promise<{ data: any }>
 
                 if (editingTransfer.parent_transaction_id === null) {
                     // This is the parent (debit/from) — find child by parent_transaction_id
@@ -83,9 +84,9 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                 }
 
                 linkedPromise.then(linkedRes => {
-                    // List endpoint returns array, get endpoint returns object
-                    const linked = Array.isArray(linkedRes.data)
-                        ? linkedRes.data[0]
+                    // List endpoint returns paginated envelope, get endpoint returns object
+                    const linked = linkedRes.data.items
+                        ? linkedRes.data.items[0]
                         : linkedRes.data
                     if (linked) {
                         if (editingTransfer.parent_transaction_id === null) {
@@ -123,7 +124,7 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                             `${getApiBaseUrl()}/api/v1/transactions?parent_transaction_id=${editingTransfer.id}`,
                             { headers: { Authorization: `Bearer ${token}` } },
                         )
-                        toLegId = childRes.data[0]?.id ?? null
+                        toLegId = childRes.data.items?.[0]?.id ?? null
                     } else {
                         // Editing the child (to) leg — swap
                         fromLegId = editingTransfer.parent_transaction_id

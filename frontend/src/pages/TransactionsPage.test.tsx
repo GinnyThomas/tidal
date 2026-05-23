@@ -456,119 +456,116 @@ describe('TransactionsPage', () => {
     })
 
     // =========================================================================
-    // Sorting
+    // Server-side sorting
     // =========================================================================
 
-    it('sorts transactions by date descending by default (newest first)', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
-                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
-            ],
-        )
+    it('sends sort_by=date and sort_dir=desc by default', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Older')
+        await screen.findByText('Tesco')
 
-        // Get the payee cells in order to verify sort
-        const rows = screen.getAllByRole('row')
-        // rows[0] is header, rows[1] is first data row, rows[2] is second
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        const secondPayee = rows[2].querySelectorAll('td')[1].textContent
-        // Descending by date: Newer (2026-04-15) first, Older (2026-01-01) second
-        expect(firstPayee).toBe('Newer')
-        expect(secondPayee).toBe('Older')
+        const calls = vi.mocked(axios.get).mock.calls
+        const txCall = calls.find(([url]) => String(url).includes('/api/v1/transactions'))
+        const params = (txCall![1] as { params: Record<string, string> }).params
+        expect(params.sort_by).toBe('date')
+        expect(params.sort_dir).toBe('desc')
     })
 
-    it('clicking Date header toggles sort direction', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
-                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
-            ],
-        )
+    it('clicking Date header toggles sort direction and re-fetches', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        // Re-fetch after sort change
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Older')
+        await screen.findByText('Tesco')
 
-        // Click Date header — default is desc, clicking toggles to asc
+        // Click Date — default is desc, should toggle to asc
         await userEvent.click(screen.getByText(/^Date/))
 
-        const rows = screen.getAllByRole('row')
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        // Ascending by date: Older (2026-01-01) first
-        expect(firstPayee).toBe('Older')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_dir === 'asc'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('clicking a different column sorts by that column ascending', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', payee: 'Zara', amount: '10.00' }),
-                makeTransaction({ id: 'tx-2', payee: 'Aldi', amount: '20.00' }),
-            ],
-        )
+    it('clicking a different column sends sort_by for that column ascending', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        // Re-fetch after sort change
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Zara')
+        await screen.findByText('Tesco')
 
-        // Click Payee header — sorts alphabetically ascending
         await userEvent.click(screen.getByText(/^Payee/))
 
-        const rows = screen.getAllByRole('row')
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        expect(firstPayee).toBe('Aldi')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'payee' &&
+                    (config as { params?: Record<string, string> })?.params?.sort_dir === 'asc'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('sorts by category name when Category header is clicked', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', payee: 'A', category_name: 'Utilities' }),
-                makeTransaction({ id: 'tx-2', payee: 'B', category_name: 'Bills' }),
-            ],
-        )
+    it('clicking Category header sends sort_by=category_name', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Utilities')
+        await screen.findByText('Tesco')
         await userEvent.click(screen.getByText(/^Category/))
 
-        const rows = screen.getAllByRole('row')
-        // Ascending: Bills before Utilities
-        expect(rows[1].querySelectorAll('td')[2].textContent).toBe('Bills')
-        expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Utilities')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'category_name'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('sorts by account name when Account header is clicked', async () => {
-        mockFetch(
-            [
-                makeAccount({ id: 'acc-a', name: 'Santander' }),
-                makeAccount({ id: 'acc-b', name: 'Nationwide' }),
-            ],
-            [
-                makeTransaction({ id: 'tx-1', account_id: 'acc-a', payee: 'X' }),
-                makeTransaction({ id: 'tx-2', account_id: 'acc-b', payee: 'Y' }),
-            ],
-        )
+    it('clicking Account header sends sort_by=account_name', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        // Wait for the table to render — use payee as the anchor since
-        // account names also appear in the filter dropdown options
-        await screen.findByText('X')
-        // "Account" button is inside the table header — use getByRole to target the sort button
+        await screen.findByText('Tesco')
         const accountSortBtn = screen.getByRole('button', { name: /^Account/ })
         await userEvent.click(accountSortBtn)
 
-        const rows = screen.getAllByRole('row')
-        // Ascending: Nationwide before Santander
-        expect(rows[1].querySelectorAll('td')[3].textContent).toBe('Nationwide')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'account_name'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
     // =========================================================================
