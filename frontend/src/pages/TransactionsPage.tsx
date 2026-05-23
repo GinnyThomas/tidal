@@ -37,6 +37,8 @@ import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import AddTransactionForm from '../components/AddTransactionForm'
 import AddTransferForm from '../components/AddTransferForm'
+import TransactionTotals from '../components/TransactionTotals'
+import type { Totals } from '../components/TransactionTotals'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 
@@ -77,6 +79,7 @@ type PaginatedResponse = {
     page: number
     page_size: number
     total_pages: number
+    totals: Totals
 }
 
 type Account = {
@@ -242,6 +245,9 @@ function TransactionsPage() {
     const [totalItems, setTotalItems] = useState(0)
     const [totalPages, setTotalPages] = useState(1)
 
+    // Totals from backend (per-currency aggregation across all filtered rows)
+    const [totals, setTotals] = useState<Totals | null>(null)
+
     // Notes expand state
     const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null)
 
@@ -319,6 +325,7 @@ function TransactionsPage() {
             setTransactions(data.items)
             setTotalItems(data.total)
             setTotalPages(data.total_pages)
+            setTotals(data.totals)
         }).catch(() => {
             setError('Could not load transactions. Please try again.')
         }).finally(() => {
@@ -669,6 +676,11 @@ function TransactionsPage() {
                             ×
                         </button>
                     </div>
+                )}
+
+                {/* Filtered totals — shown only when at least one filter is active */}
+                {totals && (filterAccountId || filterCategoryId || filterStatus || debouncedSearch || dateFrom || dateTo) && (
+                    <TransactionTotals totals={totals} />
                 )}
 
                 {/* Transaction list / empty state */}

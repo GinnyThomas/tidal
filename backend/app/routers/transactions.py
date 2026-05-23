@@ -43,10 +43,11 @@ import math
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from collections import defaultdict
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import exists, or_
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.expression import asc, desc
 
@@ -58,9 +59,11 @@ from app.models.transaction import Transaction
 from app.models.transaction_split import TransactionSplit
 from app.models.user import User
 from app.schemas.transaction import (
+    CurrencyAmount,
     PaginatedTransactions,
     TransactionCreate,
     TransactionResponse,
+    TransactionTotals,
     TransactionType,
     TransactionUpdate,
     TransferCreate,
@@ -511,6 +514,70 @@ def list_transactions(
             )
         )
 
+    # --- Compute totals across ALL filtered rows (before pagination) ---
+    # Use a subquery of matching IDs so the aggregation runs in SQL, not Python.
+    # .order_by(None) strips any ORDER BY from the source query — the subquery
+    # only needs to be a set of IDs, not an ordered list.
+    id_subq = query.order_by(None).with_entities(Transaction.id).subquery()
+
+    expenses_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    income_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    transfers_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+
+    # Non-split transactions: aggregate by (type, currency)
+    non_split_rows = (
+        db.query(
+            Transaction.transaction_type,
+            Transaction.currency,
+            func.sum(Transaction.amount),
+        )
+        .filter(Transaction.id.in_(db.query(id_subq.c.id)), Transaction.is_split.is_(False))
+        .group_by(Transaction.transaction_type, Transaction.currency)
+        .all()
+    )
+    # Split transactions: sum split amounts grouped by parent's (type, currency)
+    split_rows = (
+        db.query(
+            Transaction.transaction_type,
+            Transaction.currency,
+            func.sum(TransactionSplit.amount),
+        )
+        .join(TransactionSplit, TransactionSplit.transaction_id == Transaction.id)
+        .filter(Transaction.id.in_(db.query(id_subq.c.id)), Transaction.is_split.is_(True))
+        .group_by(Transaction.transaction_type, Transaction.currency)
+        .all()
+    )
+
+    # Refunds intentionally excluded from totals — pending refactor (see tech debt).
+    # A refund should zero out the original category spend, not appear as income.
+    for tx_type, currency, amount in [*non_split_rows, *split_rows]:
+        amt = amount or Decimal("0")
+        if tx_type == "expense":
+            expenses_by_currency[currency] += amt
+        elif tx_type == "income":
+            income_by_currency[currency] += amt
+        elif tx_type == "transfer":
+            transfers_by_currency[currency] += amt
+        # tx_type == "refund" is intentionally not bucketed
+
+    # Net = income - expenses per currency (transfers excluded).
+    # Include zero net for currencies that have activity (income or expenses)
+    # so the UI can distinguish "net zero" from "no data".
+    all_currencies = set(expenses_by_currency.keys()) | set(income_by_currency.keys())
+    net_by_currency: dict[str, Decimal] = {}
+    for c in all_currencies:
+        net_by_currency[c] = income_by_currency.get(c, Decimal("0")) - expenses_by_currency.get(c, Decimal("0"))
+
+    def to_currency_list(d: dict[str, Decimal]) -> list[dict]:
+        return [{"currency": c, "amount": a} for c, a in sorted(d.items()) if a != Decimal("0")]
+
+    totals = {
+        "expenses": to_currency_list(expenses_by_currency),
+        "income": to_currency_list(income_by_currency),
+        "transfers": to_currency_list(transfers_by_currency),
+        "net": [{"currency": c, "amount": a} for c, a in sorted(net_by_currency.items())],
+    }
+
     # Count before pagination
     total = query.count()
     total_pages = max(1, math.ceil(total / page_size))
@@ -558,6 +625,7 @@ def list_transactions(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
+        "totals": totals,
     }
 
 
