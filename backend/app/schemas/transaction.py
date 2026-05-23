@@ -186,6 +186,16 @@ class TransactionUpdate(BaseModel):
     splits: Optional[list[TransactionSplitCreate]] = None
 
 
+class PaginatedTransactions(BaseModel):
+    """Paginated envelope for GET /api/v1/transactions."""
+
+    items: list[TransactionResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class TransferCreate(BaseModel):
     """
     Request body for POST /api/v1/transactions/transfer.

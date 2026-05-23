@@ -4,14 +4,18 @@
 //
 // Test strategy:
 //   Four render states (loading, error, empty, list), inline status toggle,
-//   account filter, category filter (including URL pre-selection), and form
-//   toggle for Add Transaction / Add Transfer.
+//   account filter, category filter (including URL pre-selection), form
+//   toggle for Add Transaction / Add Transfer, date quick filters,
+//   pagination controls, and notes display.
 //
 // Three axios.get calls happen on mount: accounts and transactions (main filter
 // effect, Promise.all), then categories (separate mount-only effect). Mocks are
 // consumed in that order. The mockFetch() helper queues all three automatically.
 // On re-fetch (filter change), only accounts and transactions are re-fetched —
 // categories use the already-populated state from the mount-only effect.
+//
+// The transactions endpoint returns a paginated envelope:
+//   { items: [...], total, page, page_size, total_pages }
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -64,10 +68,25 @@ const makeTransaction = (overrides = {}) => ({
     ...overrides,
 })
 
+// Wrap a list of transactions into the paginated response envelope
+function paginate(
+    items: ReturnType<typeof makeTransaction>[],
+    page = 1,
+    page_size = 50,
+) {
+    return {
+        items,
+        total: items.length,
+        page,
+        page_size,
+        total_pages: Math.max(1, Math.ceil(items.length / page_size)),
+    }
+}
+
 // Helper: queue the three standard mocks for a page mount.
 // Consumption order matches effect definition order:
 //   1. accounts  — main filter effect, Promise.all call #1
-//   2. transactions — main filter effect, Promise.all call #2
+//   2. transactions — main filter effect, Promise.all call #2 (paginated)
 //   3. categories — separate mount-only effect (does NOT re-run on filter change)
 // Pass categories as the 3rd arg to test category filter dropdown UI.
 function mockFetch(
@@ -77,18 +96,22 @@ function mockFetch(
 ) {
     vi.mocked(axios.get)
         .mockResolvedValueOnce({ data: accounts })
-        .mockResolvedValueOnce({ data: transactions })
+        .mockResolvedValueOnce({ data: paginate(transactions) })
         .mockResolvedValueOnce({ data: categories })
 }
 
 describe('TransactionsPage', () => {
     beforeEach(() => {
         localStorage.setItem('access_token', 'fake-token')
+        // Fix date for consistent date preset calculations
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2026-05-15'))
     })
 
     afterEach(() => {
         localStorage.clear()
         vi.clearAllMocks()
+        vi.useRealTimers()
     })
 
     // =========================================================================
@@ -218,10 +241,10 @@ describe('TransactionsPage', () => {
         // Re-fetch after filter change: accounts + transactions only — categories NOT re-fetched.
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
-            .mockResolvedValueOnce({ data: [] })   // initial transactions
+            .mockResolvedValueOnce({ data: paginate([]) })   // initial transactions
             .mockResolvedValueOnce({ data: [] })   // initial categories (mount-only effect)
             .mockResolvedValueOnce({ data: [makeAccount({ id: 'acc-001', name: 'Current' })] })
-            .mockResolvedValueOnce({ data: [] })   // filtered transactions (no categories re-fetch)
+            .mockResolvedValueOnce({ data: paginate([]) })   // filtered transactions (no categories re-fetch)
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -262,7 +285,7 @@ describe('TransactionsPage', () => {
         // Re-fetch after selection: accounts + transactions only (no categories)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [] })
-            .mockResolvedValueOnce({ data: [] })
+            .mockResolvedValueOnce({ data: paginate([]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -369,7 +392,7 @@ describe('TransactionsPage', () => {
         // Initial mount: accounts + transactions (main effect) + categories (mount-only effect)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [] })        // page: accounts
-            .mockResolvedValueOnce({ data: [] })        // page: transactions
+            .mockResolvedValueOnce({ data: paginate([]) })        // page: transactions
             .mockResolvedValueOnce({ data: [] })        // page: categories (mount-only effect)
         // AddTransactionForm's own account/category/promotions fetch
         vi.mocked(axios.get)
@@ -381,7 +404,7 @@ describe('TransactionsPage', () => {
         // Re-fetch after add: accounts + transactions only (categories NOT re-fetched)
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [makeAccount()] })
-            .mockResolvedValueOnce({ data: [makeTransaction({ payee: 'Sainsbury\'s' })] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction({ payee: 'Sainsbury\'s' })]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
@@ -433,119 +456,116 @@ describe('TransactionsPage', () => {
     })
 
     // =========================================================================
-    // Sorting
+    // Server-side sorting
     // =========================================================================
 
-    it('sorts transactions by date descending by default (newest first)', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
-                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
-            ],
-        )
+    it('sends sort_by=date and sort_dir=desc by default', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Older')
+        await screen.findByText('Tesco')
 
-        // Get the payee cells in order to verify sort
-        const rows = screen.getAllByRole('row')
-        // rows[0] is header, rows[1] is first data row, rows[2] is second
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        const secondPayee = rows[2].querySelectorAll('td')[1].textContent
-        // Descending by date: Newer (2026-04-15) first, Older (2026-01-01) second
-        expect(firstPayee).toBe('Newer')
-        expect(secondPayee).toBe('Older')
+        const calls = vi.mocked(axios.get).mock.calls
+        const txCall = calls.find(([url]) => String(url).includes('/api/v1/transactions'))
+        const params = (txCall![1] as { params: Record<string, string> }).params
+        expect(params.sort_by).toBe('date')
+        expect(params.sort_dir).toBe('desc')
     })
 
-    it('clicking Date header toggles sort direction', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', date: '2026-01-01', payee: 'Older' }),
-                makeTransaction({ id: 'tx-2', date: '2026-04-15', payee: 'Newer' }),
-            ],
-        )
+    it('clicking Date header toggles sort direction and re-fetches', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        // Re-fetch after sort change
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Older')
+        await screen.findByText('Tesco')
 
-        // Click Date header — default is desc, clicking toggles to asc
+        // Click Date — default is desc, should toggle to asc
         await userEvent.click(screen.getByText(/^Date/))
 
-        const rows = screen.getAllByRole('row')
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        // Ascending by date: Older (2026-01-01) first
-        expect(firstPayee).toBe('Older')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_dir === 'asc'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('clicking a different column sorts by that column ascending', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', payee: 'Zara', amount: '10.00' }),
-                makeTransaction({ id: 'tx-2', payee: 'Aldi', amount: '20.00' }),
-            ],
-        )
+    it('clicking a different column sends sort_by for that column ascending', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        // Re-fetch after sort change
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Zara')
+        await screen.findByText('Tesco')
 
-        // Click Payee header — sorts alphabetically ascending
         await userEvent.click(screen.getByText(/^Payee/))
 
-        const rows = screen.getAllByRole('row')
-        const firstPayee = rows[1].querySelectorAll('td')[1].textContent
-        expect(firstPayee).toBe('Aldi')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'payee' &&
+                    (config as { params?: Record<string, string> })?.params?.sort_dir === 'asc'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('sorts by category name when Category header is clicked', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', payee: 'A', category_name: 'Utilities' }),
-                makeTransaction({ id: 'tx-2', payee: 'B', category_name: 'Bills' }),
-            ],
-        )
+    it('clicking Category header sends sort_by=category_name', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        await screen.findByText('Utilities')
+        await screen.findByText('Tesco')
         await userEvent.click(screen.getByText(/^Category/))
 
-        const rows = screen.getAllByRole('row')
-        // Ascending: Bills before Utilities
-        expect(rows[1].querySelectorAll('td')[2].textContent).toBe('Bills')
-        expect(rows[2].querySelectorAll('td')[2].textContent).toBe('Utilities')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'category_name'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
-    it('sorts by account name when Account header is clicked', async () => {
-        mockFetch(
-            [
-                makeAccount({ id: 'acc-a', name: 'Santander' }),
-                makeAccount({ id: 'acc-b', name: 'Nationwide' }),
-            ],
-            [
-                makeTransaction({ id: 'tx-1', account_id: 'acc-a', payee: 'X' }),
-                makeTransaction({ id: 'tx-2', account_id: 'acc-b', payee: 'Y' }),
-            ],
-        )
+    it('clicking Account header sends sort_by=account_name', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
-        // Wait for the table to render — use payee as the anchor since
-        // account names also appear in the filter dropdown options
-        await screen.findByText('X')
-        // "Account" button is inside the table header — use getByRole to target the sort button
+        await screen.findByText('Tesco')
         const accountSortBtn = screen.getByRole('button', { name: /^Account/ })
         await userEvent.click(accountSortBtn)
 
-        const rows = screen.getAllByRole('row')
-        // Ascending: Nationwide before Santander
-        expect(rows[1].querySelectorAll('td')[3].textContent).toBe('Nationwide')
+        await waitFor(() => {
+            const calls = vi.mocked(axios.get).mock.calls
+            const sortCall = calls.find(
+                ([url, config]) =>
+                    String(url).includes('/api/v1/transactions') &&
+                    (config as { params?: Record<string, string> })?.params?.sort_by === 'account_name'
+            )
+            expect(sortCall).toBeDefined()
+        })
     })
 
     // =========================================================================
@@ -566,7 +586,7 @@ describe('TransactionsPage', () => {
         // Queue mocks for the re-fetch that will fire when filter changes
         vi.mocked(axios.get)
             .mockResolvedValueOnce({ data: [acct] })
-            .mockResolvedValueOnce({ data: [makeTransaction()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
 
         // Select a specific account — triggers re-fetch
         await userEvent.selectOptions(screen.getByLabelText(/filter by account/i), 'acc-001')
@@ -627,5 +647,104 @@ describe('TransactionsPage', () => {
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
 
         expect(await screen.findByText('split')).toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Date quick filters
+    // =========================================================================
+
+    it('"This Month" quick filter sets correct date range params', async () => {
+        // System time is May 15 2026 (set in beforeEach)
+        mockFetch()
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText(/no transactions/i)
+
+        // "This Month" is the default — check that the API was called with the right params
+        const calls = vi.mocked(axios.get).mock.calls
+        const txCall = calls.find(
+            ([url, config]) =>
+                String(url).includes('/api/v1/transactions') &&
+                (config as { params?: Record<string, string> })?.params?.date_from === '2026-05-01'
+        )
+        expect(txCall).toBeDefined()
+        const params = (txCall![1] as { params: Record<string, string> }).params
+        expect(params.date_to).toBe('2026-05-31')
+    })
+
+    // =========================================================================
+    // Pagination
+    // =========================================================================
+
+    it('renders pagination controls with correct page info', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: {
+                items: [makeTransaction()],
+                total: 75,
+                page: 1,
+                page_size: 50,
+                total_pages: 2,
+            }})
+            .mockResolvedValueOnce({ data: [] })
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+
+        // Page info
+        expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+        expect(screen.getByText(/Showing 1-50 of 75 transactions/)).toBeInTheDocument()
+
+        // Prev disabled, Next enabled
+        expect(screen.getByRole('button', { name: /previous page/i })).toBeDisabled()
+        expect(screen.getByRole('button', { name: /next page/i })).not.toBeDisabled()
+    })
+
+    // =========================================================================
+    // Notes display
+    // =========================================================================
+
+    it('shows note icon only on transactions with notes', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeTransaction({ id: 'tx-1', payee: 'Tesco', note: 'Weekly shop' }),
+                makeTransaction({ id: 'tx-2', payee: 'Amazon', note: null }),
+            ],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+
+        // Only one note toggle button (for Tesco with note)
+        const noteButtons = screen.getAllByRole('button', { name: /toggle note/i })
+        expect(noteButtons).toHaveLength(1)
+    })
+
+    it('clicking note icon toggles note text display', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeTransaction({ id: 'tx-1', payee: 'Tesco', note: 'Weekly shop' })],
+        )
+
+        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+
+        await screen.findByText('Tesco')
+
+        // Note text not visible initially
+        expect(screen.queryByText('Weekly shop')).not.toBeInTheDocument()
+
+        // Click note icon
+        await userEvent.click(screen.getByRole('button', { name: /toggle note/i }))
+
+        // Note text now visible
+        expect(screen.getByText('Weekly shop')).toBeInTheDocument()
+
+        // Click again to collapse
+        await userEvent.click(screen.getByRole('button', { name: /toggle note/i }))
+        expect(screen.queryByText('Weekly shop')).not.toBeInTheDocument()
     })
 })

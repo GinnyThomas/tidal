@@ -186,8 +186,8 @@ def test_list_transactions_returns_only_current_users_transactions(test_client) 
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["payee"] == "Shop A"
+    assert body["total"] == 1
+    assert body["items"][0]["payee"] == "Shop A"
 
 
 def test_list_transactions_can_filter_by_account(test_client) -> None:
@@ -218,8 +218,8 @@ def test_list_transactions_can_filter_by_account(test_client) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["payee"] == "Shop A"
+    assert body["total"] == 1
+    assert body["items"][0]["payee"] == "Shop A"
 
 
 def test_list_transactions_can_filter_by_category(test_client) -> None:
@@ -259,8 +259,8 @@ def test_list_transactions_can_filter_by_category(test_client) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
-    assert body[0]["payee"] == "Payee A"
+    assert body["total"] == 1
+    assert body["items"][0]["payee"] == "Payee A"
 
 
 def test_only_cleared_and_reconciled_count_toward_actual_spend(test_client) -> None:
@@ -299,8 +299,8 @@ def test_only_cleared_and_reconciled_count_toward_actual_spend(test_client) -> N
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 2
-    returned_statuses = {t["status"] for t in body}
+    assert body["total"] == 2
+    returned_statuses = {t["status"] for t in body["items"]}
     assert returned_statuses == {"cleared", "reconciled"}
 
 
@@ -575,3 +575,96 @@ def test_update_split_transaction(test_client) -> None:
     assert body["is_split"] is True
     assert len(body["splits"]) == 1
     assert body["splits"][0]["amount"] == "100.00"
+
+
+# =============================================================================
+# Pagination
+# =============================================================================
+
+
+def test_list_transactions_pagination(test_client) -> None:
+    """
+    GET /api/v1/transactions returns a paginated envelope with correct
+    total, page, page_size, and total_pages. Requesting page 2 returns
+    the remaining items.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    base = {**_TXN, "account_id": account_id, "category_id": category_id}
+    for i in range(5):
+        test_client.post(
+            "/api/v1/transactions",
+            json={**base, "payee": f"Shop {i}"},
+            headers=_auth_headers(token),
+        )
+
+    # Page 1 with page_size=2
+    resp1 = test_client.get(
+        "/api/v1/transactions?page=1&page_size=2",
+        headers=_auth_headers(token),
+    )
+    assert resp1.status_code == 200
+    body1 = resp1.json()
+    assert body1["total"] == 5
+    assert body1["page"] == 1
+    assert body1["page_size"] == 2
+    assert body1["total_pages"] == 3
+    assert len(body1["items"]) == 2
+
+    # Page 3 should have 1 item
+    resp3 = test_client.get(
+        "/api/v1/transactions?page=3&page_size=2",
+        headers=_auth_headers(token),
+    )
+    body3 = resp3.json()
+    assert len(body3["items"]) == 1
+    assert body3["page"] == 3
+
+
+# =============================================================================
+# Date filter
+# =============================================================================
+
+
+def test_list_transactions_date_filter(test_client) -> None:
+    """
+    GET /api/v1/transactions?date_from=...&date_to=... returns only
+    transactions within the specified date range.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    base = {"account_id": account_id, "category_id": category_id,
+            "amount": "10.00", "transaction_type": "expense"}
+
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "date": "2026-01-10", "payee": "January"},
+        headers=_auth_headers(token),
+    )
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "date": "2026-03-15", "payee": "March"},
+        headers=_auth_headers(token),
+    )
+    test_client.post(
+        "/api/v1/transactions",
+        json={**base, "date": "2026-06-20", "payee": "June"},
+        headers=_auth_headers(token),
+    )
+
+    # Filter: Feb 1 to Apr 30 → only March
+    resp = test_client.get(
+        "/api/v1/transactions?date_from=2026-02-01&date_to=2026-04-30",
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["payee"] == "March"
+
+    # date_from only → March and June
+    resp2 = test_client.get(
+        "/api/v1/transactions?date_from=2026-02-01",
+        headers=_auth_headers(token),
+    )
+    assert resp2.json()["total"] == 2
