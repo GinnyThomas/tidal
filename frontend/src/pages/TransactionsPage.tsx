@@ -209,8 +209,8 @@ function TransactionsPage() {
     const editFormRef = useRef<HTMLDivElement>(null)
     // Incrementing refreshKey re-triggers the effect without changing filters.
     const [refreshKey, setRefreshKey] = useState(0)
-    // Client-side payee search — filters displayed transactions after fetch
-    const [payeeSearch, setPayeeSearch] = useState('')
+    // Server-side search — searches payee and note fields
+    const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
     // Server-side sorting — triggers re-fetch
     const [sortField, setSortField] = useState<'date' | 'payee' | 'category_name' | 'account_name' | 'amount' | 'status'>('date')
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -258,6 +258,7 @@ function TransactionsPage() {
         if (filterStatus) params.status = filterStatus
         if (dateFrom) params.date_from = dateFrom
         if (dateTo) params.date_to = dateTo
+        if (search) params.search = search
         params.page = String(page)
         params.page_size = String(pageSize)
         params.sort_by = sortField
@@ -278,7 +279,7 @@ function TransactionsPage() {
             setLoading(false)
         })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, page, pageSize, sortField, sortDirection, refreshKey])
+    }, [filterAccountId, filterCategoryId, filterStatus, dateFrom, dateTo, search, page, pageSize, sortField, sortDirection, refreshKey])
 
     // Categories effect: runs once on mount.
     // Fetching categories separately means filter dropdowns are populated
@@ -380,10 +381,8 @@ function TransactionsPage() {
     const ariaSort = (field: string) =>
         sortField === field ? (sortDirection === 'asc' ? 'ascending' as const : 'descending' as const) : undefined
 
-    // Client-side payee search — applied after server sort
-    const displayedTransactions = transactions.filter(tx =>
-        !payeeSearch || (tx.payee ?? '').toLowerCase().includes(payeeSearch.toLowerCase())
-    )
+    // Transactions are already filtered server-side (including search)
+    const displayedTransactions = transactions
 
     // Pagination display info
     const rangeStart = totalItems === 0 ? 0 : (page - 1) * pageSize + 1
@@ -523,22 +522,35 @@ function TransactionsPage() {
                     )}
                 </div>
 
-                {/* Payee search */}
+                {/* Search */}
                 <div className="flex items-center gap-2 mb-4">
                     <div className="relative">
                         <input
                             type="text"
-                            value={payeeSearch}
-                            onChange={(e) => setPayeeSearch(e.target.value)}
-                            placeholder="Search by payee..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value)
+                                setPage(1)
+                                const next = new URLSearchParams(searchParams)
+                                if (e.target.value) next.set('search', e.target.value)
+                                else next.delete('search')
+                                setSearchParams(next)
+                            }}
+                            placeholder="Search payee or notes..."
                             className="input-base w-64 pr-8"
-                            aria-label="Search by payee"
+                            aria-label="Search payee or notes"
                         />
-                        {payeeSearch && (
+                        {search && (
                             <button
-                                onClick={() => setPayeeSearch('')}
+                                onClick={() => {
+                                    setSearch('')
+                                    setPage(1)
+                                    const next = new URLSearchParams(searchParams)
+                                    next.delete('search')
+                                    setSearchParams(next)
+                                }}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
-                                aria-label="Clear payee search"
+                                aria-label="Clear search"
                             >
                                 ×
                             </button>

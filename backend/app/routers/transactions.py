@@ -443,6 +443,7 @@ def list_transactions(
     page_size: int = Query(default=50, ge=1, le=500),
     sort_by: str = Query(default="date"),
     sort_dir: str = Query(default="desc"),
+    search: Optional[str] = Query(default=None),
 ) -> dict:
     """
     Returns paginated, non-deleted transactions for the current user.
@@ -463,6 +464,7 @@ def list_transactions(
       sort_by     — field to sort by: date, payee, amount, status,
                     category_name, account_name. Default: date.
       sort_dir    — sort direction: asc or desc. Default: desc.
+      search      — case-insensitive substring match against payee and note.
     """
     query = db.query(Transaction).filter(
         Transaction.user_id == current_user.id,
@@ -497,6 +499,15 @@ def list_transactions(
 
     if date_to is not None:
         query = query.filter(Transaction.date <= date_to)
+
+    if search is not None:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Transaction.payee.ilike(term),
+                Transaction.note.ilike(term),
+            )
+        )
 
     # Count before pagination
     total = query.count()

@@ -598,37 +598,77 @@ describe('TransactionsPage', () => {
     })
 
     // =========================================================================
-    // Payee search
+    // Search (server-side — payee and notes)
     // =========================================================================
 
-    it('filters displayed transactions by payee search', async () => {
-        mockFetch(
-            [makeAccount()],
-            [
-                makeTransaction({ id: 'tx-1', payee: 'Tesco' }),
-                makeTransaction({ id: 'tx-2', payee: 'Sainsburys' }),
-                makeTransaction({ id: 'tx-3', payee: 'Amazon' }),
-            ],
+    it('sends search param to the API when search is set via URL', async () => {
+        // Mount with ?search=gift — the API call should include search=gift
+        mockFetch([makeAccount()], [makeTransaction()])
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?search=weekly']}>
+                <TransactionsPage />
+            </MemoryRouter>
         )
 
-        render(<MemoryRouter><TransactionsPage /></MemoryRouter>)
+        await screen.findByText('Tesco')
+
+        const calls = vi.mocked(axios.get).mock.calls
+        const searchCall = calls.find(
+            ([url, config]) =>
+                String(url).includes('/api/v1/transactions') &&
+                (config as { params?: Record<string, string> })?.params?.search === 'weekly'
+        )
+        expect(searchCall).toBeDefined()
+    })
+
+    it('clears search param when clear button is clicked', async () => {
+        // Pre-populate search via URL so clear button is visible on mount
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
+            .mockResolvedValueOnce({ data: [] })
+            // Re-fetch after clear
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()]) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?search=hello']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
 
         await screen.findByText('Tesco')
-        expect(screen.getByText('Sainsburys')).toBeInTheDocument()
-        expect(screen.getByText('Amazon')).toBeInTheDocument()
 
-        // Type in the search box
-        await userEvent.type(screen.getByPlaceholderText(/search by payee/i), 'tes')
+        // Clear button should be visible because search is pre-filled
+        await userEvent.click(screen.getByLabelText(/clear search/i))
 
-        // Only Tesco matches — others hidden
-        expect(screen.getByText('Tesco')).toBeInTheDocument()
-        expect(screen.queryByText('Sainsburys')).not.toBeInTheDocument()
-        expect(screen.queryByText('Amazon')).not.toBeInTheDocument()
+        // After clearing, the search input should be empty
+        expect(screen.getByPlaceholderText(/search payee or notes/i)).toHaveValue('')
+    })
 
-        // Clear button appears and clears the search
-        await userEvent.click(screen.getByLabelText(/clear payee search/i))
-        expect(screen.getByText('Sainsburys')).toBeInTheDocument()
-        expect(screen.getByText('Amazon')).toBeInTheDocument()
+    it('reads search from URL params on mount', async () => {
+        mockFetch([makeAccount()], [makeTransaction()])
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?search=gift']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+
+        // Search input pre-filled
+        expect(screen.getByPlaceholderText(/search payee or notes/i)).toHaveValue('gift')
+
+        // API called with search param
+        const calls = vi.mocked(axios.get).mock.calls
+        const searchCall = calls.find(
+            ([url, config]) =>
+                String(url).includes('/api/v1/transactions') &&
+                (config as { params?: Record<string, string> })?.params?.search === 'gift'
+        )
+        expect(searchCall).toBeDefined()
     })
 
     // =========================================================================
