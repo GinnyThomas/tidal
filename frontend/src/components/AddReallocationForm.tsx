@@ -16,7 +16,8 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
-import { sortCategoriesByName, buildCategoryOptions } from '../lib/categories'
+import { sortCategoriesByName } from '../lib/categories'
+import CategoryCombobox from './CategoryCombobox'
 
 type Category = { id: string; name: string; parent_category_id?: string | null }
 
@@ -104,18 +105,15 @@ function AddReallocationForm({
 
                 {/* To category — dropdown */}
                 <div>
-                    <label htmlFor="reallocTo" className="label-base">To</label>
-                    <select
-                        id="reallocTo"
-                        value={toCategoryId}
-                        onChange={(e) => setToCategoryId(e.target.value)}
-                        className="input-base"
-                        required
-                    >
-                        {buildCategoryOptions(categories).map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                    </select>
+                    <label className="label-base">To</label>
+                    <CategoryCombobox
+                        categories={categories}
+                        value={toCategoryId || null}
+                        onChange={(id) => setToCategoryId(id ?? '')}
+                        includeNoCategory={false}
+                        required={true}
+                        ariaLabel="To"
+                    />
                 </div>
 
                 {/* Amount */}

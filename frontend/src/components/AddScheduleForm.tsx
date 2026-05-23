@@ -30,7 +30,8 @@ import axios from 'axios'
 import { useState, useEffect } from 'react'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
-import { sortCategoriesByName, buildCategoryOptions } from '../lib/categories'
+import { sortCategoriesByName } from '../lib/categories'
+import CategoryCombobox from './CategoryCombobox'
 import { CURRENCIES } from '../lib/currencies'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 
@@ -201,18 +202,15 @@ function AddScheduleForm({ onScheduleAdded, editingSchedule, onScheduleUpdated }
                 </div>
 
                 <div>
-                    <label htmlFor="schedCategory" className="label-base">Category</label>
-                    <select
-                        id="schedCategory"
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
-                        className="input-base"
-                        required
-                    >
-                        {buildCategoryOptions(categories).map((opt) => (
-                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                    </select>
+                    <label className="label-base">Category</label>
+                    <CategoryCombobox
+                        categories={categories}
+                        value={categoryId || null}
+                        onChange={(id) => setCategoryId(id ?? '')}
+                        includeNoCategory={false}
+                        required={true}
+                        ariaLabel="Category"
+                    />
                 </div>
 
                 <div>

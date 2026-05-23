@@ -52,7 +52,7 @@ describe('AddReallocationForm', () => {
         // From category shown as text, not editable
         expect(screen.getByText('Food & Drink')).toBeInTheDocument()
         // To dropdown should have Travel (from category excluded)
-        expect(await screen.findByRole('option', { name: 'Travel' })).toBeInTheDocument()
+        expect(await screen.findByDisplayValue('Travel')).toBeInTheDocument()
         // Amount and reason fields present
         expect(screen.getByLabelText(/amount/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/reason/i)).toBeInTheDocument()
@@ -63,7 +63,7 @@ describe('AddReallocationForm', () => {
 
         render(<MemoryRouter><AddReallocationForm {...defaultProps} /></MemoryRouter>)
 
-        await screen.findByRole('option', { name: 'Travel' })
+        await screen.findByDisplayValue('Travel')
         await userEvent.type(screen.getByLabelText(/amount/i), '50')
         await userEvent.type(screen.getByLabelText(/reason/i), 'Holiday fund')
         await userEvent.click(screen.getByRole('button', { name: /^reallocate$/i }))
@@ -91,7 +91,7 @@ describe('AddReallocationForm', () => {
 
         render(<MemoryRouter><AddReallocationForm {...defaultProps} /></MemoryRouter>)
 
-        await screen.findByRole('option', { name: 'Travel' })
+        await screen.findByDisplayValue('Travel')
         await userEvent.type(screen.getByLabelText(/amount/i), '50')
         await userEvent.type(screen.getByLabelText(/reason/i), 'test')
         await userEvent.click(screen.getByRole('button', { name: /^reallocate$/i }))

@@ -98,9 +98,13 @@ describe('AddTransactionForm', () => {
 
         render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
 
-        // findBy waits for the async effect to populate the dropdowns
+        // Account dropdown still uses native select
         expect(await screen.findByRole('option', { name: 'Nationwide' })).toBeInTheDocument()
-        expect(await screen.findByRole('option', { name: 'Groceries' })).toBeInTheDocument()
+        // Category uses combobox — open it and check the option is available
+        const catButtons = screen.getAllByRole('button')
+        const comboboxBtn = catButtons.find(b => b.textContent === '▼')!
+        await userEvent.click(comboboxBtn)
+        expect(screen.getByRole('option', { name: /groceries/i })).toBeInTheDocument()
     })
 
     // =========================================================================
@@ -146,8 +150,12 @@ describe('AddTransactionForm', () => {
         // Wait for dropdowns so account_id is set
         await screen.findByRole('option', { name: 'Current Account' })
 
-        // Explicitly select a category — no auto-select since "No category" is default
-        await userEvent.selectOptions(screen.getByLabelText(/category/i), 'cat-001')
+        // Select a category via the combobox
+        const comboboxBtns = screen.getAllByRole('button')
+        const catBtn = comboboxBtns.find(b => b.textContent === '▼')!
+        await userEvent.click(catBtn)
+        await userEvent.click(screen.getByRole('option', { name: /groceries/i }))
+
         await userEvent.type(screen.getByLabelText(/amount/i), '25.00')
         await userEvent.click(screen.getByRole('button', { name: /save transaction/i }))
 
