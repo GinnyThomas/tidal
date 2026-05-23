@@ -985,4 +985,35 @@ describe('TransactionsPage', () => {
         expect(screen.getByText(/Balance:/)).toBeInTheDocument()
         expect(screen.getByLabelText('Transaction totals')).toBeInTheDocument()
     })
+
+    it('net card displays 0.00 when income equals expenses', async () => {
+        const totals = {
+            expenses: [{ currency: 'GBP', amount: '100.00' }],
+            income: [{ currency: 'GBP', amount: '100.00' }],
+            transfers: [],
+            net: [{ currency: 'GBP', amount: '0.00' }],
+        }
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+            .mockResolvedValueOnce({ data: paginate([makeTransaction()], 1, 50, totals) })
+
+        render(
+            <MemoryRouter initialEntries={['/transactions?category_id=cat-001']}>
+                <TransactionsPage />
+            </MemoryRouter>
+        )
+
+        await screen.findByText('Tesco')
+
+        // Net card should show £0.00 (not em-dash)
+        // The totals area has the "Net" label and should contain 0.00
+        const totalsArea = screen.getByLabelText('Transaction totals')
+        expect(totalsArea.textContent).toContain('0.00')
+        // No em-dash in the Net card — verify net label's sibling has real value
+        const netLabel = screen.getByText('Net')
+        const netCard = netLabel.parentElement!
+        expect(netCard.textContent).toContain('0.00')
+        expect(netCard.textContent).not.toContain('—')
+    })
 })

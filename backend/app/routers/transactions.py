@@ -515,49 +515,54 @@ def list_transactions(
         )
 
     # --- Compute totals across ALL filtered rows (before pagination) ---
-    # Get the IDs of all matching transactions, then aggregate separately.
-    # This avoids issues with correlated subqueries in with_entities().
-    filtered_ids = [row[0] for row in query.with_entities(Transaction.id).all()]
+    # Use a subquery of matching IDs so the aggregation runs in SQL, not Python.
+    # .order_by(None) strips any ORDER BY from the source query — the subquery
+    # only needs to be a set of IDs, not an ordered list.
+    id_subq = query.order_by(None).with_entities(Transaction.id).subquery()
 
     expenses_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     income_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     transfers_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
 
-    if filtered_ids:
-        # Non-split transactions: aggregate by (type, currency)
-        non_split_rows = (
-            db.query(
-                Transaction.transaction_type,
-                Transaction.currency,
-                func.sum(Transaction.amount),
-            )
-            .filter(Transaction.id.in_(filtered_ids), Transaction.is_split.is_(False))
-            .group_by(Transaction.transaction_type, Transaction.currency)
-            .all()
+    # Non-split transactions: aggregate by (type, currency)
+    non_split_rows = (
+        db.query(
+            Transaction.transaction_type,
+            Transaction.currency,
+            func.sum(Transaction.amount),
         )
-        # Split transactions: sum split amounts grouped by parent's (type, currency)
-        split_rows = (
-            db.query(
-                Transaction.transaction_type,
-                Transaction.currency,
-                func.sum(TransactionSplit.amount),
-            )
-            .join(TransactionSplit, TransactionSplit.transaction_id == Transaction.id)
-            .filter(Transaction.id.in_(filtered_ids), Transaction.is_split.is_(True))
-            .group_by(Transaction.transaction_type, Transaction.currency)
-            .all()
+        .filter(Transaction.id.in_(db.query(id_subq.c.id)), Transaction.is_split.is_(False))
+        .group_by(Transaction.transaction_type, Transaction.currency)
+        .all()
+    )
+    # Split transactions: sum split amounts grouped by parent's (type, currency)
+    split_rows = (
+        db.query(
+            Transaction.transaction_type,
+            Transaction.currency,
+            func.sum(TransactionSplit.amount),
         )
+        .join(TransactionSplit, TransactionSplit.transaction_id == Transaction.id)
+        .filter(Transaction.id.in_(db.query(id_subq.c.id)), Transaction.is_split.is_(True))
+        .group_by(Transaction.transaction_type, Transaction.currency)
+        .all()
+    )
 
-        for tx_type, currency, amount in [*non_split_rows, *split_rows]:
-            amt = amount or Decimal("0")
-            if tx_type == "expense":
-                expenses_by_currency[currency] += amt
-            elif tx_type == "income":
-                income_by_currency[currency] += amt
-            elif tx_type == "transfer":
-                transfers_by_currency[currency] += amt
+    # Refunds intentionally excluded from totals — pending refactor (see tech debt).
+    # A refund should zero out the original category spend, not appear as income.
+    for tx_type, currency, amount in [*non_split_rows, *split_rows]:
+        amt = amount or Decimal("0")
+        if tx_type == "expense":
+            expenses_by_currency[currency] += amt
+        elif tx_type == "income":
+            income_by_currency[currency] += amt
+        elif tx_type == "transfer":
+            transfers_by_currency[currency] += amt
+        # tx_type == "refund" is intentionally not bucketed
 
-    # Net = income - expenses per currency (transfers excluded)
+    # Net = income - expenses per currency (transfers excluded).
+    # Include zero net for currencies that have activity (income or expenses)
+    # so the UI can distinguish "net zero" from "no data".
     all_currencies = set(expenses_by_currency.keys()) | set(income_by_currency.keys())
     net_by_currency: dict[str, Decimal] = {}
     for c in all_currencies:
@@ -570,7 +575,7 @@ def list_transactions(
         "expenses": to_currency_list(expenses_by_currency),
         "income": to_currency_list(income_by_currency),
         "transfers": to_currency_list(transfers_by_currency),
-        "net": [{"currency": c, "amount": a} for c, a in sorted(net_by_currency.items()) if a != Decimal("0")],
+        "net": [{"currency": c, "amount": a} for c, a in sorted(net_by_currency.items())],
     }
 
     # Count before pagination

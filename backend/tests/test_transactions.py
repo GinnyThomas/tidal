@@ -883,3 +883,56 @@ def test_totals_no_matching_transactions(test_client) -> None:
     assert totals["income"] == []
     assert totals["transfers"] == []
     assert totals["net"] == []
+
+
+def test_totals_net_zero_is_returned(test_client) -> None:
+    """Net of zero is returned for currencies where income equals expenses."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "category_id": category_id,
+                           "date": "2026-01-15", "amount": "100.00",
+                           "transaction_type": "expense"},
+                     headers=_auth_headers(token))
+    test_client.post("/api/v1/transactions",
+                     json={"account_id": account_id, "category_id": category_id,
+                           "date": "2026-01-15", "amount": "100.00",
+                           "transaction_type": "income"},
+                     headers=_auth_headers(token))
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    assert totals["net"] == [{"currency": "GBP", "amount": "0.00"}]
+
+
+def test_totals_refunds_excluded(test_client) -> None:
+    """Refund transactions are excluded from all totals buckets."""
+    token, account_id, category_id = _setup(test_client)
+
+    # Create an expense, then a refund referencing it
+    expense_resp = test_client.post(
+        "/api/v1/transactions",
+        json={"account_id": account_id, "category_id": category_id,
+              "date": "2026-01-15", "amount": "50.00",
+              "transaction_type": "expense"},
+        headers=_auth_headers(token),
+    )
+    expense_id = expense_resp.json()["id"]
+
+    test_client.post(
+        "/api/v1/transactions",
+        json={"account_id": account_id, "category_id": category_id,
+              "date": "2026-01-16", "amount": "50.00",
+              "transaction_type": "refund",
+              "parent_transaction_id": expense_id},
+        headers=_auth_headers(token),
+    )
+
+    resp = test_client.get("/api/v1/transactions", headers=_auth_headers(token))
+    totals = resp.json()["totals"]
+    # Expense is counted, refund is NOT
+    assert totals["expenses"] == [{"currency": "GBP", "amount": "50.00"}]
+    assert totals["income"] == []
+    assert totals["transfers"] == []
+    # Net only includes expenses (no refund offset)
+    assert totals["net"] == [{"currency": "GBP", "amount": "-50.00"}]
