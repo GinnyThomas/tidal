@@ -164,22 +164,48 @@ describe('BudgetsPage', () => {
     })
 
     // =========================================================================
-    // Overrides expand
+    // Pattern modal trigger
     // =========================================================================
 
-    it('expand button shows override form inline', async () => {
-        mockFetch([makeBudget({ overrides: [{ id: 'ov-1', budget_id: 'bud-001', month: 12, amount: '350.00' }] })])
+    it('"Set pattern" button opens the pattern modal', async () => {
+        mockFetch()
 
         render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
 
         await screen.findByText('Groceries UK')
-        await userEvent.click(screen.getByRole('button', { name: /expand overrides/i }))
+        await userEvent.click(screen.getByRole('button', { name: /set pattern/i }))
 
-        // The override form should show 12 month labels
-        expect(screen.getByText('Jan')).toBeInTheDocument()
-        expect(screen.getByText('Dec')).toBeInTheDocument()
-        // The override amount for December should be visible
-        expect(screen.getByText('350.00')).toBeInTheDocument()
+        // Modal should show category name and month inputs
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByLabelText(/default monthly amount/i)).toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Dot indicator
+    // =========================================================================
+
+    it('shows dot indicator when overrides differ from default', async () => {
+        mockFetch([makeBudget({
+            default_amount: '300.00',
+            overrides: [{ id: 'ov-1', budget_id: 'bud-001', month: 6, amount: '500.00' }],
+        })])
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+        expect(screen.getByLabelText('Has custom monthly overrides')).toBeInTheDocument()
+    })
+
+    it('does not show dot indicator when overrides match default', async () => {
+        mockFetch([makeBudget({
+            default_amount: '300.00',
+            overrides: [{ id: 'ov-1', budget_id: 'bud-001', month: 6, amount: '300.00' }],
+        })])
+
+        render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+        await screen.findByText('Groceries UK')
+        expect(screen.queryByLabelText('Has custom monthly overrides')).not.toBeInTheDocument()
     })
 
     // =========================================================================
