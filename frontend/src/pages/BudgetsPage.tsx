@@ -17,7 +17,7 @@ import axios from 'axios'
 import React, { useEffect, useRef, useState } from 'react'
 import Layout from '../components/Layout'
 import AddBudgetForm from '../components/AddBudgetForm'
-import BudgetOverrideForm from '../components/BudgetOverrideForm'
+import BudgetPatternModal from '../components/BudgetPatternModal'
 import { annualPlanCache } from '../lib/annualPlanCache'
 import { getApiBaseUrl } from '../lib/api'
 import { GROUP_ORDER } from '../lib/budgetGroups'
@@ -68,8 +68,8 @@ function BudgetsPage() {
     const [showForm, setShowForm] = useState(false)
     const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
     const editFormRef = useRef<HTMLDivElement>(null)
-    // Tracks which budget IDs have their overrides expanded
-    const [expandedOverrides, setExpandedOverrides] = useState<Set<string>>(new Set())
+    // Budget currently open in the pattern modal (null = closed)
+    const [patternBudget, setPatternBudget] = useState<Budget | null>(null)
     const [refreshKey, setRefreshKey] = useState(0)
 
     // Fetch budgets for the selected year (and optional group filter)
@@ -127,6 +127,10 @@ function BudgetsPage() {
     // indented with a teal left border, matching the parent/child hierarchy
     // styling used in AnnualView and CategoriesPage. Top-level (parent)
     // budgets render the category name in bold.
+    // Whether a budget has any override that differs from its default
+    const hasCustomOverrides = (budget: Budget): boolean =>
+        budget.overrides.some(o => o.amount !== budget.default_amount)
+
     const renderBudgetRow = (budget: Budget, isChild: boolean = false) => (
         <tr
             key={budget.id}
@@ -141,47 +145,24 @@ function BudgetsPage() {
             aria-label="Click to edit"
         >
             <td className={`${isChild ? 'pl-10 pr-4 border-l-2 border-teal-500' : 'px-4'} py-3`}>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={(e) => {
-                            // Stop propagation — the <tr> has a click-to-edit
-                            // handler that would otherwise scroll the page to
-                            // the edit form when the user only wanted to
-                            // expand the inline overrides section.
-                            e.stopPropagation()
-                            toggleOverrides(budget.id)
-                        }}
-                        className="text-slate-400 hover:text-sky-400 transition-colors cursor-pointer text-xs"
-                        aria-label={`${expandedOverrides.has(budget.id) ? 'Collapse' : 'Expand'} overrides for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
-                    >
-                        {expandedOverrides.has(budget.id) ? '▼' : '▶'}
-                    </button>
-                    <span className={isChild ? "text-slate-300" : "font-semibold text-slate-100"}>
-                        {categoryById.get(budget.category_id) ?? budget.category_id}
-                    </span>
-                </div>
+                <span className={isChild ? "text-slate-300" : "font-semibold text-slate-100"}>
+                    {categoryById.get(budget.category_id) ?? budget.category_id}
+                </span>
                 {budget.notes && (
                     <p className="text-xs text-slate-400 italic mt-0.5">{budget.notes}</p>
                 )}
-                {expandedOverrides.has(budget.id) && (
-                    // stopPropagation so interactions with the inline override
-                    // form don't bubble up to the row-level click-to-edit
-                    // handler (which would scroll the page to the top form).
-                    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-                        <BudgetOverrideForm
-                            budgetId={budget.id}
-                            overrides={budget.overrides}
-                            defaultAmount={budget.default_amount}
-                            onChanged={() => {
-                                annualPlanCache.clear()
-                                setRefreshKey(k => k + 1)
-                            }}
-                        />
-                    </div>
-                )}
             </td>
             <td className="px-4 py-3 text-right text-sky-400 font-medium">
-                {budget.default_amount}
+                <span className="inline-flex items-center gap-1.5">
+                    {budget.default_amount}
+                    {hasCustomOverrides(budget) && (
+                        <span
+                            className="inline-block w-1.5 h-1.5 rounded-full bg-sky-400"
+                            title="Has monthly overrides"
+                            aria-label="Has monthly overrides"
+                        />
+                    )}
+                </span>
             </td>
             <td className="px-4 py-3 text-center text-slate-300">
                 {budget.currency}
@@ -191,6 +172,13 @@ function BudgetsPage() {
             </td>
             <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-2">
+                    <button
+                        onClick={() => setPatternBudget(budget)}
+                        aria-label={`Set pattern for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
+                        className="text-xs px-2.5 py-1 rounded border border-ocean-600 text-slate-400 hover:text-slate-200 hover:border-sky-500 transition-colors cursor-pointer"
+                    >
+                        Set pattern
+                    </button>
                     <button
                         onClick={() => handleEdit(budget)}
                         aria-label={`Edit budget for ${categoryById.get(budget.category_id) ?? budget.category_id}`}
@@ -321,18 +309,6 @@ function BudgetsPage() {
         }
     }
 
-    const toggleOverrides = (budgetId: string) => {
-        setExpandedOverrides(prev => {
-            const next = new Set(prev)
-            if (next.has(budgetId)) {
-                next.delete(budgetId)
-            } else {
-                next.add(budgetId)
-            }
-            return next
-        })
-    }
-
     // --- Early returns ---
 
     if (loading) {
@@ -460,6 +436,19 @@ function BudgetsPage() {
                             </tbody>
                         </table>
                     </div>
+                )}
+                {/* Pattern modal */}
+                {patternBudget && (
+                    <BudgetPatternModal
+                        budget={patternBudget}
+                        categoryName={categoryById.get(patternBudget.category_id) ?? patternBudget.category_id}
+                        onClose={() => setPatternBudget(null)}
+                        onSaved={() => {
+                            setPatternBudget(null)
+                            setRefreshKey(k => k + 1)
+                            annualPlanCache.clear()
+                        }}
+                    />
                 )}
             </div>
         </Layout>
