@@ -89,7 +89,7 @@ function paginate(
 
 // Helper: queue the three standard mocks for a page mount.
 // Consumption order matches effect declaration order:
-//   1. accounts   — mount-only effect
+//   1. accounts   — mount + refreshKey effect
 //   2. categories — mount-only effect
 //   3. transactions — filter effect (paginated envelope)
 // Pass categories as the 3rd arg to test category filter dropdown UI.
@@ -403,8 +403,9 @@ describe('TransactionsPage', () => {
             .mockResolvedValueOnce({ data: [] })  // promotions
         // Post succeeds
         vi.mocked(axios.post).mockResolvedValueOnce({ data: {} })
-        // Re-fetch after add: only transactions (accounts/categories already fetched on mount)
+        // Re-fetch after add: accounts (refreshKey) + transactions
         vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount()] })   // accounts refresh
             .mockResolvedValueOnce({ data: paginate([makeTransaction({ payee: 'Sainsbury\'s' })]) })
 
         render(<MemoryRouter><TransactionsPage /></MemoryRouter>)

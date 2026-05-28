@@ -273,9 +273,10 @@ function TransactionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search])
 
-    // Accounts effect: runs once on mount.
-    // Accounts rarely change during a session — fetching separately avoids
-    // re-fetching on every filter/search/sort/page change.
+    // Accounts effect: runs on mount and after mutations (refreshKey).
+    // Separate from the transactions effect so accounts aren't re-fetched on
+    // every filter/search/sort/page change — but DO re-fetch after add/edit/delete
+    // so that calculated_balance stays current.
     useEffect(() => {
         const token = localStorage.getItem('access_token')
         axios.get(`${getApiBaseUrl()}/api/v1/accounts`, {
@@ -283,7 +284,7 @@ function TransactionsPage() {
         }).then(res => {
             setAccounts(res.data)
         }).catch(() => {})
-    }, [])
+    }, [refreshKey])
 
     // Categories effect: runs once on mount.
     // Fetching categories separately means filter dropdowns are populated
