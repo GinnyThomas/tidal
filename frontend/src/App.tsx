@@ -11,14 +11,18 @@ import AnnualView from './pages/AnnualView.tsx'
 import BudgetsPage from './pages/BudgetsPage.tsx'
 import PromotionsPage from './pages/PromotionsPage.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
+import CatchUpProvider from './components/CatchUpProvider.tsx'
 
 // App defines the route tree only.
 // The standalone <h1>Tidal</h1> header has been replaced by the Layout
 // component's navigation bar (rendered inside each protected page).
 // LoginPage and RegisterPage show the Tidal brand in their own card headers.
+// CatchUpProvider wraps the entire route tree so catch-up runs once per
+// session, not on every route change.
 
 function App() {
   return (
+    <CatchUpProvider>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
@@ -35,6 +39,7 @@ function App() {
       <Route path="/promotions"     element={<ProtectedRoute><PromotionsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </CatchUpProvider>
   )
 }
 

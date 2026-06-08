@@ -35,6 +35,7 @@ def catch_up_schedules(
         .filter(
             Schedule.user_id == user_id,
             Schedule.active.is_(True),
+            Schedule.auto_generate.is_(True),
             Schedule.deleted_at.is_(None),
         )
         .all()

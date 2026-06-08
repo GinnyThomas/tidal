@@ -28,7 +28,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -243,11 +243,16 @@ def create_schedule(
     return _build_sched_response(schedule, category)
 
 
+from pydantic import BaseModel as _BaseModel
+
+class _CatchUpRequest(_BaseModel):
+    today: Optional[date] = None
+
 @router.post("/catch-up")
 def schedule_catch_up(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    today: Optional[date] = Body(default=None, embed=True),
+    body: _CatchUpRequest = _CatchUpRequest(),
 ) -> dict:
     """
     Process all active schedules with overdue occurrences, creating pending
@@ -255,8 +260,9 @@ def schedule_catch_up(
     after periods of inactivity.
 
     Accepts an optional `today` override for testing; defaults to server date.
+    Accepts empty body, `{}`, or `{"today": "YYYY-MM-DD"}`.
     """
-    target = today or date.today()
+    target = body.today or date.today()
     try:
         created = catch_up_schedules(db, current_user.id, target)
         db.commit()
