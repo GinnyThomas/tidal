@@ -185,19 +185,22 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
     return 0
 
 
-def get_next_occurrence(schedule: Schedule) -> date | None:
+def get_next_occurrence(schedule: Schedule, reference_date: date | None = None) -> date | None:
     """
-    Returns the next future occurrence date for a schedule, or None if the
-    schedule has ended or the frequency is unknown.
+    Returns the next occurrence date for a schedule on or after reference_date,
+    or None if the schedule has ended or the frequency is unknown.
 
-    Used by the schedule router to populate next_occurrence in the response.
+    When reference_date is None, defaults to date.today() (the original
+    behaviour for the schedule router's next_occurrence field).
+    The catch-up service passes explicit dates to walk forward through
+    a schedule's timeline.
     """
-    today = date.today()
+    earliest = reference_date or date.today()
     freq = schedule.frequency
     interval = schedule.interval or 1
 
     # Schedule ended
-    if schedule.end_date is not None and schedule.end_date < today:
+    if schedule.end_date is not None and schedule.end_date < earliest:
         return None
 
     # --- Monthly-pattern frequencies (monthly, quarterly, annually) ---
@@ -214,10 +217,10 @@ def get_next_occurrence(schedule: Schedule) -> date | None:
         # Start from the schedule's start month and step forward
         y, m = schedule.start_date.year, schedule.start_date.month
 
-        # Jump close to today to avoid looping from ancient start dates.
+        # Jump close to earliest to avoid looping from ancient start dates.
         # Use 0-based month arithmetic to avoid off-by-one errors.
-        if date(y, m, 1) < today:
-            total_months_since = (today.year - y) * 12 + (today.month - m)
+        if date(y, m, 1) < earliest:
+            total_months_since = (earliest.year - y) * 12 + (earliest.month - m)
             steps_to_skip = total_months_since // step_months
             total = (y * 12 + (m - 1)) + steps_to_skip * step_months
             y, m = divmod(total, 12)
@@ -227,7 +230,7 @@ def get_next_occurrence(schedule: Schedule) -> date | None:
         for _ in range(24):
             clamped_day = min(fire_day, calendar.monthrange(y, m)[1])
             candidate = date(y, m, clamped_day)
-            if candidate >= today and candidate >= schedule.start_date:
+            if candidate >= earliest and candidate >= schedule.start_date:
                 if schedule.end_date is None or candidate <= schedule.end_date:
                     return candidate
             # Advance by step_months using 0-based arithmetic
@@ -246,10 +249,10 @@ def get_next_occurrence(schedule: Schedule) -> date | None:
         else:
             step = 1
 
-        if schedule.start_date >= today:
+        if schedule.start_date >= earliest:
             candidate = schedule.start_date
         else:
-            days_since_start = (today - schedule.start_date).days
+            days_since_start = (earliest - schedule.start_date).days
             steps_needed = (days_since_start + step - 1) // step
             candidate = schedule.start_date + timedelta(days=steps_needed * step)
 

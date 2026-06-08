@@ -86,6 +86,8 @@ function SchedulesPage() {
     const [includeInactive, setIncludeInactive] = useState(false)
     const editFormRef = useRef<HTMLDivElement>(null)
     const addNowFormRef = useRef<HTMLDivElement>(null)
+    // Client-side search across name, payee, note, category_name
+    const [scheduleSearch, setScheduleSearch] = useState('')
     // Incrementing refreshKey re-triggers the effect without changing any filter.
     const [refreshKey, setRefreshKey] = useState(0)
 
@@ -179,9 +181,20 @@ function SchedulesPage() {
     // group would just add a redundant header row.
     // Same pattern as BudgetsPage group sections.
     // Apply client-side category filter from URL (drill-down from plan views)
-    const displayedSchedules = filterCategoryId
-        ? schedules.filter(s => s.category_id === filterCategoryId)
+    const searchFiltered = scheduleSearch
+        ? schedules.filter(s => {
+            const q = scheduleSearch.toLowerCase()
+            return (
+                s.name.toLowerCase().includes(q) ||
+                (s.payee ?? '').toLowerCase().includes(q) ||
+                (s.note ?? '').toLowerCase().includes(q) ||
+                (s.category_name ?? '').toLowerCase().includes(q)
+            )
+        })
         : schedules
+    const displayedSchedules = filterCategoryId
+        ? searchFiltered.filter(s => s.category_id === filterCategoryId)
+        : searchFiltered
     // Find category name for the filter badge
     const filterCategoryName = filterCategoryId
         ? displayedSchedules.find(s => s.category_id === filterCategoryId)?.category_name ?? filterCategoryId
@@ -350,6 +363,29 @@ function SchedulesPage() {
                     </div>
                 )}
 
+                {/* Search */}
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={scheduleSearch}
+                            onChange={(e) => setScheduleSearch(e.target.value)}
+                            placeholder="Search schedules..."
+                            className="input-base w-64 pr-8"
+                            aria-label="Search schedules"
+                        />
+                        {scheduleSearch && (
+                            <button
+                                onClick={() => setScheduleSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer text-sm leading-none"
+                                aria-label="Clear schedule search"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Schedule list / empty state */}
                 {/* Category filter badge — shown when drill-down from plan view */}
                 {filterCategoryId && (
@@ -376,7 +412,7 @@ function SchedulesPage() {
                     <div className="text-center py-20">
                         <p aria-hidden="true" className="text-5xl mb-4">🔁</p>
                         <p className="text-slate-400 text-lg">
-                            No schedules yet. Add one to get started.
+                            {scheduleSearch ? 'No matching schedules.' : 'No schedules yet. Add one to get started.'}
                         </p>
                     </div>
                 ) : (

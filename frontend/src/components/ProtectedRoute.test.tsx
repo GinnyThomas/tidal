@@ -5,12 +5,10 @@ import ProtectedRoute from './ProtectedRoute'
 
 describe('ProtectedRoute', () => {
     beforeEach(() => {
-        localStorage.clear()  // start each test with empty localStorage
+        localStorage.clear()
     })
 
     it('redirects to login when no token is present', () => {
-        // No localStorage.setItem here — token is absent
-
         render(
             <MemoryRouter initialEntries={['/dashboard']}>
                 <Routes>
@@ -31,8 +29,8 @@ describe('ProtectedRoute', () => {
         expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
     })
 
-    it('redirects to protected content when a valid token is present', async () => {
-        localStorage.setItem( 'access_token', 'fake-jwt-token')
+    it('renders protected content when a valid token is present', async () => {
+        localStorage.setItem('access_token', 'fake-jwt-token')
 
         render(
             <MemoryRouter initialEntries={['/dashboard']}>

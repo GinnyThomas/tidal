@@ -514,4 +514,82 @@ describe('SchedulesPage', () => {
         // Filter badge visible
         expect(screen.getByText(/filtered by/i)).toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Schedule search
+    // =========================================================================
+
+    it('typing in the search field filters the schedule list', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeSchedule({ id: 'sch-1', name: 'Netflix', category_name: 'Bills' }),
+                makeSchedule({ id: 'sch-2', name: 'Gym Membership', category_name: 'Health' }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+        expect(screen.getByText('Gym Membership')).toBeInTheDocument()
+
+        await userEvent.type(screen.getByPlaceholderText(/search schedules/i), 'net')
+
+        expect(screen.getByText('Netflix')).toBeInTheDocument()
+        expect(screen.queryByText('Gym Membership')).not.toBeInTheDocument()
+    })
+
+    it('search matches category name', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeSchedule({ id: 'sch-1', name: 'Netflix', category_name: 'Entertainment' }),
+                makeSchedule({ id: 'sch-2', name: 'Water Bill', category_name: 'Utilities' }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+
+        await userEvent.type(screen.getByPlaceholderText(/search schedules/i), 'entertain')
+
+        expect(screen.getByText('Netflix')).toBeInTheDocument()
+        expect(screen.queryByText('Water Bill')).not.toBeInTheDocument()
+    })
+
+    it('clearing the search restores the full list', async () => {
+        mockFetch(
+            [makeAccount()],
+            [
+                makeSchedule({ id: 'sch-1', name: 'Netflix' }),
+                makeSchedule({ id: 'sch-2', name: 'Gym' }),
+            ],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+
+        await userEvent.type(screen.getByPlaceholderText(/search schedules/i), 'net')
+        expect(screen.queryByText('Gym')).not.toBeInTheDocument()
+
+        await userEvent.click(screen.getByLabelText(/clear schedule search/i))
+        expect(screen.getByText('Gym')).toBeInTheDocument()
+    })
+
+    it('shows "No matching schedules" when search has no results', async () => {
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ id: 'sch-1', name: 'Netflix' })],
+        )
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        await screen.findByText('Netflix')
+
+        await userEvent.type(screen.getByPlaceholderText(/search schedules/i), 'xyznonexistent')
+
+        expect(screen.getByText('No matching schedules.')).toBeInTheDocument()
+    })
 })

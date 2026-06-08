@@ -25,7 +25,8 @@
 #   are validated on create/update (prevents cross-user injection by guessing UUIDs).
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -41,6 +42,7 @@ from app.schemas.schedule import (
     ScheduleUpdate,
 )
 from app.services.auth import get_current_user
+from app.services.catchup import catch_up_schedules
 from app.services.plan import get_next_occurrence
 
 
@@ -239,6 +241,35 @@ def create_schedule(
     db.commit()
     db.refresh(schedule)
     return _build_sched_response(schedule, category)
+
+
+from pydantic import BaseModel as _BaseModel
+
+class _CatchUpRequest(_BaseModel):
+    today: Optional[date] = None
+
+@router.post("/catch-up")
+def schedule_catch_up(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    body: _CatchUpRequest = _CatchUpRequest(),
+) -> dict:
+    """
+    Process all active schedules with overdue occurrences, creating pending
+    transactions for each missed period. Called on app load to catch up
+    after periods of inactivity.
+
+    Accepts an optional `today` override for testing; defaults to server date.
+    Accepts empty body, `{}`, or `{"today": "YYYY-MM-DD"}`.
+    """
+    target = body.today or date.today()
+    try:
+        created = catch_up_schedules(db, current_user.id, target)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"count": len(created), "created": [{"id": str(tx.id)} for tx in created]}
 
 
 @router.get(
