@@ -185,14 +185,15 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
     return 0
 
 
-def get_next_occurrence(schedule: Schedule) -> date | None:
+def get_next_occurrence(schedule: Schedule, reference_date: date | None = None) -> date | None:
     """
-    Returns the next future occurrence date for a schedule, or None if the
-    schedule has ended or the frequency is unknown.
+    Returns the next occurrence date for a schedule on or after reference_date,
+    or None if the schedule has ended or the frequency is unknown.
 
-    Used by the schedule router to populate next_occurrence in the response.
+    Used by the schedule router to populate next_occurrence in the response,
+    and by the catch-up service to find the next due date.
     """
-    today = date.today()
+    today = reference_date or date.today()
     freq = schedule.frequency
     interval = schedule.interval or 1
 

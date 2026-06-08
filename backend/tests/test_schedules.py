@@ -460,3 +460,152 @@ def test_create_transfer_schedule(test_client) -> None:
     assert body["from_account_id"] == from_id
     assert body["to_account_id"] == to_id
     assert body["category_id"] is None
+
+
+# =============================================================================
+# Catch-up
+# =============================================================================
+
+
+def test_catchup_single_overdue_occurrence(test_client) -> None:
+    """Single schedule, one overdue occurrence: creates one transaction."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+
+    # Catch up to Jan 15 — one occurrence on Jan 1
+    resp = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-01-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["count"] == 1
+
+
+def test_catchup_three_overdue_periods(test_client) -> None:
+    """Single schedule, three overdue periods: creates three transactions."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+
+    # Catch up to March 15 — Jan 1, Feb 1, Mar 1 are all overdue
+    resp = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-03-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 3
+
+
+def test_catchup_skips_inactive_schedules(test_client) -> None:
+    """Only active=true schedules process; inactive are skipped."""
+    token, account_id, category_id = _setup(test_client)
+
+    # Create and immediately deactivate
+    sched_resp = test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+    sched_id = sched_resp.json()["id"]
+    test_client.patch(
+        f"/api/v1/schedules/{sched_id}/toggle-active",
+        headers=_auth_headers(token),
+    )
+
+    resp = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-03-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp.json()["count"] == 0
+
+
+def test_catchup_no_due_occurrences(test_client) -> None:
+    """Schedule whose next occurrence is in the future: no transactions created."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-06-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+
+    # Catch up to May 15 — schedule starts June, nothing due
+    resp = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-05-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp.json()["count"] == 0
+
+
+def test_catchup_creates_pending_transactions_with_schedule_id(test_client) -> None:
+    """Auto-created transactions have status=pending and schedule_id set."""
+    token, account_id, category_id = _setup(test_client)
+
+    sched_resp = test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+    sched_id = sched_resp.json()["id"]
+
+    test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-01-15"},
+        headers=_auth_headers(token),
+    )
+
+    # Check the created transaction
+    txs = test_client.get(
+        "/api/v1/transactions",
+        headers=_auth_headers(token),
+    ).json()["items"]
+    assert len(txs) == 1
+    assert txs[0]["status"] == "pending"
+    assert txs[0]["schedule_id"] == sched_id
+
+
+def test_catchup_idempotent_second_call(test_client) -> None:
+    """Second catch-up call on same day creates no duplicates."""
+    token, account_id, category_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly"},
+        headers=_auth_headers(token),
+    )
+
+    # First call
+    resp1 = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-01-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp1.json()["count"] == 1
+
+    # Second call — same date, should find nothing new
+    resp2 = test_client.post(
+        "/api/v1/schedules/catch-up",
+        json={"today": "2026-01-15"},
+        headers=_auth_headers(token),
+    )
+    assert resp2.json()["count"] == 0

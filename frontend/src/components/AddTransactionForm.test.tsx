@@ -73,7 +73,7 @@ describe('AddTransactionForm', () => {
         // Defaults
         expect(screen.getByLabelText(/^currency$/i)).toHaveValue('GBP')
         expect(screen.getByLabelText(/type/i)).toHaveValue('expense')
-        expect(screen.getByLabelText(/status/i)).toHaveValue('pending')
+        expect(screen.getByLabelText(/status/i)).toHaveValue('cleared')
 
         // Submit button
         expect(screen.getByRole('button', { name: /save transaction/i })).toBeInTheDocument()
@@ -162,7 +162,7 @@ describe('AddTransactionForm', () => {
                     account_id: 'acc-001',
                     category_id: 'cat-001',
                     transaction_type: 'expense',
-                    status: 'pending',
+                    status: 'cleared',
                     currency: 'GBP',
                 }),
                 expect.objectContaining({

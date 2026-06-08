@@ -89,7 +89,7 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
     const [payee, setPayee] = useState(editingTransaction?.payee ?? defaultValues?.payee ?? '')
     const [amount, setAmount] = useState(editingTransaction?.amount ?? defaultValues?.amount ?? '')
     const [currency, setCurrency] = useState(editingTransaction?.currency ?? defaultValues?.currency ?? 'GBP')
-    const [status, setStatus] = useState(editingTransaction?.status ?? 'pending')
+    const [status, setStatus] = useState(editingTransaction?.status ?? 'cleared')
     const [note, setNote] = useState(editingTransaction?.note ?? '')
     const [parentTransactionId, setParentTransactionId] = useState(
         editingTransaction?.parent_transaction_id ?? ''
