@@ -17,10 +17,12 @@
 //   Status:     "Status" column ("BILLED" or "PENDING") — not used in import but noted
 
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
+import { parseDate, parseAmount } from '../csvParsing'
 
 export const virginTemplate: CsvTemplate = {
   id: 'virgin',
   name: 'Virgin Money',
+  verified: true,
 
   matches(headers: string[]): boolean {
     // "billing amount" + "debit or credit" + "merchant" are unique to Virgin Money
@@ -31,31 +33,35 @@ export const virginTemplate: CsvTemplate = {
     )
   },
 
-  parse(row: Record<string, string>): ParsedRow | null {
-    const dateStr = row['Transaction Date']?.trim()
-    const billingStr = row['Billing Amount']?.trim()
-    const debitOrCredit = row['Debit or Credit']?.trim().toUpperCase()
-    const payee = row['Merchant']?.trim() || ''
+  parse(row: Record<string, string>): ParsedRow | { error: string } | null {
+    const dateStr = row['Transaction Date']?.trim() ?? ''
+    const billingStr = row['Billing Amount']?.trim() ?? ''
+    const debitOrCredit = row['Debit or Credit']?.trim().toUpperCase() ?? ''
 
-    if (!dateStr || !billingStr || !debitOrCredit) return null
+    // Blank row — silently skip
+    if (!dateStr && !billingStr) return null
 
-    // Date is already YYYY-MM-DD — validate it
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null
+    const dateResult = parseDate(dateStr, 'YYYY-MM-DD')
+    if ('error' in dateResult) return { error: dateResult.error }
 
-    const billing = parseFloat(billingStr)
-    if (isNaN(billing)) return null
+    const amountResult = parseAmount(billingStr, '.')
+    if ('error' in amountResult) return { error: amountResult.error }
+
+    if (!debitOrCredit) return { error: 'Missing Debit or Credit indicator' }
 
     // DBIT = money out (negative), CRDT = money in (positive)
+    const billing = parseFloat(amountResult.amount)
     const signed = debitOrCredit === 'CRDT' ? billing : -billing
-    const formattedAmount = signed.toFixed(2)
+    // Re-normalise after sign flip (handles -0 if billing was 0)
+    const amount = Object.is(signed, -0) ? '0.00' : signed.toFixed(2)
 
     // Reference Number may be empty for pending transactions
     const refNumber = row['Reference Number']?.trim() || undefined
 
     return {
-      date: dateStr,
-      amount: formattedAmount,
-      payee,
+      date: dateResult.date,
+      amount,
+      payee: row['Merchant']?.trim() || '',
       externalId: refNumber || undefined,
     }
   },

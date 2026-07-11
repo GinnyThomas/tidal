@@ -323,14 +323,16 @@ describe('ImportCsvPage', () => {
       SheetNames: ['Sheet1'],
       Sheets: { Sheet1: {} },
     } as any)
+    // Header row (index 2) must contain a keyword like "date" or "amount"
+    // so it passes the sanity check added in Fix 7.
     vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([
       // metadata rows with fewer cells
       ['Banco Santander'],
       ['IBAN', 'ES12345'],
-      // header row — 5 cells (most in sheet)
+      // header row — 5 cells (densest + contains "date" keyword)
       ['Transaction date', 'Value date', 'Description', 'Amount', 'Balance'],
       // data rows
-      ['07/07/2026', '07/07/2026', 'TESCO', '−31,95', '1.234,56'],
+      ['07/07/2026', '07/07/2026', 'TESCO', '\u221231,95', '1.234,56'],
     ] as any)
 
     renderPage()
@@ -347,6 +349,66 @@ describe('ImportCsvPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Detected:/)).toBeInTheDocument()
     }, { timeout: 3000 })
+  })
+
+  it('shows parse-failure warning when template returns errors for some rows', async () => {
+    // Override papaparse to return a row that the Monzo template will fail to parse
+    const Papa = await import('papaparse')
+    vi.mocked(Papa.default.parse).mockReturnValueOnce({
+      data: [
+        // Valid Monzo row
+        { 'Transaction ID': 'tx_001', 'Date': '01/04/2026', 'Amount': '-42.50', 'Name': 'Tesco',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+        // Invalid row — bad date
+        { 'Transaction ID': 'tx_002', 'Date': 'NOT-A-DATE', 'Amount': '-10.00', 'Name': 'Shop',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+      ],
+      meta: {
+        fields: ['Transaction ID', 'Date', 'Time', 'Type', 'Name', 'Emoji', 'Category',
+          'Amount', 'Currency', 'Local amount', 'Local currency', 'Notes and #tags',
+          'Address', 'Receipt', 'Description', 'Category split', 'Money Out', 'Money In'],
+      },
+      errors: [],
+    } as any)
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not be parsed/i)).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('shows server-side skipped_rows on success screen', async () => {
+    mockedAxios.post = vi.fn().mockResolvedValue({
+      data: {
+        created: 0,
+        skipped_duplicates: 1,
+        skipped_rows: [{ row_index: 0, reason: 'Duplicate transaction (hash match)' }],
+      },
+    })
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByRole('button', { name: /Import \d+ transaction/i }), { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Duplicate transaction/i)).toBeInTheDocument()
+    })
   })
 
   it('saves mapping when user checks save box and submits mapping form', async () => {

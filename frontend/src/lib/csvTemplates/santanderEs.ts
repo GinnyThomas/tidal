@@ -27,36 +27,15 @@
 //   Balance:    "Balance" column — safely ignored
 
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
-import { parseDDMMYYYY } from './dateUtils'
+import { parseDate, parseAmount } from '../csvParsing'
 
 // Unicode MINUS SIGN (U+2212) — Santander uses this instead of ASCII hyphen-minus
 const UNICODE_MINUS = '\u2212'
 
-/**
- * Parse a Spanish-format decimal string to a JS number.
- * Handles: Unicode minus, period-thousands, comma-decimal.
- * e.g. "−1.000,00" → -1000.00
- *      "−31,95"    → -31.95
- *      "4.796,72"  → 4796.72
- */
-function parseSpanishAmount(raw: string): number | null {
-  if (!raw) return null
-  // Replace Unicode minus with ASCII minus
-  let s = raw.replace(UNICODE_MINUS, '-')
-  // Remove thousands separators. Santander ES uses period as thousands separator
-  // and comma as the decimal separator, so ALL periods in the string are thousands
-  // separators and can be stripped unconditionally before converting the decimal comma.
-  // (The regex /\.(?=\d{3})/g only removes the first separator on amounts ≥ 1,000,000.)
-  s = s.replace(/\./g, '')
-  // Replace comma decimal separator with period
-  s = s.replace(',', '.')
-  const n = parseFloat(s)
-  return isNaN(n) ? null : n
-}
-
 export const santanderEsTemplate: CsvTemplate = {
   id: 'santander_es',
   name: 'Santander España',
+  verified: true,
 
   matches(headers: string[]): boolean {
     // "transaction date" + "value date" + "description" are characteristic of
@@ -70,22 +49,26 @@ export const santanderEsTemplate: CsvTemplate = {
     )
   },
 
-  parse(row: Record<string, string>): ParsedRow | null {
-    const dateStr = row['Transaction date']?.trim()
-    const amountStr = row['Amount']?.trim()
+  parse(row: Record<string, string>): ParsedRow | { error: string } | null {
+    const dateStr = row['Transaction date']?.trim() ?? ''
+    const rawAmount = row['Amount']?.trim() ?? ''
     const payee = row['Description']?.trim() || ''
 
-    if (!dateStr || !amountStr) return null
+    // Blank row — silently skip
+    if (!dateStr && !rawAmount) return null
 
-    const date = parseDDMMYYYY(dateStr)
-    if (!date) return null
+    const dateResult = parseDate(dateStr, 'DD/MM/YYYY')
+    if ('error' in dateResult) return { error: dateResult.error }
 
-    const amount = parseSpanishAmount(amountStr)
-    if (amount === null) return null
+    // Bank-specific quirk: replace Unicode minus with ASCII minus before
+    // passing to the shared parser (which uses parseFloat internally).
+    const sanitisedAmount = rawAmount.replace(UNICODE_MINUS, '-')
+    const amountResult = parseAmount(sanitisedAmount, ',')
+    if ('error' in amountResult) return { error: amountResult.error }
 
     return {
-      date,
-      amount: amount.toFixed(2),
+      date: dateResult.date,
+      amount: amountResult.amount,
       payee,
     }
   },

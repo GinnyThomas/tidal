@@ -18,11 +18,12 @@
 //   Quoted commas: Yes ("Hoai Dang,Hoai Thu W Dang") — papaparse handles
 
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
-import { parseDDMMYYYY } from './dateUtils'
+import { parseDate, parseAmount } from '../csvParsing'
 
 export const monzoTemplate: CsvTemplate = {
   id: 'monzo',
   name: 'Monzo',
+  verified: true,
 
   matches(headers: string[]): boolean {
     // "transaction id" + "notes and #tags" are unique to Monzo
@@ -32,27 +33,26 @@ export const monzoTemplate: CsvTemplate = {
     )
   },
 
-  parse(row: Record<string, string>): ParsedRow | null {
-    const dateStr = row['Date']?.trim()
-    const amountStr = row['Amount']?.trim()
-    const payee = row['Name']?.trim() || ''
+  parse(row: Record<string, string>): ParsedRow | { error: string } | null {
+    const dateStr = row['Date']?.trim() ?? ''
+    const amountStr = row['Amount']?.trim() ?? ''
 
-    if (!dateStr || amountStr === undefined || amountStr === '') return null
+    // Blank row — silently skip
+    if (!dateStr && !amountStr) return null
 
-    const date = parseDDMMYYYY(dateStr)
-    if (!date) return null
+    const dateResult = parseDate(dateStr, 'DD/MM/YYYY')
+    if ('error' in dateResult) return { error: dateResult.error }
 
-    const amount = parseFloat(amountStr)
-    if (isNaN(amount)) return null
+    const amountResult = parseAmount(amountStr, '.')
+    if ('error' in amountResult) return { error: amountResult.error }
 
-    const formattedAmount = amount.toFixed(2)
     const notes = row['Notes and #tags']?.trim() || undefined
     const externalId = row['Transaction ID']?.trim() || undefined
 
     return {
-      date,
-      amount: formattedAmount,
-      payee,
+      date: dateResult.date,
+      amount: amountResult.amount,
+      payee: row['Name']?.trim() || '',
       notes: notes || undefined,
       externalId: externalId || undefined,
     }

@@ -549,3 +549,79 @@ def test_import_rejects_too_many_rows(test_client) -> None:
         headers=_auth(token),
     )
     assert r.status_code == 422
+
+
+def test_import_skipped_rows_populated_with_reasons(test_client) -> None:
+    """
+    skipped_rows in the response contains a reason string for each skipped row.
+    Verifies both external_id and hash-match skip reasons are populated.
+    """
+    token, account_id = _setup(test_client)
+
+    # First import to seed duplicates
+    seed = {
+        "account_id": account_id,
+        "transactions": [
+            {"date": "2026-01-15", "amount": "-42.50", "payee": "Tesco", "external_id": "EXT1"},
+            {"date": "2026-01-16", "amount": "-10.00", "payee": "Starbucks"},
+        ],
+    }
+    test_client.post("/api/v1/transactions/import", json=seed, headers=_auth(token))
+
+    # Second import with the same rows — both should be skipped with reasons
+    r = test_client.post("/api/v1/transactions/import", json=seed, headers=_auth(token))
+    assert r.status_code == 201
+    body = r.json()
+    assert body["skipped_duplicates"] == 2
+    assert len(body["skipped_rows"]) == 2
+
+    reasons = {s["reason"] for s in body["skipped_rows"]}
+    assert any("external_id" in reason or "EXT1" in reason for reason in reasons)
+    assert any("hash" in reason for reason in reasons)
+
+
+def test_import_positive_amount_classified_as_income_pending_refund_refactor(test_client) -> None:
+    """
+    CSV imports classify positive amounts as 'income'. This is a known limitation:
+    CSV exports have no refund signal, so imported refunds appear as income rather
+    than as refund-type transactions. This test pins the current behavior so that a
+    future refund refactor will update it intentionally (along with this test name).
+    See TODO(refunds) comment in routers/transactions.py.
+    """
+    token, account_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [{"date": "2026-01-15", "amount": "5.00", "payee": "Refund"}],
+        },
+        headers=_auth(token),
+    )
+
+    txns = test_client.get(
+        f"/api/v1/transactions?account_id={account_id}",
+        headers=_auth(token),
+    ).json()
+    # Currently "income" — will change to "refund" when the refund refactor lands
+    assert txns["items"][0]["transaction_type"] == "income"
+
+
+def test_import_signed_zero_hashes_same_as_positive_zero(test_client) -> None:
+    """
+    Backend: Decimal("-0.00") and Decimal("0.00") produce the same dedup hash.
+    This ensures that a zero-amount transaction created manually (amount=0) is
+    treated as a duplicate when imported as -0.00 (e.g. from a DBIT row with
+    billing=0 in Virgin Money).
+    """
+    from decimal import Decimal
+    from app.services.dedup import compute_dedup_hash
+    import uuid
+    from datetime import date
+
+    account_id = uuid.uuid4()
+    d = date(2026, 1, 15)
+
+    hash_pos = compute_dedup_hash(account_id, d, Decimal("0.00"), "Shop")
+    hash_neg = compute_dedup_hash(account_id, d, Decimal("-0.00"), "Shop")
+    assert hash_pos == hash_neg

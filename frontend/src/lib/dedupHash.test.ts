@@ -58,4 +58,12 @@ describe('computeDedupHash', () => {
     const h2 = await computeDedupHash('uuid-b', '2026-01-01', '-10.00', 'Shop')
     expect(h1).not.toBe(h2)
   })
+
+  it('normalises signed zero: -0 hashes the same as 0', async () => {
+    // Virgin Money can produce -0 when billing=0.00 and DBIT. The backend
+    // Python Decimal("-0.00") also needs normalisation. Both sides must agree.
+    const hPos = await computeDedupHash('uuid', '2026-01-01', '0.00', 'Shop')
+    const hNeg = await computeDedupHash('uuid', '2026-01-01', '-0.00', 'Shop')
+    expect(hPos).toBe(hNeg)
+  })
 })

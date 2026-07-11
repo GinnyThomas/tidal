@@ -11,11 +11,11 @@
 
 import { useState } from 'react'
 import type { ParsedRow } from '../lib/csvTemplates'
-import { parseDDMMYYYY } from '../lib/csvTemplates/dateUtils'
+import { parseDate, parseAmount } from '../lib/csvParsing'
+import type { DateFormat, DecimalSeparator } from '../lib/csvParsing'
 
 export type AmountMode = 'single' | 'debit_credit'
-export type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
-export type DecimalSeparator = '.' | ','
+export type { DateFormat, DecimalSeparator }
 
 export interface MappingConfig {
   dateColumn: string
@@ -37,48 +37,37 @@ type Props = {
   onSave: (config: MappingConfig, saveForAccount: boolean) => void
 }
 
+// Used for the live preview only. Converts errors to null (preview already shows
+// "Failed to parse" for null rows). The actual import path in ImportCsvPage uses
+// the same parseDate/parseAmount calls but collects errors to surface to the user.
 function parseWithConfig(
   row: Record<string, string>,
   config: MappingConfig,
 ): ParsedRow | null {
-  const dateRaw = row[config.dateColumn]?.trim()
-  if (!dateRaw) return null
-
-  let date: string | null = null
-  if (config.dateFormat === 'DD/MM/YYYY') {
-    date = parseDDMMYYYY(dateRaw)
-  } else if (config.dateFormat === 'MM/DD/YYYY') {
-    const match = dateRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-    if (match) date = `${match[3]}-${match[1]}-${match[2]}`
-  } else {
-    // YYYY-MM-DD
-    date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null
-  }
-  if (!date) return null
+  const dateRaw = row[config.dateColumn]?.trim() ?? ''
+  const dateResult = parseDate(dateRaw, config.dateFormat)
+  if ('error' in dateResult) return null
 
   const sep = config.decimalSeparator
-  function parseAmount(raw: string): number | null {
-    if (!raw) return null
-    let s = raw.trim()
-    if (sep === ',') {
-      s = s.replace(/\.(?=\d{3})/g, '').replace(',', '.')
-    } else {
-      s = s.replace(/,(?=\d{3})/g, '')
+
+  function resolveAmount(): string | null {
+    if (config.amountMode === 'single') {
+      const r = parseAmount(row[config.amountColumn] ?? '', sep)
+      return 'error' in r ? null : r.amount
     }
-    const n = parseFloat(s)
-    return isNaN(n) ? null : n
+    // debit_credit mode
+    const debitRaw = row[config.debitColumn] ?? ''
+    const creditRaw = row[config.creditColumn] ?? ''
+    const debitResult = debitRaw ? parseAmount(debitRaw, sep) : null
+    const creditResult = creditRaw ? parseAmount(creditRaw, sep) : null
+    const debit = debitResult && !('error' in debitResult) ? parseFloat(debitResult.amount) : null
+    const credit = creditResult && !('error' in creditResult) ? parseFloat(creditResult.amount) : null
+    if (debit !== null && debit !== 0) return (-Math.abs(debit)).toFixed(2)
+    if (credit !== null && credit !== 0) return Math.abs(credit).toFixed(2)
+    return '0.00'
   }
 
-  let amount: number | null = null
-  if (config.amountMode === 'single') {
-    amount = parseAmount(row[config.amountColumn] ?? '')
-  } else {
-    const debit = parseAmount(row[config.debitColumn] ?? '')
-    const credit = parseAmount(row[config.creditColumn] ?? '')
-    if (debit !== null && debit !== 0) amount = -Math.abs(debit)
-    else if (credit !== null && credit !== 0) amount = Math.abs(credit)
-    else amount = 0
-  }
+  const amount = resolveAmount()
   if (amount === null) return null
 
   const payee = row[config.payeeColumn]?.trim() || ''
@@ -86,8 +75,8 @@ function parseWithConfig(
   const externalId = config.externalIdColumn ? row[config.externalIdColumn]?.trim() : undefined
 
   return {
-    date,
-    amount: amount.toFixed(2),
+    date: dateResult.date,
+    amount,
     payee,
     notes: notes || undefined,
     externalId: externalId || undefined,

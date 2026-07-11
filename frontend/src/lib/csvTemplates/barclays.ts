@@ -1,10 +1,11 @@
 // lib/csvTemplates/barclays.ts
 //
-// TODO: No sample file was provided for Barclays UK. This is a stub template
-// based on the standard Barclays current account CSV export format documented
-// publicly. Verify against a real export before relying on it.
+// Unverified — awaiting a real Barclays export sample.
+// Excluded from auto-detection (verified: false) until a sample is provided
+// and this flag is flipped. A false-positive auto-match is worse than falling
+// through to manual mapping and silently misparsing a real file.
 //
-// Expected Barclays UK CSV headers (standard format):
+// Expected Barclays UK CSV headers (standard format, from public docs):
 //   Number, Date, Account, Amount, Subcategory, Memo
 //
 // Key format details (assumed from Barclays documentation):
@@ -16,18 +17,19 @@
 //   External ID: None (no bank-provided ID in standard Barclays CSV)
 //   Subcategory: Barclays category label — ignored (Tidal uses its own categories)
 //
-// If the real export has different headers, update the matches() predicate.
+// TODO: Verify all of the above against a real Barclays export, then set verified: true.
 
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
-import { parseDDMMYYYY } from './dateUtils'
+import { parseDate, parseAmount } from '../csvParsing'
 
 export const barclaysTemplate: CsvTemplate = {
   id: 'barclays',
   name: 'Barclays UK',
+  verified: false, // Unverified stub — excluded from auto-detection
 
   matches(headers: string[]): boolean {
     // "subcategory" + "memo" + "number" are distinctive to the Barclays format.
-    // TODO: Verify against a real Barclays export — this is a stub.
+    // TODO: Verify against a real Barclays export.
     return (
       headers.includes('number') &&
       headers.includes('subcategory') &&
@@ -36,24 +38,24 @@ export const barclaysTemplate: CsvTemplate = {
     )
   },
 
-  parse(row: Record<string, string>): ParsedRow | null {
+  parse(row: Record<string, string>): ParsedRow | { error: string } | null {
     // TODO: Verify column names against a real Barclays export.
-    const dateStr = row['Date']?.trim()
-    const amountStr = row['Amount']?.trim()
-    const payee = row['Memo']?.trim() || ''
+    const dateStr = row['Date']?.trim() ?? ''
+    const amountStr = row['Amount']?.trim() ?? ''
 
-    if (!dateStr || amountStr === undefined || amountStr === '') return null
+    // Blank row — silently skip
+    if (!dateStr && !amountStr) return null
 
-    const date = parseDDMMYYYY(dateStr)
-    if (!date) return null
+    const dateResult = parseDate(dateStr, 'DD/MM/YYYY')
+    if ('error' in dateResult) return { error: dateResult.error }
 
-    const amount = parseFloat(amountStr)
-    if (isNaN(amount)) return null
+    const amountResult = parseAmount(amountStr, '.')
+    if ('error' in amountResult) return { error: amountResult.error }
 
     return {
-      date,
-      amount: amount.toFixed(2),
-      payee,
+      date: dateResult.date,
+      amount: amountResult.amount,
+      payee: row['Memo']?.trim() || '',
     }
   },
 }

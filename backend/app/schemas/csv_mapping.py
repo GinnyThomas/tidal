@@ -32,11 +32,19 @@ class TransactionImportRequest(BaseModel):
     transactions: list[ImportTransactionRow]
 
 
+class SkippedRow(BaseModel):
+    """A single row skipped during import, with the reason."""
+
+    row_index: int
+    reason: str
+
+
 class TransactionImportResponse(BaseModel):
     """Response body for POST /api/v1/transactions/import."""
 
     created: int
     skipped_duplicates: int
+    skipped_rows: list[SkippedRow] = []
 
 
 # =============================================================================

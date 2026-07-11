@@ -16,7 +16,9 @@ function normalizePayee(payee: string): string {
 function formatAmount(amount: string): string {
   const n = parseFloat(amount)
   if (isNaN(n)) return amount
-  return n.toFixed(2)
+  // Normalise -0 to 0 so the hash matches the backend (Python Decimal("-0.00")
+  // formats as "-0.00", which would otherwise produce a different hash).
+  return Object.is(n, -0) ? '0.00' : n.toFixed(2)
 }
 
 /**

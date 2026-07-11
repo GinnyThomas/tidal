@@ -389,12 +389,14 @@ def import_transactions(
 
     created = 0
     skipped = 0
+    skipped_rows: list[dict] = []
     new_transactions: list[Transaction] = []
 
-    for row in import_in.transactions:
+    for i, row in enumerate(import_in.transactions):
         # external_id dedup takes precedence
         if row.external_id and row.external_id in existing_external_ids:
             skipped += 1
+            skipped_rows.append({"row_index": i, "reason": f"Duplicate external_id: {row.external_id}"})
             continue
 
         h = compute_dedup_hash(
@@ -405,6 +407,7 @@ def import_transactions(
         )
         if h in existing_hashes:
             skipped += 1
+            skipped_rows.append({"row_index": i, "reason": "Duplicate transaction (hash match)"})
             continue
 
         tx = Transaction(
@@ -413,6 +416,8 @@ def import_transactions(
             date=row.date,
             amount=row.amount,
             currency=account.currency,
+            # TODO(refunds): CSV imports currently have no refund signal — all positive
+            # amounts become 'income'. Revisit as part of the refunds refactor.
             transaction_type="income" if row.amount > 0 else "expense",
             status="cleared",
             payee=row.payee,
@@ -439,7 +444,7 @@ def import_transactions(
                 detail="Import failed due to a database error. No transactions were created.",
             )
 
-    return {"created": created, "skipped_duplicates": skipped}
+    return {"created": created, "skipped_duplicates": skipped, "skipped_rows": skipped_rows}
 
 
 @router.post(

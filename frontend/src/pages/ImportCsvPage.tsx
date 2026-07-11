@@ -26,8 +26,9 @@ import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import CsvMappingForm from '../components/CsvMappingForm'
 import type { MappingConfig } from '../components/CsvMappingForm'
-import { detectTemplate, ALL_TEMPLATES } from '../lib/csvTemplates'
-import type { CsvTemplate, ParsedRow } from '../lib/csvTemplates'
+import { detectTemplate } from '../lib/csvTemplates'
+import type { CsvTemplate, ParsedRow, ParseFailedRow } from '../lib/csvTemplates'
+import { parseDate, parseAmount } from '../lib/csvParsing'
 import { computeDedupHash } from '../lib/dedupHash'
 import { getApiBaseUrl } from '../lib/api'
 
@@ -40,63 +41,60 @@ type ClassifiedRow = ParsedRow & {
 
 type Step = 'pick' | 'mapping' | 'review' | 'done'
 
-// Apply a saved MappingConfig (returned from /api/v1/csv-mappings) to raw rows
+// Apply a saved MappingConfig to raw rows, collecting both successes and failures.
+// Uses the shared parseDate/parseAmount from csvParsing.ts — the same functions
+// that CsvMappingForm uses for its live preview — so both paths are always in sync.
 function applyMappingConfig(
   rows: Record<string, string>[],
   config: MappingConfig,
-): ParsedRow[] {
-  return rows
-    .map(row => {
-      // Inline parse using the same logic as CsvMappingForm
-      const dateRaw = row[config.dateColumn]?.trim()
-      if (!dateRaw) return null
+): { parsed: ParsedRow[]; failed: ParseFailedRow[] } {
+  const parsed: ParsedRow[] = []
+  const failed: ParseFailedRow[] = []
+  const sep = config.decimalSeparator
 
-      let date: string | null = null
-      if (config.dateFormat === 'DD/MM/YYYY') {
-        const m = dateRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-        if (m) date = `${m[3]}-${m[2]}-${m[1]}`
-      } else if (config.dateFormat === 'MM/DD/YYYY') {
-        const m = dateRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-        if (m) date = `${m[3]}-${m[1]}-${m[2]}`
-      } else {
-        date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null
-      }
-      if (!date) return null
+  function resolveAmount(row: Record<string, string>): { amount: string } | { error: string } {
+    if (config.amountMode === 'single') {
+      return parseAmount(row[config.amountColumn] ?? '', sep)
+    }
+    // debit_credit mode
+    const debitRaw = row[config.debitColumn] ?? ''
+    const creditRaw = row[config.creditColumn] ?? ''
+    const debitResult = debitRaw ? parseAmount(debitRaw, sep) : null
+    const creditResult = creditRaw ? parseAmount(creditRaw, sep) : null
+    const debit = debitResult && !('error' in debitResult) ? parseFloat(debitResult.amount) : null
+    const credit = creditResult && !('error' in creditResult) ? parseFloat(creditResult.amount) : null
+    if (debit !== null && debit !== 0) return { amount: (-Math.abs(debit)).toFixed(2) }
+    if (credit !== null && credit !== 0) return { amount: Math.abs(credit).toFixed(2) }
+    return { amount: '0.00' }
+  }
 
-      const sep = config.decimalSeparator
-      function parseAmt(raw: string): number | null {
-        if (!raw) return null
-        let s = raw.trim()
-        if (sep === ',') {
-          s = s.replace(/\./g, '').replace(',', '.')
-        } else {
-          s = s.replace(/,(?=\d{3})/g, '')
-        }
-        const n = parseFloat(s)
-        return isNaN(n) ? null : n
-      }
+  rows.forEach((row, i) => {
+    const dateRaw = row[config.dateColumn]?.trim() ?? ''
+    // Treat truly blank rows as silent skips
+    if (!dateRaw && !(row[config.amountColumn] ?? '').trim()) return
 
-      let amount: number | null = null
-      if (config.amountMode === 'single') {
-        amount = parseAmt(row[config.amountColumn] ?? '')
-      } else {
-        const debit = parseAmt(row[config.debitColumn] ?? '')
-        const credit = parseAmt(row[config.creditColumn] ?? '')
-        if (debit !== null && debit !== 0) amount = -Math.abs(debit)
-        else if (credit !== null && credit !== 0) amount = Math.abs(credit)
-        else amount = 0
-      }
-      if (amount === null) return null
+    const dateResult = parseDate(dateRaw, config.dateFormat)
+    if ('error' in dateResult) {
+      failed.push({ rowNumber: i + 2, rawRow: row, reason: dateResult.error })
+      return
+    }
 
-      return {
-        date,
-        amount: amount.toFixed(2),
-        payee: row[config.payeeColumn]?.trim() || '',
-        notes: config.notesColumn ? row[config.notesColumn]?.trim() || undefined : undefined,
-        externalId: config.externalIdColumn ? row[config.externalIdColumn]?.trim() || undefined : undefined,
-      } as ParsedRow
+    const amountResult = resolveAmount(row)
+    if ('error' in amountResult) {
+      failed.push({ rowNumber: i + 2, rawRow: row, reason: amountResult.error })
+      return
+    }
+
+    parsed.push({
+      date: dateResult.date,
+      amount: amountResult.amount,
+      payee: row[config.payeeColumn]?.trim() || '',
+      notes: config.notesColumn ? row[config.notesColumn]?.trim() || undefined : undefined,
+      externalId: config.externalIdColumn ? row[config.externalIdColumn]?.trim() || undefined : undefined,
     })
-    .filter((r): r is ParsedRow => r !== null)
+  })
+
+  return { parsed, failed }
 }
 
 export default function ImportCsvPage() {
@@ -117,12 +115,18 @@ export default function ImportCsvPage() {
   const [accountsError, setAccountsError] = useState<string | null>(null)
 
   // Step 3 state
+  const [parseFailures, setParseFailures] = useState<ParseFailedRow[]>([])
+  const [failuresExpanded, setFailuresExpanded] = useState(false)
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([])
   const [dedupLoading, setDedupLoading] = useState(false)
   const [dedupError, setDedupError] = useState<string | null>(null)
 
   // Step 4 state
-  const [importResult, setImportResult] = useState<{ created: number; skipped_duplicates: number } | null>(null)
+  const [importResult, setImportResult] = useState<{
+    created: number
+    skipped_duplicates: number
+    skipped_rows: { row_index: number; reason: string }[]
+  } | null>(null)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
 
@@ -174,6 +178,22 @@ export default function ImportCsvPage() {
           setFileError('Could not find a header row in the XLSX file.')
           return
         }
+        // Sanity check: the candidate row should contain at least one word that
+        // looks like a column header (date/amount/description etc). This guards
+        // against accidentally picking a dense metadata row instead of the real headers.
+        const HEADER_KEYWORDS = [
+          'date', 'amount', 'payee', 'description', 'debit', 'credit',
+          'fecha', 'importe', 'concepto', 'transaction', 'memo', 'balance',
+        ]
+        const candidateRow = allRows[headerRowIndex]
+        const hasHeaderKeyword = candidateRow.some(c =>
+          c !== null &&
+          HEADER_KEYWORDS.some(kw => String(c).trim().toLowerCase().includes(kw)),
+        )
+        if (!hasHeaderKeyword) {
+          setFileError('Could not identify the header row in the XLSX file.')
+          return
+        }
         hdrs = allRows[headerRowIndex].map(c => String(c ?? '').trim()).filter(Boolean)
 
         rows = allRows
@@ -207,8 +227,21 @@ export default function ImportCsvPage() {
 
       if (tmpl) {
         setDetectedTemplate(tmpl)
-        const parsed = rows.map(r => tmpl.parse(r)).filter((r): r is ParsedRow => r !== null)
+        // Collect parse results: successes, errors, and silently-skipped nulls
+        const parseResults = rows.map((r, i) => ({ i, r, result: tmpl.parse(r) }))
+        const parsed = parseResults
+          .filter(({ result }) => result !== null && !('error' in result))
+          .map(({ result }) => result as ParsedRow)
+        const failed: ParseFailedRow[] = parseResults
+          .filter(({ result }) => result !== null && 'error' in result)
+          .map(({ i, r, result }) => ({
+            rowNumber: i + 2,
+            rawRow: r,
+            reason: (result as { error: string }).error,
+          }))
         setParsedRows(parsed)
+        setParseFailures(failed)
+        setFailuresExpanded(false)
         await runDedup(parsed, selectedAccountId)
         setStep('review')
       } else {
@@ -218,8 +251,10 @@ export default function ImportCsvPage() {
             `${getApiBaseUrl()}/api/v1/csv-mappings/${selectedAccountId}`,
           )
           const savedConfig: MappingConfig = mappingResp.data.mapping_json
-          const parsed = applyMappingConfig(rows, savedConfig)
+          const { parsed, failed } = applyMappingConfig(rows, savedConfig)
           setParsedRows(parsed)
+          setParseFailures(failed)
+          setFailuresExpanded(false)
           await runDedup(parsed, selectedAccountId)
           setStep('review')
         } catch {
@@ -273,43 +308,57 @@ export default function ImportCsvPage() {
       const batchHashes = new Set<string>()
       const batchExtIds = new Set<string>()
 
-      const classified: ClassifiedRow[] = await Promise.all(
-        rows.map(async row => {
-          // external_id takes precedence
-          if (row.externalId) {
-            if (existingExtIds.has(row.externalId) || batchExtIds.has(row.externalId)) {
-              batchExtIds.add(row.externalId)
-              return { ...row, status: 'definite_duplicate' as const, included: false }
-            }
+      // Process rows sequentially so within-batch fuzzy matching can inspect
+      // rows already classified in the current import (Fix 4).
+      const classified: ClassifiedRow[] = []
+
+      // Helper: fuzzy-match two rows (same date + amount, different normalised payee)
+      function isFuzzyDup(
+        candidate: { date: string; amount?: string; payee?: string | null },
+        row: ParsedRow,
+      ): boolean {
+        if (candidate.date !== row.date) return false
+        const candidateAmt = parseFloat(candidate.amount ?? '0').toFixed(2)
+        const rowAmt = parseFloat(row.amount).toFixed(2)
+        if (candidateAmt !== rowAmt) return false
+        const candidatePayee = (candidate.payee ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+        const rowPayee = row.payee.trim().toLowerCase().replace(/\s+/g, ' ')
+        return candidatePayee !== rowPayee
+      }
+
+      for (const row of rows) {
+        // external_id dedup takes precedence
+        if (row.externalId) {
+          if (existingExtIds.has(row.externalId) || batchExtIds.has(row.externalId)) {
             batchExtIds.add(row.externalId)
+            classified.push({ ...row, status: 'definite_duplicate', included: false })
+            continue
           }
+          batchExtIds.add(row.externalId)
+        }
 
-          const hash = await computeDedupHash(accountId, row.date, row.amount, row.payee)
+        const hash = await computeDedupHash(accountId, row.date, row.amount, row.payee)
 
-          if (existingHashes.has(hash) || batchHashes.has(hash)) {
-            batchHashes.add(hash)
-            return { ...row, status: 'definite_duplicate' as const, included: false }
-          }
+        if (existingHashes.has(hash) || batchHashes.has(hash)) {
           batchHashes.add(hash)
+          classified.push({ ...row, status: 'definite_duplicate', included: false })
+          continue
+        }
+        batchHashes.add(hash)
 
-          // Possible duplicate: same date + amount, different payee
-          const possibleDup = existing.some(t => {
-            if (t.date !== row.date) return false
-            const existAmt = parseFloat(t.amount ?? '0').toFixed(2)
-            const rowAmt = parseFloat(row.amount).toFixed(2)
-            if (existAmt !== rowAmt) return false
-            const existPayee = (t.payee ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-            const rowPayee = row.payee.trim().toLowerCase().replace(/\s+/g, ' ')
-            return existPayee !== rowPayee
-          })
+        // Possible duplicate: same date + amount, different payee —
+        // check against existing DB rows AND already-classified rows in this batch.
+        const possibleDup =
+          existing.some(t => isFuzzyDup(t, row)) ||
+          classified.some(c => c.status !== 'definite_duplicate' && isFuzzyDup(c, row))
 
-          if (possibleDup) {
-            return { ...row, status: 'possible_duplicate' as const, included: false }
-          }
+        if (possibleDup) {
+          classified.push({ ...row, status: 'possible_duplicate', included: false })
+          continue
+        }
 
-          return { ...row, status: 'new' as const, included: true }
-        }),
-      )
+        classified.push({ ...row, status: 'new', included: true })
+      }
 
       setClassifiedRows(classified)
     } catch {
@@ -325,8 +374,10 @@ export default function ImportCsvPage() {
   }
 
   function handleMappingSave(config: MappingConfig, saveForAccount: boolean) {
-    const parsed = applyMappingConfig(rawRows, config)
+    const { parsed, failed } = applyMappingConfig(rawRows, config)
     setParsedRows(parsed)
+    setParseFailures(failed)
+    setFailuresExpanded(false)
 
     if (saveForAccount && selectedAccountId) {
       axios
@@ -450,6 +501,44 @@ export default function ImportCsvPage() {
               </p>
             )}
 
+            {parseFailures.length > 0 && (
+              <div className="rounded-lg bg-warning/10 border border-warning/30 px-4 py-3 space-y-2">
+                <p className="text-sm text-warning font-medium">
+                  ⚠ {parseFailures.length} of {parseFailures.length + parsedRows.length} row{parseFailures.length !== 1 ? 's' : ''} could not be parsed and will not be imported.
+                </p>
+                <button
+                  className="text-xs text-ocean-400 underline"
+                  onClick={() => setFailuresExpanded(e => !e)}
+                >
+                  {failuresExpanded ? 'Hide details' : 'Show details'}
+                </button>
+                {failuresExpanded && (
+                  <div className="overflow-x-auto rounded border border-warning/20 max-h-48">
+                    <table className="w-full text-xs text-ocean-300 min-w-[500px]">
+                      <thead className="bg-ocean-700 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1 text-left w-16">Row #</th>
+                          <th className="px-2 py-1 text-left">Reason</th>
+                          <th className="px-2 py-1 text-left">Raw data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parseFailures.map((f, i) => (
+                          <tr key={i} className="border-t border-ocean-600">
+                            <td className="px-2 py-1">{f.rowNumber}</td>
+                            <td className="px-2 py-1 text-danger">{f.reason}</td>
+                            <td className="px-2 py-1 font-mono truncate max-w-60">
+                              {Object.values(f.rawRow).join(' | ')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {dedupLoading ? (
               <p className="text-sm text-ocean-300">Checking for duplicates…</p>
             ) : (
@@ -543,6 +632,18 @@ export default function ImportCsvPage() {
                 {importResult.skipped_duplicates > 0 && `, skipped ${importResult.skipped_duplicates} duplicate${importResult.skipped_duplicates !== 1 ? 's' : ''}`}.
               </p>
             </div>
+            {(importResult.skipped_rows ?? []).length > 0 && (
+              <div className="rounded border border-ocean-600 px-4 py-3">
+                <p className="text-xs text-ocean-400 font-medium mb-2">
+                  Server-side skips ({importResult.skipped_rows.length}):
+                </p>
+                <ul className="text-xs text-ocean-400 space-y-1 list-disc list-inside">
+                  {(importResult.skipped_rows ?? []).map((s, i) => (
+                    <li key={i}>Row {s.row_index + 1}: {s.reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <button
               className="btn-primary"
               onClick={() =>

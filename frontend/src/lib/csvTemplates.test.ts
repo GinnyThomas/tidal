@@ -48,11 +48,21 @@ describe('detectTemplate', () => {
     expect(template!.id).toBe('santander_es')
   })
 
-  it('returns Barclays template for Barclays headers', () => {
+  it('does NOT return Barclays template (unverified stub) even when headers match', () => {
     const headers = ['number', 'date', 'account', 'amount', 'subcategory', 'memo']
+    // Barclays is unverified — detectTemplate must skip it to avoid silent mis-parses
     const template = detectTemplate(headers)
-    expect(template).not.toBeNull()
-    expect(template!.id).toBe('barclays')
+    expect(template).toBeNull()
+  })
+
+  it('only considers verified templates in auto-detection', () => {
+    // ALL_TEMPLATES contains Barclays (unverified). Verify the array has at
+    // least one unverified entry, and that detectTemplate skips them.
+    const anyUnverified = ALL_TEMPLATES.some(t => !t.verified)
+    expect(anyUnverified).toBe(true) // sanity: we do have unverified templates
+    // detectTemplate with Barclays headers should return null (unverified skipped)
+    const result = detectTemplate(['number', 'subcategory', 'memo', 'amount', 'date'])
+    expect(result).toBeNull()
   })
 
   it('returns null for unknown headers', () => {
@@ -125,12 +135,19 @@ describe('monzoTemplate', () => {
     expect(parsed?.amount).toBe('6000.00')
   })
 
-  it('returns null for missing date', () => {
-    expect(monzoTemplate.parse({ ...row, 'Date': '' })).toBeNull()
+  it('returns error for missing date', () => {
+    const result = monzoTemplate.parse({ ...row, 'Date': '' })
+    expect(result).toMatchObject({ error: expect.any(String) })
   })
 
-  it('returns null for missing amount', () => {
-    expect(monzoTemplate.parse({ ...row, 'Amount': '' })).toBeNull()
+  it('returns error for missing amount', () => {
+    const result = monzoTemplate.parse({ ...row, 'Amount': '' })
+    expect(result).toMatchObject({ error: expect.any(String) })
+  })
+
+  it('returns null (silent skip) for a completely blank row', () => {
+    const blankRow = Object.fromEntries(Object.keys(row).map(k => [k, '']))
+    expect(monzoTemplate.parse(blankRow)).toBeNull()
   })
 })
 
@@ -189,12 +206,14 @@ describe('virginTemplate', () => {
     expect(parsed?.externalId).toBeUndefined()
   })
 
-  it('returns null for missing date', () => {
-    expect(virginTemplate.parse({ ...row, 'Transaction Date': '' })).toBeNull()
+  it('returns error for missing date', () => {
+    const result = virginTemplate.parse({ ...row, 'Transaction Date': '' })
+    expect(result).toMatchObject({ error: expect.any(String) })
   })
 
-  it('returns null for invalid amount', () => {
-    expect(virginTemplate.parse({ ...row, 'Billing Amount': 'N/A' })).toBeNull()
+  it('returns error for invalid amount', () => {
+    const result = virginTemplate.parse({ ...row, 'Billing Amount': 'N/A' })
+    expect(result).toMatchObject({ error: expect.any(String) })
   })
 })
 
@@ -243,12 +262,14 @@ describe('santanderEsTemplate', () => {
     expect(parsed?.payee).toBe('PAGO MOVIL EN SUPERMERCAT CON, SANT ADRIA DEES, TARJ. :*328714')
   })
 
-  it('returns null for missing date', () => {
-    expect(santanderEsTemplate.parse({ ...row, 'Transaction date': '' })).toBeNull()
+  it('returns error for missing date', () => {
+    const result = santanderEsTemplate.parse({ ...row, 'Transaction date': '' })
+    expect(result).toMatchObject({ error: expect.any(String) })
   })
 
-  it('returns null for missing amount', () => {
-    expect(santanderEsTemplate.parse({ ...row, 'Amount': '' })).toBeNull()
+  it('returns error for missing amount', () => {
+    const result = santanderEsTemplate.parse({ ...row, 'Amount': '' })
+    expect(result).toMatchObject({ error: expect.any(String) })
   })
 })
 
@@ -282,7 +303,20 @@ describe('barclaysTemplate', () => {
     expect(parsed?.payee).toBe('TESCO STORES')
   })
 
-  it('returns null for invalid date format', () => {
-    expect(barclaysTemplate.parse({ ...row, 'Date': '2026-01-15' })).toBeNull()
+  it('returns error for invalid date format', () => {
+    const result = barclaysTemplate.parse({ ...row, 'Date': '2026-01-15' })
+    expect(result).toMatchObject({ error: expect.any(String) })
+  })
+
+  it('is NOT returned by detectTemplate (verified: false)', () => {
+    const headers = ['number', 'date', 'account', 'amount', 'subcategory', 'memo']
+    expect(detectTemplate(headers)).toBeNull()
+  })
+
+  it('parse() still works correctly despite verified: false', () => {
+    // The template should still parse correctly when called directly — it's only
+    // excluded from auto-detection, not broken.
+    const parsed = barclaysTemplate.parse(row)
+    expect(parsed).toMatchObject({ date: '2026-01-15', amount: '-42.50', payee: 'TESCO STORES' })
   })
 })
