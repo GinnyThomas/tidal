@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import accounts, auth, budgets, categories, opening_balances, plan, promotions, reallocations, schedules, transactions
+from app.routers import accounts, auth, budgets, categories, csv_mappings, opening_balances, plan, promotions, reallocations, schedules, transactions
 
 
 # --- Create the FastAPI application ---
@@ -64,6 +64,7 @@ app.include_router(opening_balances.router)
 app.include_router(promotions.router)
 app.include_router(reallocations.router)
 app.include_router(plan.router)
+app.include_router(csv_mappings.router)
 
 
 # --- Health check endpoint ---

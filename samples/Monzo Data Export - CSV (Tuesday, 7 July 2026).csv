@@ -1,0 +1,104 @@
+Transaction ID,Date,Time,Type,Name,Emoji,Category,Amount,Currency,Local amount,Local currency,Notes and #tags,Address,Receipt,Description,Category split,Money Out,Money In
+tx_0000B4q3rrhVDhu2P1HVdj,01/04/2026,04:19:35,Direct Debit,David Lloyd Clubs,,Personal care,-349.00,GBP,-349.00,GBP,081223AAEEE5.26267,,,081223AAEEE5.26267,,-349.00,
+tx_0000B4q4P45QBtNpEdql3x,01/04/2026,04:27:02,Direct Debit,Liverpool Victoria,,Bills,-43.06,GBP,-43.06,GBP,10095191015J,,,10095191015J,,-43.06,
+tx_0000B4rLONK54rEsf22U4Z,01/04/2026,19:20:51,Monzo-to-Monzo,Grace Thomas,,General,15.00,GBP,15.00,GBP,ice cream,,,,,,15.00
+tx_0000B4wuXdQ748055kPwl0,04/04/2026,11:48:07,Bank transfer,Jay Thomas,,General,-150.00,GBP,-150.00,GBP,Jay Thomas,,,Jay Thomas,,-150.00,
+tx_0000B4xPzm8zJzBPUxtbMX,04/04/2026,17:40:42,Card payment,Bp Pulse,⚡️🚗️,Transport,0.00,GBP,0.00,GBP,Active card check,Breckland,,BP PULSE               MILTON KEYNES GBR,,0.00,
+tx_0000B4xQ1AeVgY8FN3FQ8H,04/04/2026,17:40:57,Card payment,Bp Pulse,⚡️🚗️,Transport,-12.33,GBP,-12.33,GBP,,Breckland,,BP PULSE               MILTON KEYNES GBR,,-12.33,
+tx_0000B4xQ1G5HUQxqo4ucF9,04/04/2026,17:40:58,Pot transfer,Savings - ISA Pot,,Savings,-0.67,GBP,-0.67,GBP,,,,Round up,,-0.67,
+tx_0000B4xQ2t5nwWOa4wvxa5,04/04/2026,17:41:16,Card payment,Bp Pulse,⚡️🚗️,Transport,-39.59,GBP,-39.59,GBP,,Breckland,,BP PULSE               MILTON KEYNES GBR,,-39.59,
+tx_0000B4xg2g0cBcrp5Sbhs9,04/04/2026,20:40:30,Bank transfer,Jay Thomas,,General,-13.00,GBP,-13.00,GBP,Passport photo,,,Passport photo,,-13.00,
+tx_0000B53PJVefP284Ba6X3J,07/04/2026,15:01:20,Bank transfer,Grace Thomas,,General,-15.00,GBP,-15.00,GBP,Nail deposit,,,Nail deposit,,-15.00,
+tx_0000B55JMd5O1JaaGIxuaa,08/04/2026,13:04:05,Faster payment,Amofah Mrs MD,,General,-50.00,GBP,-50.00,GBP,DepositGraceThomas,,,DepositGraceThomas,,-50.00,
+tx_0000B59QbfbkP1Wa6OeHcB,10/04/2026,12:44:05,Faster payment,THOMAS J+V,,Income,6000.00,GBP,6000.00,GBP,TAXES,,,TAXES,,,6000.00
+tx_0000B59Qg8KHZR45FeXURd,10/04/2026,12:44:54,Pot transfer,Taxes Pot,,Savings,-6000.00,GBP,-6000.00,GBP,,,,,,-6000.00,
+tx_0000B5MhgSDfpcIuZQbJhp,16/04/2026,22:26:41,Monzo-to-Monzo,Grace Thomas,,General,8.50,GBP,8.50,GBP,linen trousers,,,,,,8.50
+tx_0000B5S3GJinyPpd72bIDy,19/04/2026,12:22:01,Flex,,,Transfers,-923.82,GBP,-923.82,GBP,"Early payment towards Flights On Booking.com, Sainsbury’s and 50 more",,,Flex,,-923.82,
+tx_0000B5S3NHDBhhKxWCEXpK,19/04/2026,12:23:17,Bank transfer,Jon W Thomas,,General,-850.00,GBP,-850.00,GBP,Jon W Thomas,,,Jon W Thomas,,-850.00,
+tx_0000B5S4i6HJeIE1Azid85,19/04/2026,12:38:15,Pot transfer,Holiday Savings Pot,,Savings,6250.00,GBP,6250.00,GBP,,,,,,,6250.00
+tx_0000B5S4p27FWTkns406wW,19/04/2026,12:39:30,Faster payment,Jon And Virginia THOMAS,,General,-6200.00,GBP,-6200.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-6200.00,
+tx_0000B5VcZSM4B9baYG5V5t,21/04/2026,05:41:47,Faster payment,VIRGINIA THOMAS,,Transfers,4000.00,GBP,4000.00,GBP,78323177,,,78323177,,,4000.00
+tx_0000B5Wq0SzbPRWYEP6KIs,21/04/2026,19:47:03,Monzo-to-Monzo,Abbey Minett,,General,-9.00,GBP,-9.00,GBP,Ear tips,,,,,-9.00,
+tx_0000B5cWWMjZNjG0A7v7EP,24/04/2026,13:36:59,Bank transfer,Grace Thomas,,General,-6.00,GBP,-6.00,GBP,Grace Thomas,,,Grace Thomas,,-6.00,
+tx_0000B5cZcW8dd4NpisrbOb,24/04/2026,14:11:43,Pot transfer,House repairs Pot,,Savings,-4000.00,GBP,-4000.00,GBP,,,,,,-4000.00,
+tx_0000B5ds5dcgsB3NIIrH5G,25/04/2026,05:13:23,monzo_paid,,,Bills,-3.00,GBP,-3.00,GBP,,,,Extra,,-3.00,
+tx_0000B5hpMYe96dyCqed68q,27/04/2026,03:01:40,Direct Debit,EE,,Bills,-77.74,GBP,-77.74,GBP,Q34442241717384294,,,Q34442241717384294,,-77.74,
+tx_0000B5jdnuwXVOJGrvVKPk,28/04/2026,00:01:34,Bacs (Direct Credit),Capgemini UK,,Income,2751.24,GBP,2751.24,GBP,225477/0995703,,,225477/0995703,,,2751.24
+tx_0000B5jkyGk20wLKrlStwi,28/04/2026,01:21:53,Faster payment,Grace Thomas,,General,-172.00,GBP,-172.00,GBP,Lunches,,,Lunches,,-172.00,
+tx_0000B5jkyUo5iduQUPTLDY,28/04/2026,01:21:55,Faster payment,Grace Thomas,,General,-80.00,GBP,-80.00,GBP,Allowance,,,Allowance,,-80.00,
+tx_0000B5nuYpCR3N7wNg62pF,30/04/2026,01:28:10,Faster payment,Grace Thomas,,General,-24.00,GBP,-24.00,GBP,Buses,,,Buses,,-24.00,
+tx_0000B5oWFJpBHFfuyXd9XA,30/04/2026,08:30:26,Flex,,,Transfers,-176.42,GBP,-176.42,GBP,"Early payment towards Deliveroo, Cotton On and 7 more",,,Flex,,-176.42,
+tx_0000B5oWJVxK7DnfYGLpQJ,30/04/2026,08:31:12,Faster payment,Jon And Virginia THOMAS,,General,-1500.00,GBP,-1500.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-1500.00,
+tx_0000B5pCtUTbHzUad38iDS,30/04/2026,16:28:19,Bank transfer,Grace Thomas,,General,-25.00,GBP,-25.00,GBP,Tutor,,,Tutor,,-25.00,
+tx_0000B5pPxwNcmjQ4AUNcUz,30/04/2026,18:54:47,Bank transfer,Jay Thomas,,General,-300.00,GBP,-300.00,GBP,Train and rent,,,Train and rent,,-300.00,
+tx_0000B5qBqXdPBYDtWTOoKI,01/05/2026,03:51:17,Direct Debit,Liverpool Victoria,,Bills,-43.06,GBP,-43.06,GBP,10095191015J,,,10095191015J,,-43.06,
+tx_0000B5qF6I9SolxXoNrxFi,01/05/2026,04:27:45,Direct Debit,David Lloyd Clubs,,Personal care,-349.00,GBP,-349.00,GBP,081223AAEEE5.26357,,,081223AAEEE5.26357,,-349.00,
+tx_0000B61P5OesHFrJ99ZEkD,06/05/2026,13:41:27,Faster payment,THOMAS J+V,,Income,6000.00,GBP,6000.00,GBP,TAXES,,,TAXES,,,6000.00
+tx_0000B61fAZ2wgDjD7SJMAs,06/05/2026,16:41:31,Pot transfer,Taxes Pot,,Savings,-6000.00,GBP,-6000.00,GBP,,,,,,-6000.00,
+tx_0000B61vINKzhCLm127iT3,06/05/2026,19:42:22,Card payment,Meetup,,Entertainment,0.00,GBP,0.00,USD,Active card check (Flex),169 Madison Avenue Suite 11218,,MEETUP                 NEW YORK      USA,,0.00,
+tx_0000B69obiPgPs3JxGPGZm,10/05/2026,15:05:06,Card payment,www.amazon,,Shopping,0.00,GBP,0.00,EUR,Active card check (Flex),5 Rue Plaetis,,WWW.AMAZON             LUXEMBOURG    LUX,,0.00,
+tx_0000B6DrNUArdWZyhc0XGT,12/05/2026,13:55:00,Monzo-to-Monzo,Grace Thomas,,General,-5.00,GBP,-5.00,GBP,lib,,,,,-5.00,
+tx_0000B6Fi44pj7RMLIx64tW,13/05/2026,11:20:04,Card payment,Nespresso,☕️ ,Groceries,0.00,GBP,0.00,EUR,Active card check,,,Nespresso              Barcelona     ESP,,0.00,
+tx_0000B6Fl1KzUtABKMurWvS,13/05/2026,11:53:11,Card payment,Nespresso,☕️ ,Groceries,0.00,GBP,0.00,EUR,Active card check (Flex),,,Nespresso              Barcelona     ESP,,0.00,
+tx_0000B6GCUUmUGXAHvz5xgZ,13/05/2026,17:01:00,Card payment,Booking.com,🏨,Holidays,0.00,GBP,0.00,EUR,Active card check (Flex),Block 3 Wesrbrook Centre Milton Road,,Hotel at Booking.com   Cambridge     GBR,,0.00,
+tx_0000B6WqhP7pi3RNFqJwnq,21/05/2026,17:46:55,Monzo-to-Monzo,Jon Thomas,,General,22.00,GBP,22.00,GBP,,,,,,,22.00
+tx_0000B6WrPMRZ2dc9qEbJHX,21/05/2026,17:54:52,Pot transfer,Holiday Savings Pot,,Savings,250.00,GBP,250.00,GBP,,,,,,,250.00
+tx_0000B6WrVxG1589damFjfN,21/05/2026,17:56:03,Bank transfer,Jay Thomas,,General,-250.00,GBP,-250.00,GBP,Happy Birthday!,,,Happy Birthday!,,-250.00,
+tx_0000B6aboa4Ahz2r5GSNG9,23/05/2026,13:18:59,Faster payment,THOMAS J+V,,Income,600.00,GBP,600.00,GBP,FOR FLEX,,,FOR FLEX,,,600.00
+tx_0000B6e3ueJHDx4YcTx3DP,25/05/2026,05:17:57,monzo_paid,,,Bills,-3.00,GBP,-3.00,GBP,,,,Extra,,-3.00,
+tx_0000B6eIgdCq1usgXClRav,25/05/2026,08:03:29,Flex,,,Transfers,-614.00,GBP,-614.00,GBP,"Sainsbury’s, Vision Express and 4 more",,,Flex,,-614.00,
+tx_0000B6fwKbDsufdf4BWESJ,26/05/2026,03:02:26,Direct Debit,EE,,Bills,-77.60,GBP,-77.60,GBP,Q34442241725879073,,,Q34442241725879073,,-77.60,
+tx_0000B6jp80OI6dZjwKQukG,28/05/2026,00:00:34,Bacs (Direct Credit),Capgemini UK,,Income,3749.33,GBP,3749.33,GBP,225477/0995703,,,225477/0995703,,,3749.33
+tx_0000B6jxawUeTUvXspiYB1,28/05/2026,01:35:26,Faster payment,Grace Thomas,,General,-172.00,GBP,-172.00,GBP,Lunches,,,Lunches,,-172.00,
+tx_0000B6jxb7eyxQj6W3dSJ0,28/05/2026,01:35:28,Faster payment,Grace Thomas,,General,-80.00,GBP,-80.00,GBP,Allowance,,,Allowance,,-80.00,
+tx_0000B6kifcklzU3ZPqpoxe,28/05/2026,10:22:55,Bank transfer,Jay Thomas,,General,-15.00,GBP,-15.00,GBP,Coffee,,,Coffee,,-15.00,
+tx_0000B6ksS3Y2ZTSmnrgzbu,28/05/2026,12:12:31,Bank transfer,"Hoai Dang,Hoai Thu W Dang",,General,-28.00,GBP,-28.00,GBP,Ginny Thomas nails,,,Ginny Thomas nails,,-28.00,
+tx_0000B6l2CF5usDssq1PVTu,28/05/2026,14:01:42,Bank transfer,Jay Thomas,,General,-202.00,GBP,-202.00,GBP,Virgin media,,,Virgin media,,-202.00,
+tx_0000B6n0nnRoIjJEyl2OkT,29/05/2026,12:55:30,Monzo-to-Monzo,Grace Thomas,,General,50.00,GBP,50.00,GBP,may payment,,,,,,50.00
+tx_0000B6o6P7Qlf10koDfECT,30/05/2026,01:32:59,Faster payment,Grace Thomas,,General,-24.00,GBP,-24.00,GBP,Buses,,,Buses,,-24.00,
+tx_0000B6oiCdbaWP4a1mH6It,30/05/2026,08:36:31,Faster payment,Jon And Virginia THOMAS,,General,-2500.00,GBP,-2500.00,GBP,Rent,,,Rent,,-2500.00,
+tx_0000B6pXpdH4mUFJe7e1Ef,30/05/2026,18:15:01,Monzo-to-Monzo,Grace Thomas,,General,-25.00,GBP,-25.00,GBP,Study program,,,,,-25.00,
+tx_0000B6sUBZylte1YTk5tP5,01/06/2026,04:02:22,Direct Debit,Liverpool Victoria,,Bills,-43.06,GBP,-43.06,GBP,10095191015J,,,10095191015J,,-43.06,
+tx_0000B6unVJVD9Z1cc7JKdk,02/06/2026,07:04:11,Faster payment,TRANSFERGO LTD,,Income,7363.98,GBP,7363.98,GBP,Sent from MRS VIRG,,,Sent from MRS VIRG,,,7363.98
+tx_0000B703owCi3Vh9Q2ILJ4,04/06/2026,20:00:34,Faster payment,Jon And Virginia THOMAS,,General,-5000.00,GBP,-5000.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-5000.00,
+tx_0000B75hoTY1ZC6X6gztWj,07/06/2026,13:22:15,Monzo-to-Monzo,Grace Thomas,,General,-130.00,GBP,-130.00,GBP,1/2 Portugal boarding,,,,,-130.00,
+tx_0000B761RGgJEfLgGPLX6X,07/06/2026,17:02:09,Faster payment,Jon And Virginia THOMAS,,General,-2000.00,GBP,-2000.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-2000.00,
+tx_0000B762HvZoQv1bItco67,07/06/2026,17:11:40,Pot transfer,Holiday Savings Pot,,Savings,3500.00,GBP,3500.00,GBP,,,,,,,3500.00
+tx_0000B763N6lANjfF4Y9cig,07/06/2026,17:23:49,Bank transfer,Jon W Thomas,,General,-300.00,GBP,-300.00,GBP,Jon W Thomas,,,Jon W Thomas,,-300.00,
+tx_0000B7FVEmVKLzGhdkkp7p,12/06/2026,06:48:27,Monzo-to-Monzo,Jon Thomas,,General,6.00,GBP,6.00,GBP,,,,,,,6.00
+tx_0000B7GEFGaJ0mlUrzgjh3,12/06/2026,15:12:45,Faster payment,Jon And Virginia THOMAS,,General,-3500.00,GBP,-3500.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-3500.00,
+tx_0000B7GoXX3I7YzoYLOyJf,12/06/2026,21:59:26,Monzo-to-Monzo,Grace Thomas,,General,-3.00,GBP,-3.00,GBP,Storage June,,,,,-3.00,
+tx_0000B7GodQVxLBnGenJJFS,12/06/2026,22:00:30,Monzo-to-Monzo,Grace Thomas,,General,-30.00,GBP,-30.00,GBP,Food Sat-Mon,,,,,-30.00,
+tx_0000B7Hp6pF6fugybiH1pD,13/06/2026,09:40:32,Flex,Amazon,,Income,291.00,GBP,291.00,GBP,Refunded (Flex),38 Avenue John F Kennedy,,WWW.AMAZON* NH7MT8DL4\38 Avenue John F Kennedy\LUXEMBOURG\1855      DUBLUX,,,291.00
+tx_0000B7ISpa9DXcOz72TYrB,13/06/2026,17:05:36,Card payment,ATM,💵,Finances,0.00,GBP,0.00,GBP,Balance check,95-97 Fortuneswell,,E01553700000000        PORTLAND      GBR,,0.00,
+tx_0000B7ISqlR93OMaR7nH98,13/06/2026,17:05:50,Card payment,ATM,💵,Finances,-220.00,GBP,-220.00,GBP,,95-97 Fortuneswell,,E01553700000000        PORTLAND      GBR,,-220.00,
+tx_0000B7Ij4S7vF91TTDAOCU,13/06/2026,20:07:35,Monzo-to-Monzo,Grace Thomas,,General,-10.00,GBP,-10.00,GBP,Cash exchange,,,,,-10.00,
+tx_0000B7JhfqTJgbjFKz1MTU,14/06/2026,07:26:38,Monzo-to-Monzo,Grace Thomas,,General,-60.00,GBP,-60.00,GBP,Cash exchange,,,,,-60.00,
+tx_0000B7JtLXa7PRPthKnzpT,14/06/2026,09:37:26,Flex,Amazon,,Income,12.08,GBP,12.08,GBP,Refunded (Flex),38 Avenue John F Kennedy,,WWW.AMAZON* NH7MT8DL4\38 Avenue John F Kennedy\LUXEMBOURG\1855      DUBLUX,,,12.08
+tx_0000B7KIkYsGEocoU6zDEo,14/06/2026,14:22:05,Card payment,Nayax Motor Fuel LTD,🚗,Transport,-3.00,GBP,-3.00,GBP,,10 Bricket Road,,Nayax **Motor Fuel Ltd St Albans     GBR,,-3.00,
+tx_0000B7KIm5MevRNvMoYrjv,14/06/2026,14:22:21,Card payment,Nayax Motor Fuel LTD,🚗,Transport,-1.50,GBP,-1.50,GBP,,10 Bricket Road,,Nayax **Motor Fuel Ltd St Albans     GBR,,-1.50,
+tx_0000B7KImAfdCKho83uPHF,14/06/2026,14:22:22,Pot transfer,Savings - ISA Pot,,Savings,-0.50,GBP,-0.50,GBP,,,,Round up,,-0.50,
+tx_0000B7QS3a06L5VvfQDNv2,17/06/2026,13:34:38,Bank transfer,Jay Thomas,,General,-200.00,GBP,-200.00,GBP,Moving,,,Moving,,-200.00,
+tx_0000B7RDh9CS6BgfyVMSEm,17/06/2026,22:28:25,Monzo-to-Monzo,Jon Thomas,,General,200.00,GBP,200.00,GBP,,,,,,,200.00
+tx_0000B7SnpcdSKhn8v0BcDz,18/06/2026,16:48:02,Monzo-to-Monzo,Grace Thomas,,General,12.00,GBP,12.00,GBP,amazon,,,,,,12.00
+tx_0000B7WXtSZ0tpi2oN9LU2,20/06/2026,12:08:18,Monzo-to-Monzo,Grace Thomas,,General,-400.00,GBP,-400.00,GBP,Allowance & food,,,,,-400.00,
+tx_0000B7WYg9vkxxZXKYsD4d,20/06/2026,12:17:06,Monzo-to-Monzo,Grace Thomas,,General,42.00,GBP,42.00,GBP,amazon,,,,,,42.00
+tx_0000B7ecZlqjXWO5PeRuoz,24/06/2026,09:38:27,Card payment,Glr Auvergne,🍎,Groceries,-3.80,GBP,-4.40,EUR,,17b All Alan Turing,,GLR AUVERGNE           AUBIERE       FRA,,-3.80,
+tx_0000B7ecZr565YBRNUupVp,24/06/2026,09:38:28,Pot transfer,Savings - ISA Pot,,Savings,-0.20,GBP,-0.20,GBP,,,,Round up,,-0.20,
+tx_0000B7elRadGGD7SnSfQW2,24/06/2026,11:17:49,Card payment,Reveo,⚡️🚗️,Transport,0.00,GBP,0.00,EUR,Active card check (Flex),,,REVEO                  GUYANCOURT    FRA,,0.00,
+tx_0000B7fQ1cNJFs92H7YhCk,24/06/2026,18:52:32,Card payment,Cepsa Recargas Electri,⛽️,Transport,0.00,GBP,0.00,EUR,Active card check (Flex),C.  Ps Castellana 259 A To0,,CEPSA RECARGAS ELECTRI MADRID        ESP,,0.00,
+tx_0000B7gKcxU5KS9TBqy0Lj,25/06/2026,05:26:46,monzo_paid,,,Bills,-3.00,GBP,-3.00,GBP,,,,Extra,,-3.00,
+tx_0000B7h71gXgFe2OPpESSi,25/06/2026,14:29:02,Pot transfer,Holiday Savings Pot,,Savings,3533.88,GBP,3533.88,GBP,,,,,,,3533.88
+tx_0000B7h79yUbOdr6blakPB,25/06/2026,14:30:34,Flex,,,Transfers,-279.48,GBP,-279.48,GBP,"Caught up towards Sainsbury’s, Vision Express and 80 more",,,Flex,,-279.48,
+tx_0000B7h7UAPan5JAmynTcY,25/06/2026,14:34:13,Flex,,,Transfers,-2250.96,GBP,-2250.96,GBP,"Early payment towards Sainsbury’s, Vision Express and 132 more",,,Flex,,-2250.96,
+tx_0000B7iC8cqh4jpf6wlLpr,26/06/2026,03:01:04,Direct Debit,EE,,Bills,-81.22,GBP,-81.22,GBP,Q34442241734252390,,,Q34442241734252390,,-81.22,
+tx_0000B7iCG0eoxEVq7Eg874,26/06/2026,03:02:24,Flex,,,Income,12.00,GBP,12.00,GBP,Returned from Flex for Ionity,,,Flex,,,12.00
+tx_0000B7ia3P3nJOhrl1WIz6,26/06/2026,07:29:02,Faster payment,TRANSFERGO LTD,,Income,5891.34,GBP,5891.34,GBP,Sent from MRS VIRG,,,Sent from MRS VIRG,,,5891.34
+tx_0000B7iaez1uXZgfCObE70,26/06/2026,07:35:50,Faster payment,Jon And Virginia THOMAS,,General,-5000.00,GBP,-5000.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-5000.00,
+tx_0000B7jVtDisP5iFQEogR4,26/06/2026,18:17:05,Monzo-to-Monzo,Grace Thomas,,General,-100.00,GBP,-100.00,GBP,Loan,,,,,-100.00,
+tx_0000B7sIZP1R8Jo8M3MPeo,01/07/2026,00:00:15,Flex,,,Income,3.00,GBP,3.00,GBP,Returned from Flex for Sanef Autoroute,,,Flex,,,3.00
+tx_0000B7sIqOJF2KRqo0VziW,01/07/2026,00:03:19,Flex,,,Income,6.00,GBP,6.00,GBP,Returned from Flex for Sanef Autoroute,,,Flex,,,6.00
+tx_0000B7sg5p7vuT3LY9yaY6,01/07/2026,04:19:47,Direct Debit,Liverpool Victoria,,Bills,-43.06,GBP,-43.06,GBP,10095191015J,,,10095191015J,,-43.06,
+tx_0000B7t27OuCZMP7446lUo,01/07/2026,08:30:29,Flex,,,Income,21.00,GBP,21.00,GBP,Returned from Flex for Totalenergies Charging,,,Flex,,,21.00
+tx_0000B7tpOJ9e6FOKIXskbr,01/07/2026,17:42:43,Faster payment,TRANSFERGO LTD,,Income,6108.12,GBP,6108.12,GBP,Sent from MRS VIRG,,,Sent from MRS VIRG,,,6108.12
+tx_0000B7tqIUKjix2yJEqqcU,01/07/2026,17:52:52,Faster payment,Jon And Virginia THOMAS,,General,-5500.00,GBP,-5500.00,GBP,Jon And Virginia THOMAS,,,Jon And Virginia THOMAS,,-5500.00,
