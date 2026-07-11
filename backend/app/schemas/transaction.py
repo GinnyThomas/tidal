@@ -149,6 +149,8 @@ class TransactionResponse(BaseModel):
     category_icon: Optional[str]
     is_split: bool = False
     splits: list[TransactionSplitResponse] = Field(default_factory=list)
+    dedup_hash: Optional[str] = None
+    external_id: Optional[str] = None
 
     @field_serializer("amount")
     def serialize_amount(self, value: Decimal) -> str:

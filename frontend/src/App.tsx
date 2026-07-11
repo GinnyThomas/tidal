@@ -10,6 +10,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage.tsx'
 import AnnualView from './pages/AnnualView.tsx'
 import BudgetsPage from './pages/BudgetsPage.tsx'
 import PromotionsPage from './pages/PromotionsPage.tsx'
+import ImportCsvPage from './pages/ImportCsvPage.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
 import CatchUpProvider from './components/CatchUpProvider.tsx'
 
@@ -37,6 +38,7 @@ function App() {
       <Route path="/annual"          element={<ProtectedRoute><AnnualView /></ProtectedRoute>} />
       <Route path="/budgets"         element={<ProtectedRoute><BudgetsPage /></ProtectedRoute>} />
       <Route path="/promotions"     element={<ProtectedRoute><PromotionsPage /></ProtectedRoute>} />
+      <Route path="/import-csv"      element={<ProtectedRoute><ImportCsvPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     </CatchUpProvider>

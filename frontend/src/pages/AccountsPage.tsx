@@ -122,16 +122,24 @@ function AccountsPage() {
                 {/* Page header */}
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold text-slate-100">Accounts</h2>
-                    <button
-                        onClick={() => {
-                            setShowForm((prev) => !prev)
-                            // Opening the add form closes any open edit form
-                            setEditingAccount(null)
-                        }}
-                        className="btn-primary cursor-pointer"
-                    >
-                        Add Account
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => navigate('/import-csv')}
+                            className="btn-secondary cursor-pointer"
+                        >
+                            Import CSV
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowForm((prev) => !prev)
+                                // Opening the add form closes any open edit form
+                                setEditingAccount(null)
+                            }}
+                            className="btn-primary cursor-pointer"
+                        >
+                            Add Account
+                        </button>
+                    </div>
                 </div>
 
                 {/* Add form — shown when "Add Account" is toggled */}

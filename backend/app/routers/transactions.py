@@ -43,6 +43,8 @@ import math
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from app.services.dedup import compute_dedup_hash
+
 from collections import defaultdict
 from decimal import Decimal
 
@@ -68,6 +70,7 @@ from app.schemas.transaction import (
     TransactionUpdate,
     TransferCreate,
 )
+from app.schemas.csv_mapping import TransactionImportRequest, TransactionImportResponse
 from app.services.auth import get_current_user
 
 
@@ -218,6 +221,8 @@ def _build_tx_response(tx: Transaction, category: Category | None) -> dict:
         "category_icon": category.icon if category else None,
         "is_split": tx.is_split,
         "splits": _build_splits_response(tx) if tx.is_split else [],
+        "dedup_hash": tx.dedup_hash,
+        "external_id": tx.external_id,
     }
 
 
@@ -321,6 +326,127 @@ def create_transfer(
     return [_build_tx_response(debit, None), _build_tx_response(credit, None)]
 
 
+_MAX_IMPORT_ROWS = 5_000
+
+
+@router.post(
+    "/import",
+    response_model=TransactionImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_transactions(
+    import_in: TransactionImportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Bulk-imports transactions from a CSV export.
+
+    Server-side dedup (final safety net):
+      - If external_id is present and matches an existing transaction on the
+        same account, the row is skipped.
+      - Otherwise, if the computed dedup_hash matches an existing transaction
+        on the same account, the row is skipped.
+      - All accepted rows are created in a single DB transaction.
+
+    Currency is always taken from the account, ignoring anything in the request.
+    All imported transactions are status='cleared', category=None.
+    """
+    if len(import_in.transactions) > _MAX_IMPORT_ROWS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Too many rows: {len(import_in.transactions)} exceeds the limit of {_MAX_IMPORT_ROWS}.",
+        )
+
+    account = _get_account_or_404(import_in.account_id, current_user.id, db)
+
+    # Fetch existing external_ids and hashes for this account in one query each.
+    # Used for server-side dedup.
+    existing_external_ids: set[str] = set()
+    existing_hashes: set[str] = set()
+
+    ext_rows = (
+        db.query(Transaction.external_id)
+        .filter(
+            Transaction.account_id == import_in.account_id,
+            Transaction.external_id.isnot(None),
+            Transaction.deleted_at.is_(None),
+        )
+        .all()
+    )
+    existing_external_ids = {row[0] for row in ext_rows}
+
+    hash_rows = (
+        db.query(Transaction.dedup_hash)
+        .filter(
+            Transaction.account_id == import_in.account_id,
+            Transaction.dedup_hash.isnot(None),
+            Transaction.deleted_at.is_(None),
+        )
+        .all()
+    )
+    existing_hashes = {row[0] for row in hash_rows}
+
+    created = 0
+    skipped = 0
+    skipped_rows: list[dict] = []
+    new_transactions: list[Transaction] = []
+
+    for i, row in enumerate(import_in.transactions):
+        # external_id dedup takes precedence
+        if row.external_id and row.external_id in existing_external_ids:
+            skipped += 1
+            skipped_rows.append({"row_index": i, "reason": f"Duplicate external_id: {row.external_id}"})
+            continue
+
+        h = compute_dedup_hash(
+            account_id=import_in.account_id,
+            date_=row.date,
+            amount=row.amount,
+            payee=row.payee,
+        )
+        if h in existing_hashes:
+            skipped += 1
+            skipped_rows.append({"row_index": i, "reason": "Duplicate transaction (hash match)"})
+            continue
+
+        tx = Transaction(
+            user_id=current_user.id,
+            account_id=import_in.account_id,
+            date=row.date,
+            amount=row.amount,
+            currency=account.currency,
+            # TODO(refunds): CSV imports currently have no refund signal — all positive
+            # amounts become 'income'. Revisit as part of the refunds refactor.
+            transaction_type="income" if row.amount > 0 else "expense",
+            status="cleared",
+            payee=row.payee,
+            note=row.notes,
+            external_id=row.external_id,
+            dedup_hash=h,
+        )
+        new_transactions.append(tx)
+        # Track within-batch dedup: add both hash and external_id to the sets
+        # so duplicate rows within the same import file are also deduplicated.
+        existing_hashes.add(h)
+        if row.external_id:
+            existing_external_ids.add(row.external_id)
+        created += 1
+
+    if new_transactions:
+        db.add_all(new_transactions)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Import failed due to a database error. No transactions were created.",
+            )
+
+    return {"created": created, "skipped_duplicates": skipped, "skipped_rows": skipped_rows}
+
+
 @router.post(
     "",
     response_model=TransactionResponse,
@@ -395,6 +521,13 @@ def create_transaction(
             if s.promotion_id is not None:
                 _get_promotion_or_404(s.promotion_id, current_user.id, db)
 
+    dedup_hash = compute_dedup_hash(
+        account_id=transaction_in.account_id,
+        date_=transaction_in.date,
+        amount=transaction_in.amount,
+        payee=transaction_in.payee,
+    )
+
     transaction = Transaction(
         user_id=current_user.id,
         account_id=transaction_in.account_id,
@@ -410,6 +543,7 @@ def create_transaction(
         parent_transaction_id=transaction_in.parent_transaction_id,
         promotion_id=transaction_in.promotion_id,
         is_split=has_splits,
+        dedup_hash=dedup_hash,
     )
     db.add(transaction)
     db.flush()  # Get the transaction.id for split FKs

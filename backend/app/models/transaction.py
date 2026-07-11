@@ -155,6 +155,19 @@ class Transaction(Base):
         Boolean, nullable=False, default=False, server_default="false",
     )
 
+    # --- CSV import dedup ---
+    # SHA-256 hex string computed from account_id|date|amount|payee_normalized.
+    # Populated on import and manual create. NULL on pre-existing rows.
+    dedup_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True,
+    )
+
+    # Bank-provided transaction ID (e.g. Monzo "tx_0000B4q3...").
+    # Takes precedence over hash-based dedup when present.
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True,
+    )
+
     # --- Relationships ---
     splits: Mapped[list["TransactionSplit"]] = relationship(  # noqa: F821
         "TransactionSplit", back_populates="transaction",

@@ -23,9 +23,10 @@ from app.models.schedule import Schedule
 from app.models.transaction import Transaction
 from app.models.transaction_split import TransactionSplit
 from app.models.reallocation import Reallocation
+from app.models.csv_mapping import CsvMapping
 
 __all__ = [
     "User", "Account", "Budget", "BudgetOverride", "Category",
     "GroupOpeningBalance", "Promotion", "Schedule", "Transaction",
-    "TransactionSplit", "Reallocation",
+    "TransactionSplit", "Reallocation", "CsvMapping",
 ]
