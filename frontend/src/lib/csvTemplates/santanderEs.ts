@@ -29,9 +29,6 @@
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
 import { parseDate, parseAmount } from '../csvParsing'
 
-// Unicode MINUS SIGN (U+2212) — Santander uses this instead of ASCII hyphen-minus
-const UNICODE_MINUS = '\u2212'
-
 export const santanderEsTemplate: CsvTemplate = {
   id: 'santander_es',
   name: 'Santander España',
@@ -60,10 +57,9 @@ export const santanderEsTemplate: CsvTemplate = {
     const dateResult = parseDate(dateStr, 'DD/MM/YYYY')
     if ('error' in dateResult) return { error: dateResult.error }
 
-    // Bank-specific quirk: replace Unicode minus with ASCII minus before
-    // passing to the shared parser (which uses parseFloat internally).
-    const sanitisedAmount = rawAmount.replace(UNICODE_MINUS, '-')
-    const amountResult = parseAmount(sanitisedAmount, ',')
+    // The Unicode minus sign this bank uses is normalised inside the shared
+    // parseAmount() now, so no bank-specific pre-processing is needed here.
+    const amountResult = parseAmount(rawAmount, ',')
     if ('error' in amountResult) return { error: amountResult.error }
 
     return {

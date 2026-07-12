@@ -120,6 +120,10 @@ export default function ImportCsvPage() {
 
   // Step 3 state
   const [parseFailures, setParseFailures] = useState<ParseFailedRow[]>([])
+  // FieldMismatch failures from papaparse (see handleFileChange) — kept in
+  // state, not just a local var, because the manual-mapping step happens in
+  // a later render (handleMappingSave) and still needs to report them.
+  const [csvMismatchFailures, setCsvMismatchFailures] = useState<ParseFailedRow[]>([])
   const [failuresExpanded, setFailuresExpanded] = useState(false)
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([])
   const [dedupLoading, setDedupLoading] = useState(false)
@@ -156,6 +160,7 @@ export default function ImportCsvPage() {
       const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
       let rows: Record<string, string>[] = []
       let hdrs: string[] = []
+      let mismatchFailures: ParseFailedRow[] = []
 
       if (isXlsx) {
         // Parse XLSX with SheetJS
@@ -215,16 +220,43 @@ export default function ImportCsvPage() {
           header: true,
           skipEmptyLines: true,
         })
-        if (result.errors.length > 0) {
-          setFileError(`CSV parse error: ${result.errors[0].message}`)
+
+        // FieldMismatch (papaparse's TooManyFields/TooFewFields) means one
+        // specific row had a different column count than the header —
+        // usually an unescaped comma, or a bank export glitch (seen for
+        // real: Virgin Money duplicated a city name in one row, shifting
+        // every column after it by one). Using that row's positionally
+        // mapped values would silently produce wrong data — e.g. a
+        // reference number landing in the "debit or credit" column — rather
+        // than a visible error, so these specific rows are excluded here and
+        // reported as parse failures instead of blocking the whole file.
+        // Any other error (e.g. an undetectable delimiter) still aborts —
+        // the whole file is unreliable at that point, not just one row.
+        const otherErrors = result.errors.filter(err => err.type !== 'FieldMismatch')
+        if (otherErrors.length > 0) {
+          setFileError(`CSV parse error: ${otherErrors[0].message}`)
           return
         }
-        rows = result.data
+
+        const mismatchRowIndexes = new Set(
+          result.errors.filter(err => err.type === 'FieldMismatch').map(err => err.row),
+        )
+        mismatchFailures = result.data
+          .map((r, i) => ({ r, i }))
+          .filter(({ i }) => mismatchRowIndexes.has(i))
+          .map(({ r, i }) => ({
+            rowNumber: i + 2,
+            rawRow: r,
+            reason: 'Row has a different number of columns than the header — likely an unescaped comma or a bank export glitch. Columns after the mismatch may be shifted, so this row was skipped; add it manually if needed.',
+          }))
+
+        rows = result.data.filter((_, i) => !mismatchRowIndexes.has(i))
         hdrs = result.meta.fields ?? []
       }
 
       setRawRows(rows)
       setHeaders(hdrs)
+      setCsvMismatchFailures(mismatchFailures)
 
       // Try to detect a template from the headers
       const tmpl = detectTemplate(hdrs)
@@ -244,7 +276,7 @@ export default function ImportCsvPage() {
             reason: (result as { error: string }).error,
           }))
         setParsedRows(parsed)
-        setParseFailures(failed)
+        setParseFailures([...mismatchFailures, ...failed])
         setFailuresExpanded(false)
         await runDedup(parsed, selectedAccountId)
         setStep('review')
@@ -258,7 +290,7 @@ export default function ImportCsvPage() {
           const savedConfig: MappingConfig = mappingResp.data.mapping_json
           const { parsed, failed } = applyMappingConfig(rows, savedConfig)
           setParsedRows(parsed)
-          setParseFailures(failed)
+          setParseFailures([...mismatchFailures, ...failed])
           setFailuresExpanded(false)
           await runDedup(parsed, selectedAccountId)
           setStep('review')
@@ -382,7 +414,7 @@ export default function ImportCsvPage() {
   function handleMappingSave(config: MappingConfig, saveForAccount: boolean) {
     const { parsed, failed } = applyMappingConfig(rawRows, config)
     setParsedRows(parsed)
-    setParseFailures(failed)
+    setParseFailures([...csvMismatchFailures, ...failed])
     setFailuresExpanded(false)
 
     if (saveForAccount && selectedAccountId) {

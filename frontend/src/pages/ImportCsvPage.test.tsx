@@ -480,6 +480,77 @@ describe('ImportCsvPage', () => {
     }, { timeout: 3000 })
   })
 
+  it('excludes a row with a field-count mismatch instead of blocking the whole import', async () => {
+    // Real-world case: a Virgin Money export had a duplicated city name in one
+    // row, shifting every column after it by one — papaparse reports this as
+    // a FieldMismatch error for that specific row (row index 1 = "Shop").
+    // The whole file (528 other valid rows) must still import.
+    const Papa = await import('papaparse')
+    vi.mocked(Papa.default.parse).mockReturnValueOnce({
+      data: [
+        { 'Transaction ID': 'tx_001', 'Date': '01/04/2026', 'Amount': '-42.50', 'Name': 'Tesco',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+        { 'Transaction ID': 'tx_002', 'Date': '02/04/2026', 'Amount': '-10.00', 'Name': 'Shop',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '',
+          __parsed_extra: ['extra-value'] },
+      ],
+      meta: {
+        fields: ['Transaction ID', 'Date', 'Time', 'Type', 'Name', 'Emoji', 'Category',
+          'Amount', 'Currency', 'Local amount', 'Local currency', 'Notes and #tags',
+          'Address', 'Receipt', 'Description', 'Category split', 'Money Out', 'Money In'],
+      },
+      errors: [
+        { type: 'FieldMismatch', code: 'TooManyFields', message: 'Too many fields: expected 18 fields but parsed 19', row: 1 },
+      ],
+    } as any)
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    // Not treated as a fatal file-level error
+    await waitFor(() => {
+      expect(screen.queryByText(/CSV parse error/i)).not.toBeInTheDocument()
+    })
+
+    // Reaches the review step with only the one unaffected row counted
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Import 1 transaction/i })).toBeInTheDocument()
+    }, { timeout: 3000 })
+
+    // The mismatched row is reported, not silently dropped
+    expect(screen.getByText(/could not be parsed/i)).toBeInTheDocument()
+  })
+
+  it('still blocks the whole import for a non-FieldMismatch parse error', async () => {
+    const Papa = await import('papaparse')
+    vi.mocked(Papa.default.parse).mockReturnValueOnce({
+      data: [],
+      meta: { fields: [] },
+      errors: [
+        { type: 'Delimiter', code: 'UndetectableDelimiter', message: 'Unable to auto-detect delimiting character; defaulted to comma.' },
+      ],
+    } as any)
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'garbage'
+    const file = new File([csvContent], 'bad.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/CSV parse error/i)).toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
   it('shows server-side skipped_rows on success screen', async () => {
     mockedAxios.post = vi.fn().mockResolvedValue({
       data: {

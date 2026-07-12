@@ -71,6 +71,13 @@ export function parseAmount(
   let s = raw.trim()
   if (!s) return { error: 'Empty amount' }
 
+  // Some banks (e.g. Santander España) use the Unicode MINUS SIGN (U+2212, "−")
+  // instead of ASCII hyphen-minus. parseFloat() doesn't recognise U+2212 at
+  // all, so every negative amount would fail to parse — normalise it here,
+  // in the shared parser, so this works for manual column mapping too, not
+  // just banks with a dedicated template.
+  s = s.replace(/−/g, '-')
+
   if (decimalSeparator === ',') {
     // Thousands sep = period → strip all periods unconditionally.
     // Decimal sep = comma → swap to period.
