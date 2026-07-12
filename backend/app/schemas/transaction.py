@@ -237,3 +237,18 @@ class TransferCreate(BaseModel):
     amount: Decimal = Field(...)
     currency: str = Field(default="GBP", max_length=3)
     note: Optional[str] = None
+
+
+class ConvertToTransferRequest(BaseModel):
+    """
+    Request body for POST /api/v1/transactions/{id}/convert-to-transfer.
+
+    Fixes a mis-imported CSV row (e.g. a bank transfer that was categorised
+    as a plain expense/income) without losing the row's history — the
+    existing transaction is mutated in place into one leg of the transfer,
+    keeping its id, dedup_hash, and external_id. Only other_account_id is
+    needed: direction (debit vs credit) is inferred from the transaction's
+    current type.
+    """
+
+    other_account_id: uuid.UUID

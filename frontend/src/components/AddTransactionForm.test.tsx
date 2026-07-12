@@ -8,7 +8,7 @@
 //   on type=refund, the correct POST is made on submit, the callback fires on
 //   success, and an error message appears on failure.
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
@@ -298,6 +298,116 @@ describe('AddTransactionForm', () => {
         expect(mockOnUpdated).toHaveBeenCalledTimes(1)
         // The create callback should NOT have fired
         expect(mockOnTransactionAdded).not.toHaveBeenCalled()
+    })
+
+    // =========================================================================
+    // Convert to transfer
+    // =========================================================================
+
+    it('shows a "convert to transfer" prompt in edit mode for expense/income', () => {
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                />
+            </MemoryRouter>
+        )
+        expect(screen.getByText(/actually a transfer/i)).toBeInTheDocument()
+    })
+
+    it('does not show the convert-to-transfer prompt in create mode', () => {
+        render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+        expect(screen.queryByText(/actually a transfer/i)).not.toBeInTheDocument()
+    })
+
+    it('does not show the convert-to-transfer prompt for split transactions', () => {
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={{ ...editingTransaction, is_split: true }}
+                />
+            </MemoryRouter>
+        )
+        expect(screen.queryByText(/actually a transfer/i)).not.toBeInTheDocument()
+    })
+
+    it('excludes the transaction\'s own account from the "other account" dropdown', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount(), makeAccount({ id: 'acc-002', name: 'Savings' })] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByText(/actually a transfer/i))
+        const select = screen.getByLabelText(/other account for transfer/i)
+        expect(within(select).queryByText('Current Account')).not.toBeInTheDocument()
+        expect(within(select).getByText('Savings')).toBeInTheDocument()
+    })
+
+    it('lets the user pick another account and convert the transaction to a transfer', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount(), makeAccount({ id: 'acc-002', name: 'Savings' })] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+        vi.mocked(axios.post).mockResolvedValueOnce({ data: [] })
+        const mockOnUpdated = vi.fn()
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                    onTransactionUpdated={mockOnUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByText(/actually a transfer/i))
+        await userEvent.selectOptions(screen.getByLabelText(/other account for transfer/i), 'acc-002')
+        await userEvent.click(screen.getByRole('button', { name: /convert to transfer/i }))
+
+        await waitFor(() => {
+            expect(vi.mocked(axios.post)).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/transactions/tx-edit-001/convert-to-transfer`,
+                { other_account_id: 'acc-002' },
+                expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } })
+            )
+        })
+        expect(mockOnUpdated).toHaveBeenCalledTimes(1)
+        expect(mockOnTransactionAdded).not.toHaveBeenCalled()
+    })
+
+    it('shows an error and does not call onTransactionUpdated when the convert request fails', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount(), makeAccount({ id: 'acc-002', name: 'Savings' })] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+        vi.mocked(axios.post).mockRejectedValueOnce(new Error('network error'))
+        const mockOnUpdated = vi.fn()
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    editingTransaction={editingTransaction}
+                    onTransactionUpdated={mockOnUpdated}
+                />
+            </MemoryRouter>
+        )
+
+        await userEvent.click(screen.getByText(/actually a transfer/i))
+        await userEvent.selectOptions(screen.getByLabelText(/other account for transfer/i), 'acc-002')
+        await userEvent.click(screen.getByRole('button', { name: /convert to transfer/i }))
+
+        expect(await screen.findByText(/could not convert/i)).toBeInTheDocument()
+        expect(mockOnUpdated).not.toHaveBeenCalled()
     })
 
     it('pre-selects the account when defaultAccountId is provided', async () => {
