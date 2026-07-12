@@ -111,6 +111,40 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
+    // Convert-to-transfer: fixes a mis-imported row (e.g. a bank transfer that
+    // a CSV import classified as a plain expense/income) without deleting and
+    // re-adding it. Only offered for non-split expense/income transactions —
+    // transfers and refunds already have a fixed "other side" and can't be
+    // converted. Gated on editingTransaction's ORIGINAL type, not the `transactionType`
+    // dropdown state, since the conversion call bypasses the rest of the form.
+    const canConvertToTransfer =
+        isEditMode &&
+        !editingTransaction!.is_split &&
+        (editingTransaction!.transaction_type === 'expense' || editingTransaction!.transaction_type === 'income')
+    const [showConvertToTransfer, setShowConvertToTransfer] = useState(false)
+    const [convertOtherAccountId, setConvertOtherAccountId] = useState('')
+    const [convertError, setConvertError] = useState<string | null>(null)
+    const [isConverting, setIsConverting] = useState(false)
+
+    const handleConvertToTransfer = async () => {
+        if (!editingTransaction || !convertOtherAccountId || isConverting) return
+        setIsConverting(true)
+        setConvertError(null)
+        const token = localStorage.getItem('access_token')
+        try {
+            await axios.post(
+                `${getApiBaseUrl()}/api/v1/transactions/${editingTransaction.id}/convert-to-transfer`,
+                { other_account_id: convertOtherAccountId },
+                { headers: { Authorization: `Bearer ${token}` } }
+            )
+            onTransactionUpdated?.()
+        } catch {
+            setConvertError('Could not convert to a transfer. Please try again.')
+        } finally {
+            setIsConverting(false)
+        }
+    }
+
     // Fetch accounts and categories to populate the dropdowns.
     // In edit mode, skip auto-selection — the pre-set values from editingTransaction are used.
     useEffect(() => {
@@ -218,6 +252,60 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             <h3 className="section-header mb-5">
                 {isEditMode ? 'Edit Transaction' : 'New Transaction'}
             </h3>
+
+            {canConvertToTransfer && (
+                <div className="mb-5 p-4 rounded-lg border border-sky-500/30 bg-sky-500/5">
+                    {!showConvertToTransfer ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowConvertToTransfer(true)}
+                            className="text-sm text-sky-400 hover:text-sky-300 cursor-pointer"
+                        >
+                            This is actually a transfer between my own accounts →
+                        </button>
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-300">
+                                Convert this {editingTransaction!.transaction_type} into a transfer.
+                                The other leg will be created on:
+                            </p>
+                            <select
+                                value={convertOtherAccountId}
+                                onChange={(e) => setConvertOtherAccountId(e.target.value)}
+                                className="input-base"
+                                aria-label="Other account for transfer"
+                            >
+                                <option value="">Select an account…</option>
+                                {accounts
+                                    .filter(a => a.id !== editingTransaction!.account_id)
+                                    .map(a => (
+                                        <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                            </select>
+                            {convertError && (
+                                <p className="text-coral-400 text-sm">{convertError}</p>
+                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleConvertToTransfer}
+                                    disabled={!convertOtherAccountId || isConverting}
+                                    className="btn-primary text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isConverting ? 'Converting…' : 'Convert to Transfer'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowConvertToTransfer(false); setConvertError(null) }}
+                                    className="btn-secondary text-sm cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>

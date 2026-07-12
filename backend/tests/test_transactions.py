@@ -360,6 +360,271 @@ def test_create_transfer_creates_two_linked_transactions(test_client) -> None:
 
 
 # =============================================================================
+# Convert to transfer
+# =============================================================================
+
+
+def test_convert_expense_to_transfer_links_two_legs(test_client) -> None:
+    """
+    POST /api/v1/transactions/{id}/convert-to-transfer on an expense mutates
+    it in place into the debit (from) leg of a transfer, and creates a new
+    credit (to) leg on the other account.
+
+    The original transaction keeps its id (and therefore its dedup_hash /
+    external_id, if any) — this is a conversion, not a delete-and-recreate.
+    """
+    token, account_id, category_id = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Savings")
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "amount": "50.00", "transaction_type": "expense",
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{expense['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+
+    types = {t["transaction_type"] for t in body}
+    assert types == {"transfer"}
+
+    debit_leg = next(t for t in body if t["id"] == expense["id"])
+    credit_leg = next(t for t in body if t["id"] != expense["id"])
+
+    # The original row is the debit (from) leg — unchanged account, no parent
+    assert debit_leg["account_id"] == account_id
+    assert debit_leg["parent_transaction_id"] is None
+    assert debit_leg["category_id"] is None
+    assert debit_leg["amount"] == "50.00"
+
+    # The new row is the credit (to) leg on the other account
+    assert credit_leg["account_id"] == other_account
+    assert credit_leg["parent_transaction_id"] == debit_leg["id"]
+    assert credit_leg["amount"] == "50.00"
+
+
+def test_convert_income_to_transfer_links_two_legs(test_client) -> None:
+    """
+    Converting an income transaction makes it the credit (to) leg, and
+    creates a new debit (from) leg on the other account.
+    """
+    token, account_id, category_id = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Checking")
+
+    income = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "amount": "75.00", "transaction_type": "income",
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{income['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    credit_leg = next(t for t in body if t["id"] == income["id"])
+    debit_leg = next(t for t in body if t["id"] != income["id"])
+
+    # The original row is the credit (to) leg — points at the new debit leg
+    assert credit_leg["account_id"] == account_id
+    assert credit_leg["parent_transaction_id"] == debit_leg["id"]
+    assert credit_leg["category_id"] is None
+
+    # The new row is the debit (from) leg on the other account
+    assert debit_leg["account_id"] == other_account
+    assert debit_leg["parent_transaction_id"] is None
+
+
+def test_convert_to_transfer_preserves_dedup_hash_and_external_id(test_client) -> None:
+    """
+    Converting a CSV-imported row must preserve its dedup_hash/external_id —
+    re-importing the same CSV file afterwards should still detect it as a
+    duplicate rather than creating an extra expense row.
+    """
+    token, account_id, _ = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Savings")
+
+    test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [{
+                "date": "2026-01-15", "amount": "-30.00", "payee": "Internal Transfer",
+                "external_id": "tx_abc123",
+            }],
+        },
+        headers=_auth_headers(token),
+    )
+    imported = test_client.get(
+        f"/api/v1/transactions?account_id={account_id}", headers=_auth_headers(token),
+    ).json()["items"][0]
+
+    response = test_client.post(
+        f"/api/v1/transactions/{imported['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200
+    debit_leg = next(t for t in response.json() if t["id"] == imported["id"])
+    assert debit_leg["dedup_hash"] == imported["dedup_hash"]
+    assert debit_leg["external_id"] == "tx_abc123"
+
+
+def test_convert_to_transfer_rejects_same_account(test_client) -> None:
+    """The other account must differ from the transaction's own account."""
+    token, account_id, category_id = _setup(test_client)
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "amount": "50.00", "transaction_type": "expense",
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{expense['id']}/convert-to-transfer",
+        json={"other_account_id": account_id},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_convert_to_transfer_rejects_transfer_type(test_client) -> None:
+    """A transaction that is already a transfer leg cannot be converted again."""
+    token, account_id, category_id = _setup(test_client)
+    account_to = _create_account(test_client, token, name="To Account")
+    account_other = _create_account(test_client, token, name="Other")
+
+    transfer = test_client.post(
+        "/api/v1/transactions/transfer",
+        json={
+            "from_account_id": account_id, "to_account_id": account_to,
+            "date": "2026-01-15", "amount": "200.00",
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{transfer[0]['id']}/convert-to-transfer",
+        json={"other_account_id": account_other},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_convert_to_transfer_rejects_refund_type(test_client) -> None:
+    """Refunds are linked to their original expense and cannot be converted."""
+    token, account_id, category_id = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Other")
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-10", "amount": "80.00", "transaction_type": "expense",
+        },
+        headers=_auth_headers(token),
+    ).json()
+    refund = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-10", "amount": "80.00", "transaction_type": "refund",
+            "parent_transaction_id": expense["id"],
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{refund['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_convert_to_transfer_rejects_split_transaction(test_client) -> None:
+    """Split transactions have no single category to clear and cannot be converted."""
+    token, account_id, category_id = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Other")
+
+    split_tx = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "date": "2026-01-15", "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": category_id, "amount": "60.00"},
+                {"category_id": category_id, "amount": "40.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{split_tx['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_convert_to_transfer_rejects_other_users_account(test_client) -> None:
+    """Cannot convert into a transfer targeting another user's account."""
+    token_a, account_a, category_a = _setup(test_client, "a3@example.com")
+    token_b = _register_and_login(test_client, "b3@example.com")
+    account_b = _create_account(test_client, token_b, name="B's Account")
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_a, "category_id": category_a,
+            "date": "2026-01-15", "amount": "50.00", "transaction_type": "expense",
+        },
+        headers=_auth_headers(token_a),
+    ).json()
+
+    response = test_client.post(
+        f"/api/v1/transactions/{expense['id']}/convert-to-transfer",
+        json={"other_account_id": account_b},
+        headers=_auth_headers(token_a),
+    )
+    assert response.status_code == 404
+
+
+def test_convert_to_transfer_returns_404_for_missing_transaction(test_client) -> None:
+    """Converting a nonexistent transaction returns 404."""
+    token, account_id, _ = _setup(test_client)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+
+    response = test_client.post(
+        f"/api/v1/transactions/{fake_id}/convert-to-transfer",
+        json={"other_account_id": account_id},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 404
+
+
+# =============================================================================
 # Refund
 # =============================================================================
 

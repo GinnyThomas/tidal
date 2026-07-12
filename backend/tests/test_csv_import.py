@@ -500,6 +500,44 @@ def test_import_zero_amount_row(test_client) -> None:
     assert txns["items"][0]["transaction_type"] == "expense"
 
 
+def test_import_stores_amount_as_positive_magnitude(test_client) -> None:
+    """
+    Bank CSV exports use a signed amount column (negative = debit, positive =
+    credit). The `amount` column must always store a positive magnitude —
+    direction is derived from transaction_type (and account_type for credit
+    cards), not from the sign of amount. See _calculate_balance() in
+    routers/accounts.py, which assumes amount is always non-negative.
+
+    Storing the raw signed value corrupts calculated_balance (an "expense"
+    with a negative amount cancels out instead of subtracting) and fails the
+    browser's `min="0"` validation when the user tries to edit the row.
+    """
+    token, account_id = _setup(test_client)
+
+    test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-42.50", "payee": "Tesco"},
+                {"date": "2026-01-16", "amount": "1200.00", "payee": "Employer"},
+            ],
+        },
+        headers=_auth(token),
+    )
+
+    txns = test_client.get(
+        f"/api/v1/transactions?account_id={account_id}",
+        headers=_auth(token),
+    ).json()["items"]
+
+    by_payee = {t["payee"]: t for t in txns}
+    assert by_payee["Tesco"]["amount"] == "42.50"
+    assert by_payee["Tesco"]["transaction_type"] == "expense"
+    assert by_payee["Employer"]["amount"] == "1200.00"
+    assert by_payee["Employer"]["transaction_type"] == "income"
+
+
 def test_import_rejects_other_users_account(test_client) -> None:
     """
     User B cannot import transactions into User A's account.

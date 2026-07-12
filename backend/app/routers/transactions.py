@@ -61,6 +61,7 @@ from app.models.transaction import Transaction
 from app.models.transaction_split import TransactionSplit
 from app.models.user import User
 from app.schemas.transaction import (
+    ConvertToTransferRequest,
     CurrencyAmount,
     PaginatedTransactions,
     TransactionCreate,
@@ -326,6 +327,112 @@ def create_transfer(
     return [_build_tx_response(debit, None), _build_tx_response(credit, None)]
 
 
+@router.post(
+    "/{transaction_id}/convert-to-transfer",
+    response_model=list[TransactionResponse],
+    status_code=status.HTTP_200_OK,
+)
+def convert_to_transfer(
+    transaction_id: uuid.UUID,
+    convert_in: ConvertToTransferRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """
+    Converts a mis-imported expense/income transaction into a transfer,
+    without losing its history.
+
+    Common case: a CSV import classifies a bank-to-bank transfer as a plain
+    expense or income (banks don't reliably flag internal transfers). Fixing
+    this by deleting the row and re-adding it via POST /transfer would lose
+    the row's dedup_hash and external_id — a later re-import of the same CSV
+    file would then create a duplicate. Instead, this endpoint mutates the
+    existing row in place into one leg of the transfer (keeping its id,
+    dedup_hash, and external_id) and creates exactly one new row for the
+    other leg.
+
+    Direction is inferred from the transaction's current type:
+      - expense → this row becomes the debit (from) leg; a new credit (to)
+        leg is created on other_account_id.
+      - income  → this row becomes the credit (to) leg; a new debit (from)
+        leg is created on other_account_id, and this row's
+        parent_transaction_id is set to point at it.
+
+    Rejects (422) transfers, refunds, and split transactions — none of these
+    have a single unambiguous "other side" to convert against.
+    """
+    transaction = _get_transaction_or_404(transaction_id, current_user.id, db)
+
+    if transaction.transaction_type not in ("expense", "income"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only expense or income transactions can be converted to a transfer.",
+        )
+    if transaction.is_split:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Split transactions cannot be converted to a transfer.",
+        )
+    if transaction.parent_transaction_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This transaction is already linked to another transaction.",
+        )
+
+    other_account = _get_account_or_404(convert_in.other_account_id, current_user.id, db)
+    if other_account.id == transaction.account_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The other account must be different from the transaction's account.",
+        )
+
+    # Capture direction before mutating transaction_type below.
+    original_type = transaction.transaction_type
+
+    transaction.transaction_type = "transfer"
+    transaction.category_id = None
+    transaction.status = "cleared"
+
+    if original_type == "expense":
+        # transaction becomes the debit (from) leg — parent_transaction_id
+        # stays None, exactly like the parent leg in create_transfer().
+        other_leg = Transaction(
+            user_id=current_user.id,
+            account_id=other_account.id,
+            date=transaction.date,
+            amount=transaction.amount,
+            currency=transaction.currency,
+            transaction_type="transfer",
+            status="cleared",
+            note=transaction.note,
+            parent_transaction_id=transaction.id,
+        )
+    else:
+        # income: transaction becomes the credit (to) leg, which must point
+        # at the new debit leg. Generate that id up front (same trick as
+        # create_transfer's debit_id) since parent_transaction_id has to be
+        # set on `transaction` before the new leg gets a DB-assigned id.
+        other_leg_id = uuid.uuid4()
+        other_leg = Transaction(
+            id=other_leg_id,
+            user_id=current_user.id,
+            account_id=other_account.id,
+            date=transaction.date,
+            amount=transaction.amount,
+            currency=transaction.currency,
+            transaction_type="transfer",
+            status="cleared",
+            note=transaction.note,
+        )
+        transaction.parent_transaction_id = other_leg_id
+
+    db.add(other_leg)
+    db.commit()
+    db.refresh(transaction)
+    db.refresh(other_leg)
+    return [_build_tx_response(transaction, None), _build_tx_response(other_leg, None)]
+
+
 _MAX_IMPORT_ROWS = 5_000
 
 
@@ -399,10 +506,19 @@ def import_transactions(
             skipped_rows.append({"row_index": i, "reason": f"Duplicate external_id: {row.external_id}"})
             continue
 
+        # Bank CSV exports use a signed amount column (negative = debit,
+        # positive = credit). `amount` must always be a positive magnitude —
+        # direction is derived from transaction_type (and account_type for
+        # credit cards) elsewhere, e.g. _calculate_balance() in
+        # routers/accounts.py. Hash on the same magnitude used for storage so
+        # this matches the dedup hash computed for manually-entered
+        # transactions (whose amount is also always a positive magnitude).
+        amount = abs(row.amount)
+
         h = compute_dedup_hash(
             account_id=import_in.account_id,
             date_=row.date,
-            amount=row.amount,
+            amount=amount,
             payee=row.payee,
         )
         if h in existing_hashes:
@@ -414,7 +530,7 @@ def import_transactions(
             user_id=current_user.id,
             account_id=import_in.account_id,
             date=row.date,
-            amount=row.amount,
+            amount=amount,
             currency=account.currency,
             # TODO(refunds): CSV imports currently have no refund signal — all positive
             # amounts become 'income'. Revisit as part of the refunds refactor.
