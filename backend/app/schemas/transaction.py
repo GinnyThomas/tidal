@@ -61,7 +61,9 @@ class TransactionSplitCreate(BaseModel):
 
     category_id: Optional[uuid.UUID] = None
     promotion_id: Optional[uuid.UUID] = None
-    amount: Decimal = Field(...)
+    # ge=0: a split is a slice of the (always non-negative) transaction total,
+    # never a signed value.
+    amount: Decimal = Field(..., ge=0)
     note: Optional[str] = None
 
 
@@ -97,7 +99,10 @@ class TransactionCreate(BaseModel):
     account_id: uuid.UUID
     category_id: Optional[uuid.UUID] = None
     date: date_
-    amount: Decimal = Field(...)
+    # ge=0: amount is always a positive magnitude — direction comes from
+    # transaction_type (and account_type for credit cards), never from the
+    # sign of amount. See _calculate_balance() in routers/accounts.py.
+    amount: Decimal = Field(..., ge=0)
     transaction_type: TransactionType
     status: TransactionStatus = TransactionStatus.pending
     payee: Optional[str] = Field(default=None, max_length=100)
@@ -176,7 +181,9 @@ class TransactionUpdate(BaseModel):
     account_id: Optional[uuid.UUID] = None
     category_id: Optional[uuid.UUID] = None
     date: Optional[date_] = None
-    amount: Optional[Decimal] = None
+    # ge=0: see TransactionCreate.amount — a positive magnitude always,
+    # regardless of transaction_type.
+    amount: Optional[Decimal] = Field(default=None, ge=0)
     transaction_type: Optional[TransactionType] = None
     status: Optional[TransactionStatus] = None
     payee: Optional[str] = Field(default=None, max_length=100)
@@ -234,7 +241,8 @@ class TransferCreate(BaseModel):
     from_account_id: uuid.UUID
     to_account_id: uuid.UUID
     date: date_
-    amount: Decimal = Field(...)
+    # ge=0: see TransactionCreate.amount.
+    amount: Decimal = Field(..., ge=0)
     currency: str = Field(default="GBP", max_length=3)
     note: Optional[str] = None
 

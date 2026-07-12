@@ -43,6 +43,12 @@ def _setup(test_client):
     return token, account_id
 
 
+def _get_category_id(test_client, token: str) -> str:
+    """Return the id of the first seeded system category (see test_transactions.py)."""
+    categories = test_client.get("/api/v1/categories", headers=_auth(token)).json()
+    return categories[0]["id"]
+
+
 _ROW = {
     "date": "2026-01-15",
     "amount": "-42.50",
@@ -142,6 +148,98 @@ def test_import_sets_category_null(test_client) -> None:
         headers=_auth(token),
     ).json()
     assert txns["items"][0]["category_id"] is None
+
+
+def test_import_assigns_category_when_provided(test_client) -> None:
+    """
+    A row with category_id set is created with that category, so the user
+    can categorise transactions during the review step instead of editing
+    every row afterwards.
+    """
+    token, account_id = _setup(test_client)
+    category_id = _get_category_id(test_client, token)
+
+    test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-10.00", "payee": "Shop", "category_id": category_id},
+            ],
+        },
+        headers=_auth(token),
+    )
+
+    txns = test_client.get(
+        f"/api/v1/transactions?account_id={account_id}",
+        headers=_auth(token),
+    ).json()
+    assert txns["items"][0]["category_id"] == category_id
+
+
+def test_import_mixed_rows_with_and_without_category(test_client) -> None:
+    """Rows without category_id still default to None even when other rows in the same batch have one."""
+    token, account_id = _setup(test_client)
+    category_id = _get_category_id(test_client, token)
+
+    test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-10.00", "payee": "Tesco", "category_id": category_id},
+                {"date": "2026-01-16", "amount": "-20.00", "payee": "Shell"},
+            ],
+        },
+        headers=_auth(token),
+    )
+
+    txns = test_client.get(
+        f"/api/v1/transactions?account_id={account_id}",
+        headers=_auth(token),
+    ).json()["items"]
+    by_payee = {t["payee"]: t for t in txns}
+    assert by_payee["Tesco"]["category_id"] == category_id
+    assert by_payee["Shell"]["category_id"] is None
+
+
+def test_import_rejects_nonexistent_category_id(test_client) -> None:
+    """An unknown category_id causes the whole import to fail with 422."""
+    token, account_id = _setup(test_client)
+    fake_category_id = "00000000-0000-0000-0000-000000000000"
+
+    response = test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-10.00", "payee": "Shop", "category_id": fake_category_id},
+            ],
+        },
+        headers=_auth(token),
+    )
+    assert response.status_code == 422
+
+
+def test_import_rejects_other_users_category_id(test_client) -> None:
+    """A category_id belonging to a different user causes the import to fail with 422."""
+    token_a = _register_and_login(test_client, "cat-a@example.com")
+    account_a = _create_account(test_client, token_a)
+
+    token_b = _register_and_login(test_client, "cat-b@example.com")
+    category_b = _get_category_id(test_client, token_b)
+
+    response = test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_a,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-10.00", "payee": "Shop", "category_id": category_b},
+            ],
+        },
+        headers=_auth(token_a),
+    )
+    assert response.status_code == 422
 
 
 def test_import_stores_notes(test_client) -> None:

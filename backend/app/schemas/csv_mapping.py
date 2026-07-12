@@ -19,10 +19,18 @@ class ImportTransactionRow(BaseModel):
     """One row of a CSV import — the normalised form sent by the frontend."""
 
     date: date_
+    # Deliberately NOT ge=0, unlike every other amount field in this app.
+    # This is the raw bank-signed value (negative = debit, positive =
+    # credit) straight off the CSV, before routers.transactions.import_transactions
+    # takes abs() of it to get the stored magnitude. A ge=0 constraint here
+    # would reject every legitimate expense row before that conversion runs.
     amount: Decimal = Field(...)
     payee: str = Field(..., max_length=100)
     notes: Optional[str] = None
     external_id: Optional[str] = Field(default=None, max_length=255)
+    # Optional — lets the user assign a category during the review step
+    # instead of editing every row after import.
+    category_id: Optional[uuid.UUID] = None
 
 
 class TransactionImportRequest(BaseModel):

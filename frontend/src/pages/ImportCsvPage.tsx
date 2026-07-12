@@ -30,13 +30,18 @@ import { detectTemplate } from '../lib/csvTemplates'
 import type { CsvTemplate, ParsedRow, ParseFailedRow } from '../lib/csvTemplates'
 import { parseDate, parseAmount } from '../lib/csvParsing'
 import { computeDedupHash } from '../lib/dedupHash'
+import { buildCategoryOptions } from '../lib/categories'
 import { getApiBaseUrl } from '../lib/api'
 
 type Account = { id: string; name: string; currency: string }
+type Category = { id: string; name: string; parent_category_id: string | null }
 
 type ClassifiedRow = ParsedRow & {
   status: 'new' | 'definite_duplicate' | 'possible_duplicate'
   included: boolean
+  // '' means uncategorised — assigned during the review step (per-row or
+  // via "bulk assign") so the user doesn't have to edit every row afterwards.
+  categoryId: string
 }
 
 type Step = 'pick' | 'mapping' | 'review' | 'done'
@@ -107,6 +112,7 @@ export default function ImportCsvPage() {
 
   // Step 1 state
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [headers, setHeaders] = useState<string[]>([])
@@ -124,6 +130,7 @@ export default function ImportCsvPage() {
   const [classifiedRows, setClassifiedRows] = useState<ClassifiedRow[]>([])
   const [dedupLoading, setDedupLoading] = useState(false)
   const [dedupError, setDedupError] = useState<string | null>(null)
+  const [bulkCategoryId, setBulkCategoryId] = useState('')
 
   // Step 4 state
   const [importResult, setImportResult] = useState<{
@@ -144,6 +151,16 @@ export default function ImportCsvPage() {
         if (r.data.length > 0) setSelectedAccountId(r.data[0].id)
       })
       .catch(() => setAccountsError('Failed to load accounts. Please refresh the page.'))
+  }, [])
+
+  // Categories power the (optional) per-row and bulk category assignment on
+  // the review step. Failure is non-critical — import still works without
+  // categorisation, same as the category filter on TransactionsPage.
+  useEffect(() => {
+    axios
+      .get(`${getApiBaseUrl()}/api/v1/categories`, { headers: authHeaders() })
+      .then(r => setCategories(r.data))
+      .catch(() => {})
   }, [])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -337,7 +354,7 @@ export default function ImportCsvPage() {
         if (row.externalId) {
           if (existingExtIds.has(row.externalId) || batchExtIds.has(row.externalId)) {
             batchExtIds.add(row.externalId)
-            classified.push({ ...row, status: 'definite_duplicate', included: false })
+            classified.push({ ...row, status: 'definite_duplicate', included: false, categoryId: '' })
             continue
           }
           batchExtIds.add(row.externalId)
@@ -347,7 +364,7 @@ export default function ImportCsvPage() {
 
         if (existingHashes.has(hash) || batchHashes.has(hash)) {
           batchHashes.add(hash)
-          classified.push({ ...row, status: 'definite_duplicate', included: false })
+          classified.push({ ...row, status: 'definite_duplicate', included: false, categoryId: '' })
           continue
         }
         batchHashes.add(hash)
@@ -359,11 +376,11 @@ export default function ImportCsvPage() {
           classified.some(c => c.status !== 'definite_duplicate' && isFuzzyDup(c, row))
 
         if (possibleDup) {
-          classified.push({ ...row, status: 'possible_duplicate', included: false })
+          classified.push({ ...row, status: 'possible_duplicate', included: false, categoryId: '' })
           continue
         }
 
-        classified.push({ ...row, status: 'new', included: true })
+        classified.push({ ...row, status: 'new', included: true, categoryId: '' })
       }
 
       setClassifiedRows(classified)
@@ -373,7 +390,7 @@ export default function ImportCsvPage() {
       setDedupError(
         'Could not check for duplicates — please review carefully before importing.',
       )
-      setClassifiedRows(rows.map(row => ({ ...row, status: 'new' as const, included: true })))
+      setClassifiedRows(rows.map(row => ({ ...row, status: 'new' as const, included: true, categoryId: '' })))
     } finally {
       setDedupLoading(false)
     }
@@ -404,6 +421,22 @@ export default function ImportCsvPage() {
     )
   }
 
+  function setRowCategory(index: number, categoryId: string) {
+    setClassifiedRows(prev =>
+      prev.map((r, i) => i === index ? { ...r, categoryId } : r),
+    )
+  }
+
+  // Applies bulkCategoryId to every row currently checked for import — lets
+  // the user categorise a whole batch (e.g. all "Tesco" rows) in one action
+  // instead of picking a category on each row individually.
+  function applyBulkCategory() {
+    if (!bulkCategoryId) return
+    setClassifiedRows(prev =>
+      prev.map(r => r.included ? { ...r, categoryId: bulkCategoryId } : r),
+    )
+  }
+
   async function handleConfirmImport() {
     const included = classifiedRows.filter(r => r.included)
     if (included.length === 0) return
@@ -421,6 +454,7 @@ export default function ImportCsvPage() {
             payee: r.payee,
             notes: r.notes,
             external_id: r.externalId,
+            category_id: r.categoryId || null,
           })),
         },
         { headers: authHeaders() },
@@ -562,6 +596,33 @@ export default function ImportCsvPage() {
                   <span className="text-warning">{possibleDupCount} need review</span>
                 </div>
 
+                {categories.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label htmlFor="bulkCategory" className="text-sm text-ocean-300">
+                      Bulk assign category:
+                    </label>
+                    <select
+                      id="bulkCategory"
+                      value={bulkCategoryId}
+                      onChange={e => setBulkCategoryId(e.target.value)}
+                      className="input-base text-xs py-1"
+                    >
+                      <option value="">Select a category…</option>
+                      {buildCategoryOptions(categories).map(opt => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs px-3 py-1"
+                      onClick={applyBulkCategory}
+                      disabled={!bulkCategoryId || includedCount === 0}
+                    >
+                      Apply to {includedCount} selected
+                    </button>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto rounded border border-ocean-600 max-h-96">
                   <table className="w-full text-xs text-ocean-200 min-w-[500px]">
                     <thead className="bg-ocean-700 sticky top-0">
@@ -572,6 +633,7 @@ export default function ImportCsvPage() {
                         <th className="px-2 py-2 text-left">Date</th>
                         <th className="px-2 py-2 text-right">Amount</th>
                         <th className="px-2 py-2 text-left">Payee</th>
+                        <th className="px-2 py-2 text-left">Category</th>
                         <th className="px-2 py-2 text-center">Status</th>
                       </tr>
                     </thead>
@@ -598,6 +660,20 @@ export default function ImportCsvPage() {
                             {row.amount}
                           </td>
                           <td className="px-2 py-1 truncate max-w-40">{row.payee}</td>
+                          <td className="px-2 py-1">
+                            <select
+                              value={row.categoryId}
+                              onChange={e => setRowCategory(i, e.target.value)}
+                              className="input-base text-xs py-1"
+                              aria-label={`Category for row ${i + 1}`}
+                              disabled={row.status === 'definite_duplicate'}
+                            >
+                              <option value="">No category</option>
+                              {buildCategoryOptions(categories).map(opt => (
+                                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </td>
                           <td className="px-2 py-1 text-center">
                             {row.status === 'new' && <span className="text-success">New</span>}
                             {row.status === 'definite_duplicate' && <span className="text-ocean-400">Duplicate</span>}
