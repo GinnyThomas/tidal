@@ -3,7 +3,7 @@
 // Integration tests for the CSV import multi-step flow.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import axios from 'axios'
 import ImportCsvPage from './ImportCsvPage'
@@ -525,6 +525,59 @@ describe('ImportCsvPage', () => {
 
     // The mismatched row is reported, not silently dropped
     expect(screen.getByText(/could not be parsed/i)).toBeInTheDocument()
+  })
+
+  it('reports the correct original row number for a parse failure after an excluded mismatch row', async () => {
+    // .filter() reindexes the array — if a genuine parse failure's row
+    // number were computed from its position in the post-filter array
+    // instead of its original file line, excluding an earlier row would
+    // make every later failure misreport itself as one line earlier than
+    // it actually is. Layout: row0 valid, row1 FieldMismatch (excluded),
+    // row2 valid (no failure — just there to shift the array position),
+    // row3 has a bad date (a genuine, later parse failure).
+    const Papa = await import('papaparse')
+    vi.mocked(Papa.default.parse).mockReturnValueOnce({
+      data: [
+        { 'Transaction ID': 'tx_001', 'Date': '01/04/2026', 'Amount': '-42.50', 'Name': 'Tesco',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+        { 'Transaction ID': 'tx_002', 'Date': '02/04/2026', 'Amount': '-10.00', 'Name': 'Shop',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '',
+          __parsed_extra: ['extra-value'] },
+        { 'Transaction ID': 'tx_003', 'Date': '03/04/2026', 'Amount': '-15.00', 'Name': 'Garage',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+        { 'Transaction ID': 'tx_004', 'Date': 'NOT-A-DATE', 'Amount': '-5.00', 'Name': 'BadDate',
+          'Notes and #tags': '', 'Currency': 'GBP', 'Local amount': '', 'Local currency': '' },
+      ],
+      meta: {
+        fields: ['Transaction ID', 'Date', 'Time', 'Type', 'Name', 'Emoji', 'Category',
+          'Amount', 'Currency', 'Local amount', 'Local currency', 'Notes and #tags',
+          'Address', 'Receipt', 'Description', 'Category split', 'Money Out', 'Money In'],
+      },
+      errors: [
+        { type: 'FieldMismatch', code: 'TooManyFields', message: 'Too many fields: expected 18 fields but parsed 19', row: 1 },
+      ],
+    } as any)
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByText(/could not be parsed/i), { timeout: 3000 })
+    fireEvent.click(screen.getByText(/Show details/i))
+
+    // row3 (0-based) is file line 5 (header=1, row0=2, row1=3, row2=4, row3=5).
+    // Before the fix, its post-filter array position (2, since only row1 was
+    // excluded) would incorrectly compute line 4 instead.
+    const badDateRow = (await screen.findAllByRole('row')).find(r =>
+      within(r).queryAllByText(/NOT-A-DATE/i).length > 0,
+    )
+    expect(badDateRow).toBeTruthy()
+    expect(within(badDateRow!).getByText('5')).toBeInTheDocument()
   })
 
   it('still blocks the whole import for a non-FieldMismatch parse error', async () => {

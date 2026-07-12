@@ -48,9 +48,17 @@ function authHeaders() {
 // Apply a saved MappingConfig to raw rows, collecting both successes and failures.
 // Uses the shared parseDate/parseAmount from csvParsing.ts — the same functions
 // that CsvMappingForm uses for its live preview — so both paths are always in sync.
+//
+// originalIndexes[i] gives the row-index `rows[i]` had in the original parsed
+// file, BEFORE any FieldMismatch rows were filtered out (see handleFileChange).
+// Using `rows`' own post-filter position for rowNumber would silently misreport
+// which line a later, unrelated parse failure is on — .filter() reindexes the
+// array, so if row 2 was excluded, the row that used to be #5 shifts to
+// position 3 and would incorrectly report itself as row 4.
 function applyMappingConfig(
   rows: Record<string, string>[],
   config: MappingConfig,
+  originalIndexes: number[],
 ): { parsed: ParsedRow[]; failed: ParseFailedRow[] } {
   const parsed: ParsedRow[] = []
   const failed: ParseFailedRow[] = []
@@ -77,15 +85,17 @@ function applyMappingConfig(
     // Treat truly blank rows as silent skips
     if (!dateRaw && !(row[config.amountColumn] ?? '').trim()) return
 
+    const rowNumber = originalIndexes[i] + 2
+
     const dateResult = parseDate(dateRaw, config.dateFormat)
     if ('error' in dateResult) {
-      failed.push({ rowNumber: i + 2, rawRow: row, reason: dateResult.error })
+      failed.push({ rowNumber, rawRow: row, reason: dateResult.error })
       return
     }
 
     const amountResult = resolveAmount(row)
     if ('error' in amountResult) {
-      failed.push({ rowNumber: i + 2, rawRow: row, reason: amountResult.error })
+      failed.push({ rowNumber, rawRow: row, reason: amountResult.error })
       return
     }
 
@@ -109,6 +119,10 @@ export default function ImportCsvPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
+  // rawRows[i]'s row number in the original file — see applyMappingConfig's
+  // doc comment. Needed in state (not just a local var) because the manual
+  // mapping step (handleMappingSave) runs in a later render.
+  const [rawRowOriginalIndexes, setRawRowOriginalIndexes] = useState<number[]>([])
   const [headers, setHeaders] = useState<string[]>([])
   const [detectedTemplate, setDetectedTemplate] = useState<CsvTemplate | null>(null)
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([])
@@ -161,6 +175,10 @@ export default function ImportCsvPage() {
       let rows: Record<string, string>[] = []
       let hdrs: string[] = []
       let mismatchFailures: ParseFailedRow[] = []
+      // rows[i]'s row number in the original parsed file — identity unless
+      // the CSV branch below excludes FieldMismatch rows, which shifts every
+      // later row's array position without changing its real file line.
+      let rowOriginalIndexes: number[] = []
 
       if (isXlsx) {
         // Parse XLSX with SheetJS
@@ -213,6 +231,9 @@ export default function ImportCsvPage() {
             hdrs.forEach((h, i) => { obj[h] = String(row[i] ?? '').trim() })
             return obj
           })
+        // No rows are excluded on this path — array position already matches
+        // the original row order.
+        rowOriginalIndexes = rows.map((_, i) => i)
       } else {
         // Parse CSV with papaparse
         const text = await file.text()
@@ -250,11 +271,19 @@ export default function ImportCsvPage() {
             reason: 'Row has a different number of columns than the header — likely an unescaped comma or a bank export glitch. Columns after the mismatch may be shifted, so this row was skipped; add it manually if needed.',
           }))
 
-        rows = result.data.filter((_, i) => !mismatchRowIndexes.has(i))
+        // Carry each surviving row's original index through the filter —
+        // .filter() reindexes the array, so rows[i] no longer corresponds to
+        // file line i+2 once anything upstream of it was excluded.
+        const indexedRows = result.data
+          .map((r, i) => ({ r, i }))
+          .filter(({ i }) => !mismatchRowIndexes.has(i))
+        rows = indexedRows.map(({ r }) => r)
+        rowOriginalIndexes = indexedRows.map(({ i }) => i)
         hdrs = result.meta.fields ?? []
       }
 
       setRawRows(rows)
+      setRawRowOriginalIndexes(rowOriginalIndexes)
       setHeaders(hdrs)
       setCsvMismatchFailures(mismatchFailures)
 
@@ -263,8 +292,10 @@ export default function ImportCsvPage() {
 
       if (tmpl) {
         setDetectedTemplate(tmpl)
-        // Collect parse results: successes, errors, and silently-skipped nulls
-        const parseResults = rows.map((r, i) => ({ i, r, result: tmpl.parse(r) }))
+        // Collect parse results: successes, errors, and silently-skipped nulls.
+        // `i` here is the ORIGINAL file row index, not the post-filter array
+        // position — see rowOriginalIndexes' doc comment above.
+        const parseResults = rows.map((r, i) => ({ i: rowOriginalIndexes[i], r, result: tmpl.parse(r) }))
         const parsed = parseResults
           .filter(({ result }) => result !== null && !('error' in result))
           .map(({ result }) => result as ParsedRow)
@@ -288,7 +319,7 @@ export default function ImportCsvPage() {
             { headers: authHeaders() },
           )
           const savedConfig: MappingConfig = mappingResp.data.mapping_json
-          const { parsed, failed } = applyMappingConfig(rows, savedConfig)
+          const { parsed, failed } = applyMappingConfig(rows, savedConfig, rowOriginalIndexes)
           setParsedRows(parsed)
           setParseFailures([...mismatchFailures, ...failed])
           setFailuresExpanded(false)
@@ -412,7 +443,7 @@ export default function ImportCsvPage() {
   }
 
   function handleMappingSave(config: MappingConfig, saveForAccount: boolean) {
-    const { parsed, failed } = applyMappingConfig(rawRows, config)
+    const { parsed, failed } = applyMappingConfig(rawRows, config, rawRowOriginalIndexes)
     setParsedRows(parsed)
     setParseFailures([...csvMismatchFailures, ...failed])
     setFailuresExpanded(false)
