@@ -399,10 +399,19 @@ def import_transactions(
             skipped_rows.append({"row_index": i, "reason": f"Duplicate external_id: {row.external_id}"})
             continue
 
+        # Bank CSV exports use a signed amount column (negative = debit,
+        # positive = credit). `amount` must always be a positive magnitude —
+        # direction is derived from transaction_type (and account_type for
+        # credit cards) elsewhere, e.g. _calculate_balance() in
+        # routers/accounts.py. Hash on the same magnitude used for storage so
+        # this matches the dedup hash computed for manually-entered
+        # transactions (whose amount is also always a positive magnitude).
+        amount = abs(row.amount)
+
         h = compute_dedup_hash(
             account_id=import_in.account_id,
             date_=row.date,
-            amount=row.amount,
+            amount=amount,
             payee=row.payee,
         )
         if h in existing_hashes:
@@ -414,7 +423,7 @@ def import_transactions(
             user_id=current_user.id,
             account_id=import_in.account_id,
             date=row.date,
-            amount=row.amount,
+            amount=amount,
             currency=account.currency,
             # TODO(refunds): CSV imports currently have no refund signal — all positive
             # amounts become 'income'. Revisit as part of the refunds refactor.
