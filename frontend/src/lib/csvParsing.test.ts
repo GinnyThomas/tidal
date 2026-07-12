@@ -3,7 +3,7 @@
 // Purpose: Tests for the shared parseDate/parseAmount helpers used by both
 // CsvMappingForm (manual column mapping) and every bank CSV/XLSX template.
 
-import { parseDate, parseAmount } from './csvParsing'
+import { parseDate, parseAmount, clampPayee, MAX_PAYEE_LENGTH } from './csvParsing'
 
 describe('parseDate', () => {
   it('parses DD/MM/YYYY to ISO', () => {
@@ -69,5 +69,41 @@ describe('parseAmount', () => {
 
   it('parses a Unicode-minus amount with thousands separators too', () => {
     expect(parseAmount('−1.234,56', ',')).toEqual({ amount: '-1234.56' })
+  })
+})
+
+describe('clampPayee', () => {
+  // Regression: Transaction.payee is capped at 100 chars server-side, but
+  // Spanish direct debit descriptions ("RECIBO Santander Generales Seguros y
+  // Reaseguros Nº RECIBO 0049 1555 755 BBGXCWZ REF. MANDATO...") routinely
+  // exceed it. Since the import request sends every row's payee in one
+  // batch, a single overlong row failed Pydantic validation for the whole
+  // request — silently blocking every other row in the file, not just the
+  // long one.
+  it('passes a short payee through unchanged', () => {
+    expect(clampPayee('Tesco')).toEqual({ payee: 'Tesco', notes: undefined })
+  })
+
+  it('truncates a payee over the limit and preserves the full text in notes', () => {
+    const long = 'RECIBO Santander Generales Seguros y Reaseguros Nº RECIBO 0049 1555 755 BBGXCWZ REF. MANDATO 123456789'
+    const result = clampPayee(long)
+    expect(result.payee.length).toBe(MAX_PAYEE_LENGTH)
+    expect(result.payee).toBe(long.slice(0, MAX_PAYEE_LENGTH))
+    expect(result.notes).toBe(long)
+  })
+
+  it('appends the overflow to existing notes rather than replacing them', () => {
+    const long = 'X'.repeat(150)
+    const result = clampPayee(long, 'existing note')
+    expect(result.notes).toBe(`${long} — existing note`)
+  })
+
+  it('does not touch notes when payee is within the limit', () => {
+    expect(clampPayee('Tesco', 'birthday gift')).toEqual({ payee: 'Tesco', notes: 'birthday gift' })
+  })
+
+  it('treats a payee exactly at the limit as unchanged', () => {
+    const exact = 'X'.repeat(MAX_PAYEE_LENGTH)
+    expect(clampPayee(exact)).toEqual({ payee: exact, notes: undefined })
   })
 })
