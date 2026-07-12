@@ -94,3 +94,26 @@ export function parseAmount(
   // Object.is distinguishes -0 from 0; toFixed() does not in all JS engines.
   return { amount: Object.is(n, -0) ? '0.00' : n.toFixed(2) }
 }
+
+// ─── clampPayee ──────────────────────────────────────────────────────────────
+
+// Transaction.payee is capped at 100 chars server-side (TransactionCreate,
+// ImportTransactionRow). Some banks routinely exceed it — Spanish direct
+// debit descriptions in particular ("RECIBO ... REF. MANDATO ...") regularly
+// run past 150 characters. Since the import request sends every row's payee
+// in a single batch, ONE overlong row fails Pydantic validation for the
+// entire request, silently blocking every other row in the file too.
+export const MAX_PAYEE_LENGTH = 100
+
+/**
+ * Enforces the 100-char payee limit without losing information: the
+ * overflow is preserved in `notes` (which has no length limit) rather than
+ * silently discarded. Called once, right after parsing and before the dedup
+ * hash is computed, so the value reviewed on-screen matches what's actually
+ * submitted and hashed.
+ */
+export function clampPayee(rawPayee: string, notes?: string): { payee: string; notes?: string } {
+  if (rawPayee.length <= MAX_PAYEE_LENGTH) return { payee: rawPayee, notes }
+  const payee = rawPayee.slice(0, MAX_PAYEE_LENGTH)
+  return { payee, notes: notes ? `${rawPayee} — ${notes}` : rawPayee }
+}

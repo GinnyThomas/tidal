@@ -452,6 +452,52 @@ describe('ImportCsvPage', () => {
     }, { timeout: 3000 })
   })
 
+  it('truncates an overlong Santander payee and sends a payload the backend accepts', async () => {
+    // Regression: Transaction.payee is capped at 100 chars server-side.
+    // Spanish direct debit descriptions routinely exceed it (real example:
+    // "RECIBO Santander Generales Seguros y Reaseguros Nº RECIBO 0049 1555
+    // 755 BBGXCWZ REF. MANDATO..."). Because the import request sends every
+    // row's payee in a single batch, this ONE overlong row previously failed
+    // Pydantic validation for the WHOLE request — every other row in the
+    // file (60 in the real report) silently failed to import too.
+    const longDescription = 'RECIBO Santander Generales Seguros y Reaseguros Nº RECIBO 0049 1555 755 BBGXCWZ REF. MANDATO 123456789 CONCEPTO ADICIONAL DE PRUEBA'
+    expect(longDescription.length).toBeGreaterThan(100)
+
+    const XLSX = await import('xlsx')
+    vi.mocked(XLSX.read).mockReturnValue({
+      SheetNames: ['Sheet1'],
+      Sheets: { Sheet1: {} },
+    } as any)
+    vi.mocked(XLSX.utils.sheet_to_json).mockReturnValue([
+      ['Banco Santander'],
+      ['IBAN', 'ES12345'],
+      ['Transaction date', 'Value date', 'Description', 'Amount', 'Balance'],
+      ['07/07/2026', '07/07/2026', longDescription, '−31,95', '1.234,56'],
+    ] as any)
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const file = new File(['dummy'], 'santander.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    Object.defineProperty(file, 'arrayBuffer', { value: () => Promise.resolve(new ArrayBuffer(0)) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByRole('button', { name: /Import \d+ transaction/i }), { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalled()
+    })
+    const body = vi.mocked(mockedAxios.post).mock.calls[0][1] as { transactions: { payee: string; notes?: string }[] }
+    expect(body.transactions).toHaveLength(1)
+    expect(body.transactions[0].payee.length).toBeLessThanOrEqual(100)
+    expect(body.transactions[0].notes).toBe(longDescription)
+  })
+
   it('shows parse-failure warning when template returns errors for some rows', async () => {
     // Override papaparse to return a row that the Monzo template will fail to parse
     const Papa = await import('papaparse')

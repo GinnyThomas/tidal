@@ -28,7 +28,7 @@ import CsvMappingForm from '../components/CsvMappingForm'
 import type { MappingConfig } from '../components/CsvMappingForm'
 import { detectTemplate } from '../lib/csvTemplates'
 import type { CsvTemplate, ParsedRow, ParseFailedRow } from '../lib/csvTemplates'
-import { parseDate, parseAmount } from '../lib/csvParsing'
+import { parseDate, parseAmount, clampPayee } from '../lib/csvParsing'
 import { computeDedupHash } from '../lib/dedupHash'
 import { buildCategoryOptions } from '../lib/categories'
 import { getApiBaseUrl } from '../lib/api'
@@ -114,6 +114,19 @@ function applyMappingConfig(
   })
 
   return { parsed, failed }
+}
+
+// Applied to every ParsedRow — regardless of which bank template or mapping
+// path produced it — right after parsing and before the dedup hash is
+// computed. See clampPayee's doc comment: the backend rejects the whole
+// import batch if any single row's payee exceeds 100 chars, so this has to
+// run before runDedup, not just before the final submit, or the hash the
+// user reviews on-screen would differ from the one actually stored.
+function clampParsedRows(rows: ParsedRow[]): ParsedRow[] {
+  return rows.map(r => {
+    const { payee, notes } = clampPayee(r.payee, r.notes)
+    return { ...r, payee, notes }
+  })
 }
 
 export default function ImportCsvPage() {
@@ -313,9 +326,11 @@ export default function ImportCsvPage() {
         // `i` here is the ORIGINAL file row index, not the post-filter array
         // position — see rowOriginalIndexes' doc comment above.
         const parseResults = rows.map((r, i) => ({ i: rowOriginalIndexes[i], r, result: tmpl.parse(r) }))
-        const parsed = parseResults
-          .filter(({ result }) => result !== null && !('error' in result))
-          .map(({ result }) => result as ParsedRow)
+        const parsed = clampParsedRows(
+          parseResults
+            .filter(({ result }) => result !== null && !('error' in result))
+            .map(({ result }) => result as ParsedRow),
+        )
         const failed: ParseFailedRow[] = parseResults
           .filter(({ result }) => result !== null && 'error' in result)
           .map(({ i, r, result }) => ({
@@ -336,7 +351,8 @@ export default function ImportCsvPage() {
             { headers: authHeaders() },
           )
           const savedConfig: MappingConfig = mappingResp.data.mapping_json
-          const { parsed, failed } = applyMappingConfig(rows, savedConfig, rowOriginalIndexes)
+          const { parsed: rawParsed, failed } = applyMappingConfig(rows, savedConfig, rowOriginalIndexes)
+          const parsed = clampParsedRows(rawParsed)
           setParsedRows(parsed)
           setParseFailures([...mismatchFailures, ...failed])
           setFailuresExpanded(false)
@@ -460,7 +476,8 @@ export default function ImportCsvPage() {
   }
 
   function handleMappingSave(config: MappingConfig, saveForAccount: boolean) {
-    const { parsed, failed } = applyMappingConfig(rawRows, config, rawRowOriginalIndexes)
+    const { parsed: rawParsed, failed } = applyMappingConfig(rawRows, config, rawRowOriginalIndexes)
+    const parsed = clampParsedRows(rawParsed)
     setParsedRows(parsed)
     setParseFailures([...csvMismatchFailures, ...failed])
     setFailuresExpanded(false)
