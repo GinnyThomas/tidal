@@ -41,6 +41,10 @@ type ClassifiedRow = ParsedRow & {
 
 type Step = 'pick' | 'mapping' | 'review' | 'done'
 
+function authHeaders() {
+  return { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+}
+
 // Apply a saved MappingConfig to raw rows, collecting both successes and failures.
 // Uses the shared parseDate/parseAmount from csvParsing.ts — the same functions
 // that CsvMappingForm uses for its live preview — so both paths are always in sync.
@@ -134,7 +138,7 @@ export default function ImportCsvPage() {
 
   useEffect(() => {
     axios
-      .get(`${getApiBaseUrl()}/api/v1/accounts`)
+      .get(`${getApiBaseUrl()}/api/v1/accounts`, { headers: authHeaders() })
       .then(r => {
         setAccounts(r.data)
         if (r.data.length > 0) setSelectedAccountId(r.data[0].id)
@@ -249,6 +253,7 @@ export default function ImportCsvPage() {
         try {
           const mappingResp = await axios.get(
             `${getApiBaseUrl()}/api/v1/csv-mappings/${selectedAccountId}`,
+            { headers: authHeaders() },
           )
           const savedConfig: MappingConfig = mappingResp.data.mapping_json
           const { parsed, failed } = applyMappingConfig(rows, savedConfig)
@@ -294,6 +299,7 @@ export default function ImportCsvPage() {
       while (true) {
         const resp = await axios.get(`${getApiBaseUrl()}/api/v1/transactions`, {
           params: { account_id: accountId, date_from: minDate, date_to: maxDate, page, page_size: PAGE_SIZE },
+          headers: authHeaders(),
         })
         const batch: TxItem[] = resp.data.items
         const total: number = resp.data.total
@@ -381,11 +387,11 @@ export default function ImportCsvPage() {
 
     if (saveForAccount && selectedAccountId) {
       axios
-        .post(`${getApiBaseUrl()}/api/v1/csv-mappings`, {
-          account_id: selectedAccountId,
-          name: `Custom mapping`,
-          mapping_json: config,
-        })
+        .post(
+          `${getApiBaseUrl()}/api/v1/csv-mappings`,
+          { account_id: selectedAccountId, name: `Custom mapping`, mapping_json: config },
+          { headers: authHeaders() },
+        )
         .catch(err => console.warn('Failed to save mapping:', err))
     }
 
@@ -405,16 +411,20 @@ export default function ImportCsvPage() {
     setImporting(true)
     setImportError(null)
     try {
-      const resp = await axios.post(`${getApiBaseUrl()}/api/v1/transactions/import`, {
-        account_id: selectedAccountId,
-        transactions: included.map(r => ({
-          date: r.date,
-          amount: r.amount,
-          payee: r.payee,
-          notes: r.notes,
-          external_id: r.externalId,
-        })),
-      })
+      const resp = await axios.post(
+        `${getApiBaseUrl()}/api/v1/transactions/import`,
+        {
+          account_id: selectedAccountId,
+          transactions: included.map(r => ({
+            date: r.date,
+            amount: r.amount,
+            payee: r.payee,
+            notes: r.notes,
+            external_id: r.externalId,
+          })),
+        },
+        { headers: authHeaders() },
+      )
       setImportResult(resp.data)
       setStep('done')
     } catch (err) {
@@ -471,7 +481,7 @@ export default function ImportCsvPage() {
             </div>
 
             <p className="text-xs text-ocean-400">
-              Supported banks: Monzo, Virgin Money, Santander España (XLSX), Barclays UK.
+              Auto-detected banks: Monzo, Virgin Money, Santander España (XLSX).
               Other banks can be mapped manually.
             </p>
           </div>
