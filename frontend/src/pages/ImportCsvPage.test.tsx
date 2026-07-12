@@ -75,7 +75,13 @@ function renderPage() {
 describe('ImportCsvPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Simulate a logged-in user — the page reads this to build Authorization headers
+    localStorage.setItem('access_token', 'fake-token')
     mockAccountsResponse()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
   })
 
   it('renders the account dropdown after loading', async () => {
@@ -95,9 +101,97 @@ describe('ImportCsvPage', () => {
   it('shows supported banks hint', async () => {
     renderPage()
     await waitFor(() => {
-      expect(screen.getByText(/Monzo, Virgin Money/)).toBeInTheDocument()
+      expect(screen.getByText(/Auto-detected banks: Monzo, Virgin Money/)).toBeInTheDocument()
     })
   })
+
+  // ── Auth header assertions ──────────────────────────────────────────────────
+
+  it('fetches accounts with Authorization header', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/accounts'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      )
+    })
+  })
+
+  it('fetches transactions (dedup check) with Authorization header', async () => {
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/transactions'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      )
+    }, { timeout: 3000 })
+  })
+
+  it('sends import POST with Authorization header', async () => {
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByRole('button', { name: /Import \d+ transaction/i }), { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/transactions/import'),
+        expect.any(Object),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      )
+    })
+  })
+
+  it('sends saved-mapping GET with Authorization header', async () => {
+    // Use a file that doesn't match a template so we hit the mapping-GET path
+    const Papa = await import('papaparse')
+    vi.mocked(Papa.default.parse).mockReturnValueOnce({
+      data: [{ Date: '15/01/2026', Amount: '-42.50', Name: 'Tesco' }],
+      meta: { fields: ['Date', 'Amount', 'Name'] },
+      errors: [],
+    } as any)
+
+    mockedAxios.get.mockImplementation((url: string, config?: object) => {
+      if (url.includes('/api/v1/accounts')) return Promise.resolve({ data: ACCOUNTS })
+      if (url.includes('/api/v1/csv-mappings')) return Promise.reject({ response: { status: 404 } })
+      if (url.includes('/api/v1/transactions')) return Promise.resolve({ data: { items: [], total: 0 } })
+      return Promise.reject(new Error('unexpected'))
+    })
+
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const file = new File(['Date,Amount,Name\n15/01/2026,-42.50,Tesco'], 'bank.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve('Date,Amount,Name\n15/01/2026,-42.50,Tesco') })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/csv-mappings/'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      )
+    }, { timeout: 3000 })
+  })
+
+  // ───────────────────────────────────────────────────────────────────────────
 
   it('detects Monzo template and advances to review after file upload', async () => {
     renderPage()
@@ -133,7 +227,7 @@ describe('ImportCsvPage', () => {
   })
 
   it('calls POST /transactions/import on confirm', async () => {
-    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0 } })
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
 
     renderPage()
     await waitFor(() => screen.getByText('Monzo (GBP)'))
@@ -151,12 +245,13 @@ describe('ImportCsvPage', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.stringContaining('/transactions/import'),
         expect.objectContaining({ account_id: 'acc-123' }),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
       )
     })
   })
 
   it('shows success message on done step', async () => {
-    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0 } })
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
 
     renderPage()
     await waitFor(() => screen.getByText('Monzo (GBP)'))
@@ -439,6 +534,7 @@ describe('ImportCsvPage', () => {
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.stringContaining('/csv-mappings'),
         expect.objectContaining({ account_id: 'acc-123' }),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
       )
     }, { timeout: 3000 })
   })
