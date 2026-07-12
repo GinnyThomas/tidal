@@ -391,6 +391,12 @@ def convert_to_transfer(
 
     transaction.transaction_type = "transfer"
     transaction.category_id = None
+    # A transfer between the user's own accounts isn't a promotion payment —
+    # create_transfer() never sets promotion_id on either leg, so a converted
+    # row must match. Otherwise _compute_fields() in promotions.py (which
+    # sums total_paid by promotion_id across all transaction_types) would
+    # keep counting this row after it stops being a real payment.
+    transaction.promotion_id = None
     transaction.status = "cleared"
 
     if original_type == "expense":
@@ -457,7 +463,8 @@ def import_transactions(
       - All accepted rows are created in a single DB transaction.
 
     Currency is always taken from the account, ignoring anything in the request.
-    All imported transactions are status='cleared', category=None.
+    All imported transactions are status='cleared'. category_id is optional per
+    row — omit it to leave the transaction uncategorised, as before.
     """
     if len(import_in.transactions) > _MAX_IMPORT_ROWS:
         raise HTTPException(
@@ -466,6 +473,26 @@ def import_transactions(
         )
 
     account = _get_account_or_404(import_in.account_id, current_user.id, db)
+
+    # Validate any category_ids up front in a single query, rather than one
+    # query per row — batches can have thousands of rows. Reject the whole
+    # import if any row references a category that doesn't exist or belongs
+    # to another user, so we never silently drop a category the user picked.
+    requested_category_ids = {row.category_id for row in import_in.transactions if row.category_id is not None}
+    if requested_category_ids:
+        owned_category_ids = {
+            row[0] for row in db.query(Category.id).filter(
+                Category.id.in_(requested_category_ids),
+                Category.user_id == current_user.id,
+                Category.deleted_at.is_(None),
+            ).all()
+        }
+        unknown = requested_category_ids - owned_category_ids
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unknown category_id: {next(iter(unknown))}",
+            )
 
     # Fetch existing external_ids and hashes for this account in one query each.
     # Used for server-side dedup.
@@ -529,6 +556,7 @@ def import_transactions(
         tx = Transaction(
             user_id=current_user.id,
             account_id=import_in.account_id,
+            category_id=row.category_id,
             date=row.date,
             amount=amount,
             currency=account.currency,

@@ -123,6 +123,77 @@ def test_create_expense_returns_201(test_client) -> None:
     assert isinstance(body["category_name"], str)
 
 
+def test_create_expense_rejects_negative_amount(test_client) -> None:
+    """
+    amount must be a non-negative magnitude at the schema level — direction
+    comes from transaction_type/account_type (see _calculate_balance in
+    routers/accounts.py), never from the sign of amount. This was previously
+    enforced only by convention (the frontend's <input min="0">), which is
+    exactly how the CSV-import signed-amount bug slipped through undetected.
+    """
+    token, account_id, category_id = _setup(test_client)
+
+    response = test_client.post(
+        "/api/v1/transactions",
+        json={**_TXN, "account_id": account_id, "category_id": category_id, "amount": "-42.50"},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_update_transaction_rejects_negative_amount(test_client) -> None:
+    """PUT must reject a negative amount the same way POST does."""
+    token, account_id, category_id = _setup(test_client)
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={**_TXN, "account_id": account_id, "category_id": category_id},
+        headers=_auth_headers(token),
+    ).json()
+
+    response = test_client.put(
+        f"/api/v1/transactions/{expense['id']}",
+        json={"amount": "-10.00"},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_create_transfer_rejects_negative_amount(test_client) -> None:
+    """POST /transfer must reject a negative amount the same way expense/income do."""
+    token, account_id, _ = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Other")
+
+    response = test_client.post(
+        "/api/v1/transactions/transfer",
+        json={
+            "from_account_id": account_id, "to_account_id": other_account,
+            "date": "2026-01-15", "amount": "-200.00",
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
+def test_create_split_rejects_negative_split_amount(test_client) -> None:
+    """A negative amount on an individual split must be rejected at the schema level."""
+    token, account_id, category_id = _setup(test_client)
+
+    response = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "date": "2026-01-15", "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": category_id, "amount": "-60.00"},
+                {"category_id": category_id, "amount": "160.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 422
+
+
 def test_create_transaction_without_auth_returns_401(test_client) -> None:
     """Posting without an Authorization header should return 401."""
     response = test_client.post(
@@ -586,6 +657,58 @@ def test_convert_to_transfer_rejects_split_transaction(test_client) -> None:
         headers=_auth_headers(token),
     )
     assert response.status_code == 422
+
+
+def test_convert_to_transfer_clears_promotion_id(test_client) -> None:
+    """
+    A transaction linked to a promotion (e.g. a 0%-APR balance transfer
+    instalment) must have promotion_id cleared on conversion.
+
+    _compute_fields() in promotions.py sums total_paid by promotion_id alone,
+    across any transaction_type — it doesn't filter to expenses. If
+    promotion_id survived the conversion, this row would keep counting
+    toward the promotion's total_paid/remaining_balance even though it's now
+    a transfer between the user's own accounts, not a payment. create_transfer
+    never sets promotion_id on either leg, so a converted transaction must
+    match that.
+    """
+    token, account_id, category_id = _setup(test_client)
+    other_account = _create_account(test_client, token, name="Savings")
+
+    promo_response = test_client.post(
+        "/api/v1/promotions",
+        json={
+            "name": "0% Balance Transfer",
+            "promotion_type": "balance_transfer",
+            "original_balance": "2000.00",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        },
+        headers=_auth_headers(token),
+    )
+    assert promo_response.status_code == 201, promo_response.text
+    promotion_id = promo_response.json()["id"]
+
+    expense = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id, "category_id": category_id,
+            "date": "2026-01-15", "amount": "50.00", "transaction_type": "expense",
+            "promotion_id": promotion_id,
+        },
+        headers=_auth_headers(token),
+    ).json()
+    assert expense["promotion_id"] == promotion_id
+
+    response = test_client.post(
+        f"/api/v1/transactions/{expense['id']}/convert-to-transfer",
+        json={"other_account_id": other_account},
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    debit_leg = next(t for t in response.json() if t["id"] == expense["id"])
+    assert debit_leg["promotion_id"] is None
 
 
 def test_convert_to_transfer_rejects_other_users_account(test_client) -> None:

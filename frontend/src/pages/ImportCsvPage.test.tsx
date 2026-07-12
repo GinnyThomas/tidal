@@ -55,9 +55,15 @@ const ACCOUNTS = [
   { id: 'acc-456', name: 'Virgin', currency: 'GBP' },
 ]
 
+const CATEGORIES = [
+  { id: 'cat-groceries', name: 'Groceries', parent_category_id: null },
+  { id: 'cat-transport', name: 'Transport', parent_category_id: null },
+]
+
 function mockAccountsResponse() {
   mockedAxios.get.mockImplementation((url: string) => {
     if (url.includes('/api/v1/accounts')) return Promise.resolve({ data: ACCOUNTS })
+    if (url.includes('/api/v1/categories')) return Promise.resolve({ data: CATEGORIES })
     if (url.includes('/api/v1/csv-mappings')) return Promise.reject({ response: { status: 404 } })
     if (url.includes('/api/v1/transactions')) return Promise.resolve({ data: { items: [] } })
     return Promise.reject(new Error('unexpected'))
@@ -537,5 +543,93 @@ describe('ImportCsvPage', () => {
         expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
       )
     }, { timeout: 3000 })
+  })
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Category assignment during review
+  // ───────────────────────────────────────────────────────────────────────────
+
+  async function uploadMonzoFileAndReachReview() {
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByRole('button', { name: /Import \d+ transaction/i }), { timeout: 3000 })
+  }
+
+  it('fetches categories with Authorization header', async () => {
+    renderPage()
+    await waitFor(() => {
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/categories'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+      )
+    })
+  })
+
+  it('shows a category dropdown for each row on the review step', async () => {
+    await uploadMonzoFileAndReachReview()
+    expect(screen.getByLabelText(/Category for row 1/i)).toBeInTheDocument()
+  })
+
+  it('includes the picked category_id in the import payload', async () => {
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
+    await uploadMonzoFileAndReachReview()
+
+    fireEvent.change(screen.getByLabelText(/Category for row 1/i), { target: { value: 'cat-groceries' } })
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/transactions/import'),
+        expect.objectContaining({
+          transactions: [expect.objectContaining({ category_id: 'cat-groceries' })],
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('sends null category_id for rows left uncategorised', async () => {
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
+    await uploadMonzoFileAndReachReview()
+
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/transactions/import'),
+        expect.objectContaining({
+          transactions: [expect.objectContaining({ category_id: null })],
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('bulk-assigns a category to all included rows via "Apply to selected"', async () => {
+    mockedAxios.post = vi.fn().mockResolvedValue({ data: { created: 1, skipped_duplicates: 0, skipped_rows: [] } })
+    await uploadMonzoFileAndReachReview()
+
+    fireEvent.change(screen.getByLabelText(/Bulk assign category/i), { target: { value: 'cat-transport' } })
+    fireEvent.click(screen.getByRole('button', { name: /Apply to \d+ selected/i }))
+
+    expect(screen.getByLabelText(/Category for row 1/i)).toHaveValue('cat-transport')
+
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+    await waitFor(() => {
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/transactions/import'),
+        expect.objectContaining({
+          transactions: [expect.objectContaining({ category_id: 'cat-transport' })],
+        }),
+        expect.any(Object),
+      )
+    })
   })
 })
