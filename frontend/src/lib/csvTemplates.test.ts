@@ -257,9 +257,29 @@ describe('santanderEsTemplate', () => {
     expect(parsed?.amount).toBe('7300.00')
   })
 
-  it('uses Description as payee', () => {
+  it('uses Description as payee, minus the "PAGO MOVIL EN" boilerplate prefix', () => {
     const parsed = santanderEsTemplate.parse(row)
-    expect(parsed?.payee).toBe('PAGO MOVIL EN SUPERMERCAT CON, SANT ADRIA DEES, TARJ. :*328714')
+    expect(parsed?.payee).toBe('SUPERMERCAT CON, SANT ADRIA DEES, TARJ. :*328714')
+  })
+
+  it('strips the "COMPRA" boilerplate prefix too', () => {
+    const parsed = santanderEsTemplate.parse({ ...row, 'Description': 'COMPRA AMAZON.ES' })
+    expect(parsed?.payee).toBe('AMAZON.ES')
+  })
+
+  it('strips prefixes case-insensitively', () => {
+    const parsed = santanderEsTemplate.parse({ ...row, 'Description': 'compra Amazon.es' })
+    expect(parsed?.payee).toBe('Amazon.es')
+  })
+
+  it('leaves a description with no boilerplate prefix unchanged', () => {
+    const parsed = santanderEsTemplate.parse({ ...row, 'Description': 'TRANSFERENCIA A FAVOR DE JON' })
+    expect(parsed?.payee).toBe('TRANSFERENCIA A FAVOR DE JON')
+  })
+
+  it('falls back to the raw description if stripping the prefix would leave nothing', () => {
+    const parsed = santanderEsTemplate.parse({ ...row, 'Description': 'COMPRA' })
+    expect(parsed?.payee).toBe('COMPRA')
   })
 
   it('returns error for missing date', () => {
