@@ -15,7 +15,7 @@ import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
 import { CURRENCIES } from '../lib/currencies'
 
-type Account = { id: string; name: string }
+type Account = { id: string; name: string; currency: string }
 
 export type EditingTransfer = {
     id: string
@@ -62,6 +62,11 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                 // two dropdowns never start with the same value.
                 const nextTo = res.data.find((a: Account) => a.id !== fromId)
                 if (nextTo) setToAccountId(nextTo.id)
+                // Currency was previously hard-coded to 'GBP' regardless of the
+                // from account — sync it to the (auto-selected or pre-filtered)
+                // account's actual currency.
+                const fromAcct = res.data.find((a: Account) => a.id === fromId)
+                if (fromAcct) setCurrency(fromAcct.currency)
             }
             // In edit mode, find the linked leg via targeted query
             if (isEditMode && editingTransfer) {
@@ -182,7 +187,14 @@ function AddTransferForm({ onTransactionAdded, editingTransfer, onTransferUpdate
                     <select
                         id="transferFrom"
                         value={fromAccountId}
-                        onChange={(e) => setFromAccountId(e.target.value)}
+                        onChange={(e) => {
+                            const newFromAccountId = e.target.value
+                            setFromAccountId(newFromAccountId)
+                            // Currency follows the from account so it's never
+                            // silently left on whatever the previous account used.
+                            const acct = accounts.find(a => a.id === newFromAccountId)
+                            if (acct) setCurrency(acct.currency)
+                        }}
                         className="input-base"
                         required
                     >

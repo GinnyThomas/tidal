@@ -106,6 +106,85 @@ describe('AddTransactionForm', () => {
     })
 
     // =========================================================================
+    // Currency sync — regression: currency was hard-coded to 'GBP' regardless
+    // of which account was selected, so creating a transaction on a non-GBP
+    // account (e.g. a EUR Santander account) silently mis-tagged its currency.
+    // =========================================================================
+
+    it('syncs currency to the auto-selected account\'s currency in create mode', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount({ currency: 'EUR' })] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+
+        await screen.findByRole('option', { name: 'Current Account' })
+        await waitFor(() => {
+            expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+        })
+    })
+
+    it('syncs currency to the pre-selected account when defaultAccountId is provided', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({
+                data: [
+                    makeAccount({ id: 'acc-001', name: 'Current Account', currency: 'GBP' }),
+                    makeAccount({ id: 'acc-002', name: 'Santander', currency: 'EUR' }),
+                ],
+            })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm onTransactionAdded={mockOnTransactionAdded} defaultAccountId="acc-002" />
+            </MemoryRouter>
+        )
+
+        await screen.findByRole('option', { name: 'Santander' })
+        await waitFor(() => {
+            expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+        })
+    })
+
+    it('updates currency when the user manually switches accounts', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({
+                data: [
+                    makeAccount({ id: 'acc-001', name: 'Current Account', currency: 'GBP' }),
+                    makeAccount({ id: 'acc-002', name: 'Santander', currency: 'EUR' }),
+                ],
+            })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(<MemoryRouter><AddTransactionForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+
+        await screen.findByRole('option', { name: 'Santander' })
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('GBP')
+
+        await userEvent.selectOptions(screen.getByLabelText(/^account$/i), 'acc-002')
+
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+    })
+
+    it('does not override an explicit defaultValues.currency (e.g. "Add now" from a schedule)', async () => {
+        vi.mocked(axios.get)
+            .mockResolvedValueOnce({ data: [makeAccount({ currency: 'GBP' })] })
+            .mockResolvedValueOnce({ data: [makeCategory()] })
+
+        render(
+            <MemoryRouter>
+                <AddTransactionForm
+                    onTransactionAdded={mockOnTransactionAdded}
+                    defaultValues={{ currency: 'USD' }}
+                />
+            </MemoryRouter>
+        )
+
+        await screen.findByRole('option', { name: 'Current Account' })
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('USD')
+    })
+
+    // =========================================================================
     // Refund — conditional field
     // =========================================================================
 

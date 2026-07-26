@@ -157,6 +157,63 @@ describe('AddTransferForm', () => {
         expect(toSelect.value).toBe('acc-001')
     })
 
+    // =========================================================================
+    // Currency sync — same regression as AddTransactionForm: currency was
+    // hard-coded to 'GBP' regardless of which account was selected.
+    // =========================================================================
+
+    it('syncs currency to the auto-selected from-account\'s currency in create mode', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [makeAccount({ id: 'acc-001', name: 'Santander', currency: 'EUR' })],
+        })
+
+        render(<MemoryRouter><AddTransferForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+
+        await screen.findAllByRole('option', { name: 'Santander' })
+        await waitFor(() => {
+            expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+        })
+    })
+
+    it('syncs currency to the pre-selected from-account when defaultAccountId is provided', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [
+                makeAccount({ id: 'acc-001', name: 'Current', currency: 'GBP' }),
+                makeAccount({ id: 'acc-002', name: 'Santander', currency: 'EUR' }),
+            ],
+        })
+
+        render(
+            <MemoryRouter>
+                <AddTransferForm onTransactionAdded={mockOnTransactionAdded} defaultAccountId="acc-002" />
+            </MemoryRouter>
+        )
+
+        await waitFor(() => {
+            const fromSelect = screen.getByLabelText(/from account/i) as HTMLSelectElement
+            expect(fromSelect.value).toBe('acc-002')
+        })
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+    })
+
+    it('updates currency when the user manually switches the from account', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: [
+                makeAccount({ id: 'acc-001', name: 'Current', currency: 'GBP' }),
+                makeAccount({ id: 'acc-002', name: 'Santander', currency: 'EUR' }),
+            ],
+        })
+
+        render(<MemoryRouter><AddTransferForm onTransactionAdded={mockOnTransactionAdded} /></MemoryRouter>)
+
+        await screen.findAllByRole('option', { name: 'Santander' })
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('GBP')
+
+        await userEvent.selectOptions(screen.getByLabelText(/from account/i), 'acc-002')
+
+        expect(screen.getByLabelText(/^currency$/i)).toHaveValue('EUR')
+    })
+
     it('shows Edit Transfer heading in edit mode', () => {
         const editing = {
             id: 'tx-1', account_id: 'acc-001', date: '2026-01-15',

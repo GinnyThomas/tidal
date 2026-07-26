@@ -27,7 +27,7 @@ import CategoryCombobox from './CategoryCombobox'
 import { getApiBaseUrl } from '../lib/api'
 import { CURRENCIES } from '../lib/currencies'
 
-type Account = { id: string; name: string }
+type Account = { id: string; name: string; currency: string }
 type Category = { id: string; name: string; parent_category_id?: string | null }
 type PromotionOption = { id: string; name: string }
 
@@ -163,7 +163,19 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
             if (promosRes) setPromotions(promosRes.data)
             // Only auto-select the first option in create mode — in edit mode the
             // values are already set from the editingTransaction prop.
-            if (!isEditMode && !defaultAccountId && accountsRes.data.length > 0) setAccountId(accountsRes.data[0].id)
+            if (!isEditMode) {
+                const selectedId = defaultAccountId || accountsRes.data[0]?.id
+                if (!defaultAccountId && accountsRes.data.length > 0) setAccountId(selectedId)
+                // Currency was previously hard-coded to 'GBP' regardless of the
+                // account — sync it to the (auto-selected or pre-filtered)
+                // account's actual currency. Skipped when defaultValues.currency
+                // was explicitly provided (e.g. "Add now" from a schedule),
+                // which already carries the right one.
+                if (selectedId && !defaultValues?.currency) {
+                    const acct = accountsRes.data.find((a: Account) => a.id === selectedId)
+                    if (acct) setCurrency(acct.currency)
+                }
+            }
             // Category is not auto-selected — "No category" is a valid choice
             // (e.g. credit card payments). defaultValues?.categoryId pre-fills
             // when coming from "Add now" on the schedules page.
@@ -313,7 +325,14 @@ function AddTransactionForm({ onTransactionAdded, editingTransaction, onTransact
                     <select
                         id="txAccount"
                         value={accountId}
-                        onChange={(e) => setAccountId(e.target.value)}
+                        onChange={(e) => {
+                            const newAccountId = e.target.value
+                            setAccountId(newAccountId)
+                            // Currency follows the selected account so it's never
+                            // silently left on whatever the previous account used.
+                            const acct = accounts.find(a => a.id === newAccountId)
+                            if (acct) setCurrency(acct.currency)
+                        }}
                         className="input-base"
                         required
                     >

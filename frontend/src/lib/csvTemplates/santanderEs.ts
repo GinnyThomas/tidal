@@ -20,7 +20,9 @@
 //               - Decimal separator: comma  (e.g. "−31,95")
 //               - Thousands separator: period (e.g. "−1.000,00")
 //               - Uses Unicode MINUS SIGN U+2212 (−), NOT ASCII hyphen-minus (-)
-//   Payee:      "Description" column
+//   Payee:      "Description" column, with redundant boilerplate prefixes
+//               Santander adds to every card/mobile payment stripped off
+//               (e.g. "PAGO MOVIL EN SUPERMERCAT..." → "SUPERMERCAT...").
 //   Notes:      None (Description doubles as both payee and notes)
 //   External ID: None
 //   Currency:   "Currency" column (EUR) — ignored; account currency used by backend
@@ -28,6 +30,23 @@
 
 import type { CsvTemplate, ParsedRow } from '../csvTemplates'
 import { parseDate, parseAmount } from '../csvParsing'
+
+// Santander prefixes every contactless/mobile/card payment's description
+// with one of these boilerplate phrases ("mobile payment at", "purchase") —
+// stripping it leaves just the merchant name, which is what's actually
+// useful as a payee. Only one of these ever applies to a given row.
+const REDUNDANT_PAYEE_PREFIXES = [/^PAGO MOVIL EN\s+/i, /^COMPRA\s+/i]
+
+function stripRedundantPrefix(text: string): string {
+  for (const prefix of REDUNDANT_PAYEE_PREFIXES) {
+    if (prefix.test(text)) {
+      // Fall back to the untouched text if stripping the prefix would leave
+      // nothing behind (e.g. a description that's only "COMPRA").
+      return text.replace(prefix, '').trim() || text
+    }
+  }
+  return text
+}
 
 export const santanderEsTemplate: CsvTemplate = {
   id: 'santander_es',
@@ -49,7 +68,7 @@ export const santanderEsTemplate: CsvTemplate = {
   parse(row: Record<string, string>): ParsedRow | { error: string } | null {
     const dateStr = row['Transaction date']?.trim() ?? ''
     const rawAmount = row['Amount']?.trim() ?? ''
-    const payee = row['Description']?.trim() || ''
+    const payee = stripRedundantPrefix(row['Description']?.trim() || '')
 
     // Blank row — silently skip
     if (!dateStr && !rawAmount) return null
