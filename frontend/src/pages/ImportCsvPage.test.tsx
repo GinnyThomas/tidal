@@ -400,6 +400,52 @@ describe('ImportCsvPage', () => {
     })
   })
 
+  async function uploadMonzoAndClickImport() {
+    renderPage()
+    await waitFor(() => screen.getByText('Monzo (GBP)'))
+
+    const fileInput = screen.getByLabelText(/CSV or XLSX file/i)
+    const csvContent = 'Transaction ID,Date,...'
+    const file = new File([csvContent], 'monzo.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve(csvContent) })
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => screen.getByRole('button', { name: /Import \d+ transaction/i }), { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: /Import \d+ transaction/i }))
+  }
+
+  it('shows the server detail message when import fails with a string detail', async () => {
+    // e.g. a category deleted in another tab after it was assigned during review —
+    // retrying can't fix this, so the user needs to see which ids are bad.
+    mockedAxios.post = vi.fn().mockRejectedValue({
+      response: { status: 404, data: { detail: 'Unknown category_id(s): cat-deleted' } },
+    })
+
+    await uploadMonzoAndClickImport()
+
+    await waitFor(() => {
+      expect(screen.getByText('Unknown category_id(s): cat-deleted')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/Import failed/i)).not.toBeInTheDocument()
+  })
+
+  it('falls back to the generic message when detail is not a string', async () => {
+    // FastAPI request-validation errors return detail as a list of objects —
+    // rendering that directly would crash React.
+    mockedAxios.post = vi.fn().mockRejectedValue({
+      response: {
+        status: 422,
+        data: { detail: [{ loc: ['body', 'transactions', 0, 'date'], msg: 'invalid date', type: 'value_error' }] },
+      },
+    })
+
+    await uploadMonzoAndClickImport()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Import failed/i)).toBeInTheDocument()
+    })
+  })
+
   it('navigates back to pick step when Back button clicked on review step', async () => {
     renderPage()
     await waitFor(() => screen.getByText('Monzo (GBP)'))

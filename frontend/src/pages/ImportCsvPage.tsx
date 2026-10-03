@@ -542,7 +542,12 @@ export default function ImportCsvPage() {
       setImportResult(resp.data)
       setStep('done')
     } catch (err) {
-      setImportError('Import failed. Please try again.')
+      // Surface the server's message when it's a plain string (e.g. the 404
+      // listing unknown category_ids — retrying won't fix that). FastAPI
+      // validation errors send detail as a list of objects, so anything that
+      // isn't a string falls back to the generic message rather than crashing.
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setImportError(typeof detail === 'string' ? detail : 'Import failed. Please try again.')
       console.error(err)
     } finally {
       setImporting(false)
