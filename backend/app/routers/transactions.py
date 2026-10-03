@@ -489,9 +489,16 @@ def import_transactions(
         }
         unknown = requested_category_ids - owned_category_ids
         if unknown:
+            # 404, not 422 — matches the _get_category_or_404 convention used
+            # everywhere else in this router for "doesn't exist or isn't
+            # yours" ownership checks. Doesn't leak anything new: every id in
+            # the message is one the caller already submitted themselves.
+            # Report the full set, not just one — a big batch with several
+            # bad ids shouldn't force a fix-one-retry-fix-one-retry loop.
+            unknown_ids = ", ".join(sorted(str(u) for u in unknown))
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Unknown category_id: {next(iter(unknown))}",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unknown category_id(s): {unknown_ids}",
             )
 
     # Fetch existing external_ids and hashes for this account in one query each.

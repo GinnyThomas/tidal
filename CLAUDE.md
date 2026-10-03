@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 356 Tests
+## All Phases Complete — 605 Tests
 
-**116 backend · 240 frontend · 356 total**
+**185 backend · 420 frontend · 605 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -52,28 +52,35 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - ✅ Phase 10: Promotions, cash flow, opening balances, transfer editing, UX polish
 - ✅ Phase 11: Category groups, credit card balances, scheduled transfers, exports,
                payee search, schedule category filter, batch overrides, Add now
+- ✅ Split transactions (one transaction → multiple category allocations)
+- ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
 
 ---
 
-## Models (10 tables)
+## Models (12 tables)
 
 - `users` — email(lower) · bcrypt · JWT
 - `accounts` — type · currency · opening_balance · calculated dynamically
 - `categories` — hierarchy · is_system · is_hidden · is_income · **group**
-- `transactions` — 4 types · nullable category · promotion_id · optional category
+- `transactions` — 4 types · nullable category · promotion_id · is_split · dedup_hash · external_id
+- `transaction_splits` — category · promotion · amount · note (sum must equal parent, enforced in router)
 - `schedules` — recurrence · group · next_occurrence · active · **schedule_type** · from/to accounts
 - `reallocations` — immutable · reason required
 - `budgets` — default_amount · year · group · notes · unique(user,cat,year)
 - `budget_overrides` — month · amount · batch upsert endpoint
 - `promotions` — type · dates · interest_rate · is_active · urgency computed
 - `group_opening_balances` — group · year · opening_balance · currency
+- `csv_mappings` — saved column mapping per (user, account) · mapping_json
 
 ---
 
-## Routers (11 endpoints)
+## Routers (11)
 
 `/auth` · `/accounts` · `/categories` · `/transactions` · `/schedules`
 `/reallocations` · `/plan` · `/budgets` · `/promotions` · `/opening_balances`
+`/csv-mappings`
+
+Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST /{id}/convert-to-transfer`
 
 ---
 
@@ -91,6 +98,30 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - Income determined by `is_income` flag on Category
 - Expenses/Income shown in separate sub-sections within each group
 - Default: cash flow ON
+
+**CSV Import (`ImportCsvPage.tsx`):**
+- Bank templates in `lib/csvTemplates/` — Monzo, Virgin Money, Santander España
+  auto-detected from headers; Barclays exists but `verified: false` (excluded from
+  auto-detection until checked against a real export)
+- Unrecognised files → manual column mapping, saved per account via `/csv-mappings`
+- Client-side dedup (definite / possible duplicates) in review step; server-side
+  dedup via `dedup_hash` + `external_id` as final safety net
+- Category assignment during review (per row or bulk-apply to selected rows);
+  unknown/unowned category_ids → 404 listing all bad ids
+- "Convert to Transfer" turns a mis-classified imported row into a transfer leg,
+  keeping its dedup history
+- Robustness: malformed rows skipped (not whole file), Unicode minus handled,
+  payees > 100 chars truncated with full text in note, Santander "PAGO MOVIL EN" /
+  "COMPRA" prefixes stripped, currency follows the selected account
+- Santander match requires `Value date` + `Balance` columns — the narrower export
+  variant falls through to manual mapping (deliberate: avoids false positives)
+- `TODO(refunds)`: no refund signal from banks, so all positive amounts import as
+  income — pinned by `test_import_positive_amount_classified_as_income_pending_refund_refactor`
+
+**Split Transactions:**
+- `is_split` on transaction + `transaction_splits` rows (category · promotion · amount)
+- Split amounts must sum to transaction total (router validation)
+- Full UI in `AddTransactionForm.tsx`; plan service allocates actuals per split
 
 **Account Balances:**
 - `calculated_balance` = opening + transactions (cleared/reconciled only)
@@ -171,6 +202,9 @@ planned = schedule amounts + budget amounts per category per month:
 - `lib/annualPlanCache.ts` — session cache, invalidated on mutations/logout
 - `lib/axiosConfig.ts` — 401 handler + JWT auto-refresh (< 15 min expiry)
 - `lib/api.ts` — `getApiBaseUrl()`
+- `lib/csvTemplates.ts` + `lib/csvTemplates/` — bank template registry, `detectTemplate()`
+- `lib/csvParsing.ts` — shared parsing for mapping preview + import (must stay identical: feeds dedup hash)
+- `lib/dedupHash.ts` — client-side dedup hash, mirrors backend `compute_dedup_hash()`
 
 ---
 
@@ -198,7 +232,9 @@ planned = schedule amounts + budget amounts per category per month:
 - N+1 on list_accounts balance calculation
 - sessionStorage for annual cache (in-memory only)
 - React Query not wired up
-- Split transactions not yet built (Amazon use case)
+- CSV import refund detection (see `TODO(refunds)` above)
+- Annual CSV export writes hardcoded totals, not live `=SUM()` formulas
+  (needs a careful exception in `escapeCsvCell()` formula-injection protection)
 - Currency consolidation (exchange_rate exists, no conversion logic)
 - Open Banking / bank sync
 - Google OAuth
@@ -228,4 +264,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: May 2026 — 356 tests · Live at tidal-vert.vercel.app*
+*Last updated: September 2026 — 605 tests · Live at tidal-vert.vercel.app*

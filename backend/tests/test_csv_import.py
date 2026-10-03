@@ -204,7 +204,11 @@ def test_import_mixed_rows_with_and_without_category(test_client) -> None:
 
 
 def test_import_rejects_nonexistent_category_id(test_client) -> None:
-    """An unknown category_id causes the whole import to fail with 422."""
+    """
+    An unknown category_id causes the whole import to fail with 404 — matches
+    the _get_category_or_404 convention used elsewhere in this router for
+    "doesn't exist or isn't yours" checks, rather than 422.
+    """
     token, account_id = _setup(test_client)
     fake_category_id = "00000000-0000-0000-0000-000000000000"
 
@@ -218,11 +222,12 @@ def test_import_rejects_nonexistent_category_id(test_client) -> None:
         },
         headers=_auth(token),
     )
-    assert response.status_code == 422
+    assert response.status_code == 404
+    assert fake_category_id in response.json()["detail"]
 
 
 def test_import_rejects_other_users_category_id(test_client) -> None:
-    """A category_id belonging to a different user causes the import to fail with 422."""
+    """A category_id belonging to a different user causes the import to fail with 404."""
     token_a = _register_and_login(test_client, "cat-a@example.com")
     account_a = _create_account(test_client, token_a)
 
@@ -239,7 +244,34 @@ def test_import_rejects_other_users_category_id(test_client) -> None:
         },
         headers=_auth(token_a),
     )
-    assert response.status_code == 422
+    assert response.status_code == 404
+
+
+def test_import_rejects_multiple_unknown_category_ids_reports_all(test_client) -> None:
+    """
+    When several rows reference bad category_ids, the error must list all of
+    them — not just an arbitrary one — so a large batch doesn't turn into a
+    fix-one-retry-fix-one-retry loop.
+    """
+    token, account_id = _setup(test_client)
+    fake_id_1 = "00000000-0000-0000-0000-000000000001"
+    fake_id_2 = "00000000-0000-0000-0000-000000000002"
+
+    response = test_client.post(
+        "/api/v1/transactions/import",
+        json={
+            "account_id": account_id,
+            "transactions": [
+                {"date": "2026-01-15", "amount": "-10.00", "payee": "Shop A", "category_id": fake_id_1},
+                {"date": "2026-01-16", "amount": "-20.00", "payee": "Shop B", "category_id": fake_id_2},
+            ],
+        },
+        headers=_auth(token),
+    )
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert fake_id_1 in detail
+    assert fake_id_2 in detail
 
 
 def test_import_stores_notes(test_client) -> None:
