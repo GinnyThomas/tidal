@@ -12,7 +12,7 @@
 
 import axios from 'axios'
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
 import DemoButton from '../components/DemoButton'
@@ -23,6 +23,9 @@ function LoginPage() {
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const navigate = useNavigate()
+    // ResetPasswordPage redirects here with { passwordReset: true } on success.
+    const location = useLocation()
+    const passwordReset = (location.state as { passwordReset?: boolean } | null)?.passwordReset === true
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
@@ -56,6 +59,12 @@ function LoginPage() {
                         </h1>
                         <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
                     </div>
+
+                    {passwordReset && (
+                        <div className="bg-teal-500/10 border border-teal-500/30 rounded-lg px-3 py-2.5 mb-5">
+                            <p className="text-teal-400 text-sm">Password updated. Log in with your new password.</p>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
@@ -102,6 +111,11 @@ function LoginPage() {
                                 >
                                     {showPassword ? '🔒' : '👁️'}
                                 </button>
+                            </div>
+                            <div className="text-right mt-1.5">
+                                <Link to="/forgot-password" className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                                    Forgot password?
+                                </Link>
                             </div>
                         </div>
 

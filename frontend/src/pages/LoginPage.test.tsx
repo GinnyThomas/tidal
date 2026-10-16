@@ -85,4 +85,27 @@ describe('LoginPage', () => {
         render(<MemoryRouter><LoginPage /></MemoryRouter>)
         expect(screen.getByRole('button', { name: /try demo/i })).toBeInTheDocument()
     })
+
+    // =========================================================================
+    // Forgot password
+    // =========================================================================
+
+    it('links to the forgot password page', () => {
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute('href', '/forgot-password')
+    })
+
+    it('shows a success message when arriving from a password reset', () => {
+        render(
+            <MemoryRouter initialEntries={[{ pathname: '/login', state: { passwordReset: true } }]}>
+                <LoginPage />
+            </MemoryRouter>
+        )
+        expect(screen.getByText(/password updated/i)).toBeInTheDocument()
+    })
+
+    it('does not show the success message on a normal visit', () => {
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        expect(screen.queryByText(/password updated/i)).not.toBeInTheDocument()
+    })
 })

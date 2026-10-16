@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 641 Tests
+## All Phases Complete — 671 Tests
 
-**196 backend · 445 frontend · 641 total**
+**210 backend · 461 frontend · 671 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -55,10 +55,11 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - ✅ Split transactions (one transaction → multiple category allocations)
 - ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
 - ✅ Year-end rollover (copy budgets to next year, carry closing → opening balance)
+- ✅ Password reset (forgot-password email via Resend, single-use hashed tokens)
 
 ---
 
-## Models (12 tables)
+## Models (13 tables)
 
 - `users` — email(lower) · bcrypt · JWT
 - `accounts` — type · currency · opening_balance · calculated dynamically
@@ -72,6 +73,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `promotions` — type · dates · interest_rate · is_active · urgency computed
 - `group_opening_balances` — group · year · opening_balance · currency
 - `csv_mappings` — saved column mapping per (user, account) · mapping_json
+- `password_reset_tokens` — token_hash (SHA-256, raw token only in email) · expires_at · used_at
 
 ---
 
@@ -81,6 +83,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 `/reallocations` · `/plan` · `/budgets` · `/promotions` · `/opening_balances`
 `/csv-mappings`
 
+Notable `/auth` sub-routes: `POST /forgot-password` (always 202) · `POST /reset-password`
 Notable `/budgets` sub-route: `POST /copy-year`
 Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST /{id}/convert-to-transfer`
 
@@ -106,6 +109,16 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   `computeClosingBalances()`; plan response types in `lib/planTypes.ts`
 - `/plan?group=` filters **budgets only** (schedules/transactions from all groups
   still arrive), so a filtered Annual view's cash flow filters rows client-side
+
+**Password Reset:**
+- Login → "Forgot password?" → `/forgot-password` → email link → `/reset-password?token=…`
+  → back to `/login` with a "Password updated" banner (router state `passwordReset`)
+- Same 202 response for known/unknown emails; email sent via `BackgroundTasks`
+  so response time doesn't leak whether the account exists
+- Tokens: 30 min expiry, single use; a successful reset consumes all of the user's
+  outstanding tokens
+- `services/email.py` → Resend HTTP API (Railway blocks SMTP). No `RESEND_API_KEY`
+  = email logged to console. Railway env: `RESEND_API_KEY`, `FRONTEND_URL`
 
 **Cash Flow (Annual View):**
 - Opening balance per group per year (editable inline)
@@ -255,6 +268,9 @@ planned = schedule amounts + budget amounts per category per month:
 - Currency consolidation (exchange_rate exists, no conversion logic)
 - Open Banking / bank sync
 - Google OAuth
+- Password reset: no domain verified with Resend yet, so emails only reach the Resend
+  account owner; no rate limiting on `/forgot-password`; JWTs issued before a
+  reset stay valid until expiry (no revocation)
 - Per-schedule actual spend tracking
 
 ---

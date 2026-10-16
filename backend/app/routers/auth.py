@@ -10,19 +10,30 @@
 # Endpoints:
 #   POST /api/v1/auth/register  → creates a new user, returns UserResponse (201)
 #   POST /api/v1/auth/login     → verifies credentials, returns TokenResponse (200)
+#   POST /api/v1/auth/forgot-password → emails a reset link if the account exists (always 202)
+#   POST /api/v1/auth/reset-password  → redeems a reset token for a new password (204 / 400)
 #
 # This module is the "thin HTTP layer" — it handles request/response shapes
 # and delegates all logic to services/auth.py. Routes should be short.
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    MessageResponse,
+    ResetPasswordRequest,
+    TokenResponse,
+)
 from app.schemas.user import UserCreate, UserResponse
+from app.services import email as email_service
+from app.services import password_reset
 from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.services.categories import seed_default_categories
 
@@ -196,6 +207,70 @@ def change_password(
         )
     current_user.password_hash = hash_password(body.new_password)
     db.commit()
+
+
+# Same message whether or not the account exists — see forgot_password().
+FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link is on its way."
+INVALID_RESET_TOKEN_MESSAGE = "This reset link is invalid or has expired."
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,  # 202 = "accepted for processing" — the email goes out afterwards
+)
+def forgot_password(
+    body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Starts a password reset: if the email belongs to an active account, emails
+    a single-use link to /reset-password?token=... on the frontend.
+
+    Security note — user enumeration:
+        Same reasoning as login's generic 401. The response is identical for
+        known and unknown emails, so this endpoint can't be used to discover
+        who has an account.
+
+    Why BackgroundTasks?
+        Sending via Resend is an HTTP round-trip. Done inline, "account exists"
+        would respond measurably slower than "no account" — a timing leak that
+        undoes the identical response body. As a background task the email is
+        sent after the response, so both paths return equally fast.
+    """
+    email = body.email.lower()
+    user = (
+        db.query(User)
+        .filter(func.lower(User.email) == email, User.deleted_at.is_(None))
+        .first()
+    )
+    if user is not None:
+        raw_token = password_reset.create_reset_token(user, db)
+        subject, html = password_reset.build_reset_email(raw_token)
+        # Looked up on the module at call time so tests can swap in a fake sender.
+        background_tasks.add_task(email_service.send_email, user.email, subject, html)
+
+    return {"detail": FORGOT_PASSWORD_MESSAGE}
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) -> None:
+    """
+    Sets a new password using the token from a reset email.
+
+    400 (not 401/404) for a bad token: the request itself can't be fulfilled.
+    One message covers unknown, used and expired tokens — the user's next step
+    is the same in every case (request a new link).
+    """
+    if not password_reset.reset_password(body.token, body.new_password, db):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_RESET_TOKEN_MESSAGE,
+        )
 
 
 @router.post("/refresh", response_model=TokenResponse)
