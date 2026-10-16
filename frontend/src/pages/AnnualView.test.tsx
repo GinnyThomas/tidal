@@ -6,7 +6,8 @@
 //   Loading state, error state, empty state (no planned amounts across the year),
 //   12 month column headers, category amounts, "—" for zero amounts,
 //   year navigation, group sections with separate expense/income subtotals,
-//   and cash flow (on by default).
+//   cash flow (on by default), and carrying the previous year's closing
+//   balance forward as the opening balance.
 //
 // One axios.get call on mount: GET /api/v1/plan/{year}
 // Returns an AnnualPlan: { year, months: MonthlyPlan[12] }
@@ -574,6 +575,247 @@ describe('AnnualView', () => {
             globalThis.Blob = origBlob
             URL.createObjectURL = origCreate
             URL.revokeObjectURL = origRevoke
+        }
+    })
+
+    // =========================================================================
+    // Carry forward previous year's closing balance
+    // =========================================================================
+
+    describe('carry forward opening balance', () => {
+        // 2026: opening 1,000, rent actual 100/month → closes at -200.00
+        const plan2026 = () => {
+            const rowsByMonth: Record<number, ReturnType<typeof makePlanRow>[]> = {}
+            for (let i = 0; i < 12; i++) {
+                rowsByMonth[i] = [makePlanRow({ category_name: 'Rent', planned: '100.00', actual: '100.00' })]
+            }
+            return makeAnnualPlan(2026, rowsByMonth, [
+                { id: 'ob-26', group: 'General', year: 2026, opening_balance: '1000.00', currency: 'GBP' },
+            ])
+        }
+        const plan2027 = (openingBalances: object[] = []) =>
+            makeAnnualPlan(2027, { 0: [makePlanRow({ category_name: 'Rent' })] }, openingBalances)
+
+        // Route GETs by URL so call order doesn't matter
+        function mockPlans(plans: Record<number, () => object>) {
+            vi.mocked(axios.get).mockImplementation((url: string) => {
+                const year = Number(url.split('/').pop())
+                return Promise.resolve({ data: plans[year]() })
+            })
+        }
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it('offers to use the previous year\'s closing when there is no opening balance', async () => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            mockPlans({ 2027: () => plan2027() })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            expect(await screen.findByRole('button', { name: 'Use 2026 closing' })).toBeInTheDocument()
+            // 2026 is over, so the figure is final — no estimate warning
+            expect(screen.queryByText(/estimate/i)).not.toBeInTheDocument()
+        })
+
+        it('does not offer it once an opening balance is set', async () => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            mockPlans({
+                2027: () => plan2027([
+                    { id: 'ob-27', group: 'General', year: 2027, opening_balance: '50.00', currency: 'GBP' },
+                ]),
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Rent')
+            expect(screen.queryByRole('button', { name: /closing$/i })).not.toBeInTheDocument()
+        })
+
+        it("fetches the previous year, saves its December closing as this year's opening, and shows it", async () => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            let saved = false
+            vi.mocked(axios.get).mockImplementation((url: string) => {
+                if (url.endsWith('/2026')) return Promise.resolve({ data: plan2026() })
+                return Promise.resolve({
+                    data: plan2027(saved
+                        ? [{ id: 'ob-27', group: 'General', year: 2027, opening_balance: '-200.00', currency: 'GBP' }]
+                        : []),
+                })
+            })
+            vi.mocked(axios.post).mockImplementation(() => {
+                saved = true
+                return Promise.resolve({ data: {} })
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(axios.get).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/plan/2026`,
+                expect.anything(),
+            )
+            expect(axios.post).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/opening-balances`,
+                { group: 'General', year: 2027, opening_balance: '-200.00', currency: 'GBP' },
+                expect.anything(),
+            )
+            expect(await screen.findByText('-200.00')).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Use 2026 closing' })).not.toBeInTheDocument()
+        })
+
+        it('warns that the figure is an estimate while the previous year is still running', async () => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-15'))
+            mockPlans({
+                2026: () => plan2026(),
+                2027: () => plan2027(),
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Rent')
+            await userEvent.click(screen.getByRole('button', { name: /next/i }))
+
+            expect(await screen.findByRole('button', { name: 'Use 2026 closing' })).toBeInTheDocument()
+            expect(screen.getByText(/estimate/i)).toBeInTheDocument()
+        })
+
+        it('does not report a failed carry-forward when the save worked but the reload failed', async () => {
+            // Saying "could not carry forward" here would invite a retry that
+            // then 409s, because the opening balance now exists.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            let saved = false
+            vi.mocked(axios.get).mockImplementation((url: string) => {
+                if (url.endsWith('/2026')) return Promise.resolve({ data: plan2026() })
+                return saved
+                    ? Promise.reject(new Error('Network error'))
+                    : Promise.resolve({ data: plan2027() })
+            })
+            vi.mocked(axios.post).mockImplementation(() => {
+                saved = true
+                return Promise.resolve({ data: {} })
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(await screen.findByText(/could not load annual plan/i)).toBeInTheDocument()
+            expect(screen.queryByText(/could not carry forward/i)).not.toBeInTheDocument()
+        })
+
+        it('while filtered, carries forward only that group\'s money, from the unfiltered previous year', async () => {
+            // /plan?group= only filters budgets — schedules and transactions
+            // from every group still come back, so the client must filter.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            const mixedPlan = (year: number) => {
+                const rowsByMonth: Record<number, ReturnType<typeof makePlanRow>[]> = {}
+                for (let i = 0; i < 12; i++) {
+                    rowsByMonth[i] = [
+                        makePlanRow({ category_id: 'uk', category_name: 'Rent', planned: '100.00', actual: '100.00', group: 'UK' }),
+                        makePlanRow({ category_id: 'es', category_name: 'Mercado', planned: '50.00', actual: '50.00', group: 'España' }),
+                    ]
+                }
+                return makeAnnualPlan(year, rowsByMonth)
+            }
+            vi.mocked(axios.get).mockImplementation((url: string) =>
+                Promise.resolve({ data: mixedPlan(url.endsWith('/2026') ? 2026 : 2027) }),
+            )
+            vi.mocked(axios.post).mockResolvedValue({ data: {} })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Mercado')
+            await userEvent.selectOptions(screen.getByLabelText('Budget group'), 'España')
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(axios.get).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/plan/2026`,
+                expect.objectContaining({ params: {} }),
+            )
+            expect(axios.post).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/opening-balances`,
+                { group: 'España', year: 2027, opening_balance: '-600.00', currency: 'EUR' },
+                expect.anything(),
+            )
+        })
+
+        it('shows an error if the carry-forward fails', async () => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            vi.mocked(axios.get).mockImplementation((url: string) =>
+                url.endsWith('/2026')
+                    ? Promise.reject(new Error('Network error'))
+                    : Promise.resolve({ data: plan2027() }),
+            )
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(await screen.findByText(/could not carry forward/i)).toBeInTheDocument()
+        })
+    })
+
+    // =========================================================================
+    // Filtered cash flow + opening balance save robustness
+    // =========================================================================
+
+    it("filtered to one group, the closing balance counts only that group's rows", async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2027-01-10'))
+        try {
+            // Server returns schedule rows from every group even when filtered
+            const rows = [
+                makePlanRow({ category_id: 'uk', category_name: 'Rent', planned: '100.00', group: 'UK' }),
+                makePlanRow({ category_id: 'es', category_name: 'Mercado', planned: '50.00', group: 'España' }),
+            ]
+            vi.mocked(axios.get).mockResolvedValue({ data: makeAnnualPlan(2027, { 0: rows }) })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Mercado')
+            await userEvent.selectOptions(screen.getByLabelText('Budget group'), 'España')
+
+            await waitFor(() => {
+                const closingRow = screen.getByText('Closing Balance').closest('tr')!
+                expect(closingRow.querySelectorAll('td')[1].textContent).toBe('-50.00')
+            })
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not get stuck loading when the reload after an inline opening balance save fails', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2027-01-10'))
+        try {
+            let saved = false
+            vi.mocked(axios.get).mockImplementation(() => saved
+                ? Promise.reject(new Error('Network error'))
+                : Promise.resolve({ data: makeAnnualPlan(2027, { 0: [makePlanRow({ category_name: 'Rent' })] }) }))
+            vi.mocked(axios.post).mockImplementation(() => {
+                saved = true
+                return Promise.resolve({ data: {} })
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByText('Set opening balance'))
+            await userEvent.type(screen.getByRole('spinbutton'), '100{Enter}')
+
+            expect(await screen.findByText(/could not load annual plan/i)).toBeInTheDocument()
+            expect(screen.queryByText(/building your annual plan/i)).not.toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
         }
     })
 })

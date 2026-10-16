@@ -8,6 +8,8 @@
 #   BudgetResponse        — response for all budget endpoints (includes overrides)
 #   BudgetOverrideCreate  — request body for POST /api/v1/budgets/{id}/overrides
 #   BudgetOverrideResponse — nested inside BudgetResponse
+#   BudgetCopyYear        — request body for POST /api/v1/budgets/copy-year
+#   BudgetCopyYearResult  — response for POST /api/v1/budgets/copy-year
 #
 # Amount serialisation:
 #   Same pattern as other financial schemas — @field_serializer converts
@@ -19,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 
 class BudgetOverrideBatchItem(BaseModel):
@@ -115,3 +117,29 @@ class BudgetResponse(BaseModel):
     def serialize_amount(self, value: Decimal) -> str:
         """Return amount as a string with exactly 2 decimal places."""
         return str(value.quantize(Decimal("0.01")))
+
+
+class BudgetCopyYear(BaseModel):
+    """
+    Request body for POST /api/v1/budgets/copy-year.
+
+    include_overrides defaults to False: overrides are usually one-offs
+    (a big December), so by default only default_amount carries forward.
+    """
+
+    from_year: int
+    to_year: int
+    include_overrides: bool = False
+
+    @model_validator(mode="after")
+    def check_years_differ(self) -> "BudgetCopyYear":
+        if self.from_year == self.to_year:
+            raise ValueError("from_year and to_year must be different")
+        return self
+
+
+class BudgetCopyYearResult(BaseModel):
+    """How many budgets were created vs skipped (already budgeted or deleted category)."""
+
+    created: int
+    skipped: int

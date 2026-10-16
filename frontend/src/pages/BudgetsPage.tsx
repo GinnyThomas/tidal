@@ -12,6 +12,8 @@
 //   - Edit button pre-populates AddBudgetForm
 //   - Delete button with confirmation
 //   - Overrides expand button shows BudgetOverrideForm inline
+//   - Empty year: "Copy budgets from {year - 1}" rolls the previous year's
+//     budgets forward (overrides optional), via POST /budgets/copy-year
 
 import axios from 'axios'
 import React, { useEffect, useRef, useState } from 'react'
@@ -54,6 +56,24 @@ type Category = {
     name: string
 }
 
+type CopyYearResult = {
+    created: number
+    skipped: number
+}
+
+type CopyStatus = { kind: 'success' | 'error'; text: string }
+
+function describeCopyResult(result: CopyYearResult, fromYear: number): string {
+    if (result.created === 0 && result.skipped === 0) {
+        return `No budgets found in ${fromYear} to copy.`
+    }
+    const noun = result.created === 1 ? 'budget' : 'budgets'
+    const skipped = result.skipped > 0
+        ? ` Skipped ${result.skipped} (already budgeted or category deleted).`
+        : ''
+    return `Copied ${result.created} ${noun} from ${fromYear}.${skipped}`
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -71,6 +91,15 @@ function BudgetsPage() {
     // Budget currently open in the pattern modal (null = closed)
     const [patternBudget, setPatternBudget] = useState<Budget | null>(null)
     const [refreshKey, setRefreshKey] = useState(0)
+    // Copy-from-previous-year (rollover) state
+    const [includeOverrides, setIncludeOverrides] = useState(false)
+    const [copying, setCopying] = useState(false)
+    const [copyStatus, setCopyStatus] = useState<CopyStatus | null>(null)
+
+    // A copy result belongs to the year it was made in
+    useEffect(() => {
+        setCopyStatus(null)
+    }, [year])
 
     // Fetch budgets for the selected year (and optional group filter)
     useEffect(() => {
@@ -289,6 +318,27 @@ function BudgetsPage() {
         annualPlanCache.clear()
     }
 
+    const handleCopyFromPreviousYear = async () => {
+        const fromYear = year - 1
+        const token = localStorage.getItem('access_token')
+        setCopying(true)
+        setCopyStatus(null)
+        try {
+            const res = await axios.post<CopyYearResult>(
+                `${getApiBaseUrl()}/api/v1/budgets/copy-year`,
+                { from_year: fromYear, to_year: year, include_overrides: includeOverrides },
+                { headers: { Authorization: `Bearer ${token}` } },
+            )
+            setCopyStatus({ kind: 'success', text: describeCopyResult(res.data, fromYear) })
+            setRefreshKey(k => k + 1)
+            annualPlanCache.clear()
+        } catch {
+            setCopyStatus({ kind: 'error', text: 'Could not copy budgets. Please try again.' })
+        } finally {
+            setCopying(false)
+        }
+    }
+
     const handleEdit = (budget: Budget) => {
         setShowForm(false)
         setEditingBudget(budget)
@@ -398,6 +448,15 @@ function BudgetsPage() {
                     </div>
                 )}
 
+                {copyStatus && (
+                    <p
+                        role={copyStatus.kind === 'error' ? 'alert' : 'status'}
+                        className={`mb-4 text-sm ${copyStatus.kind === 'error' ? 'text-coral-400' : 'text-teal-400'}`}
+                    >
+                        {copyStatus.text}
+                    </p>
+                )}
+
                 {/* Budget list / empty state */}
                 {budgets.length === 0 ? (
                     <div className="text-center py-20">
@@ -405,6 +464,27 @@ function BudgetsPage() {
                         <p className="text-slate-400 text-lg">
                             No budgets for {year}. Add one to set monthly spending targets.
                         </p>
+                        {/* Rollover copies every group, so only offer it unfiltered */}
+                        {!filterGroup && (
+                            <div className="mt-6 flex flex-col items-center gap-3">
+                                <button
+                                    onClick={handleCopyFromPreviousYear}
+                                    disabled={copying}
+                                    className="btn-secondary cursor-pointer disabled:opacity-50"
+                                >
+                                    {`Copy budgets from ${year - 1}`}
+                                </button>
+                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeOverrides}
+                                        onChange={(e) => setIncludeOverrides(e.target.checked)}
+                                        className="accent-sky-500"
+                                    />
+                                    Include monthly overrides
+                                </label>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="overflow-x-auto rounded-xl border border-ocean-700 bg-ocean-800">

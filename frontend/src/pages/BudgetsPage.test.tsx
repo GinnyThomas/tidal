@@ -4,7 +4,8 @@
 //
 // Test strategy:
 //   Loading, error, and empty states; budget list rendering; Add Budget
-//   toggle; Edit button opens pre-populated form; year navigation.
+//   toggle; Edit button opens pre-populated form; year navigation;
+//   copy budgets from the previous year (year-end rollover).
 //
 // Two axios.get calls on mount: budgets (with year param) and categories.
 
@@ -313,5 +314,126 @@ describe('BudgetsPage', () => {
         const childName = screen.getByText('Groceries UK')
         expect(childName).not.toHaveClass('font-semibold')
         expect(childName).toHaveClass('text-slate-300')
+    })
+
+    // =========================================================================
+    // Copy from previous year (rollover)
+    // =========================================================================
+
+    describe('copy from previous year', () => {
+        const currentYear = new Date().getFullYear()
+
+        it('offers to copy from the previous year when the year is empty', async () => {
+            mockFetch([], [])
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            expect(await screen.findByRole('button', { name: `Copy budgets from ${currentYear - 1}` }))
+                .toBeInTheDocument()
+            expect(screen.getByLabelText(/include monthly overrides/i)).not.toBeChecked()
+        })
+
+        it('does not offer the copy when the year already has budgets', async () => {
+            mockFetch()
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await screen.findByText('Groceries UK')
+            expect(screen.queryByRole('button', { name: /copy budgets from/i })).not.toBeInTheDocument()
+        })
+
+        it('does not offer the copy while a group filter is active', async () => {
+            // The copy rolls over every group, so offering it from a filtered
+            // (and possibly only-filtered-empty) view would be misleading.
+            mockFetch()
+            vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await screen.findByText('Groceries UK')
+            await userEvent.selectOptions(screen.getByLabelText('Group'), 'España')
+
+            await screen.findByText(/no budgets/i)
+            expect(screen.queryByRole('button', { name: /copy budgets from/i })).not.toBeInTheDocument()
+        })
+
+        it('posts previous → current year without overrides, then reloads and reports', async () => {
+            mockFetch([], [makeCategory()])
+            vi.mocked(axios.post).mockResolvedValueOnce({ data: { created: 2, skipped: 0 } })
+            // Refetch after copy
+            vi.mocked(axios.get).mockResolvedValueOnce({ data: [makeBudget({ year: currentYear })] })
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: /copy budgets from/i }))
+
+            expect(axios.post).toHaveBeenCalledWith(
+                expect.stringContaining('/api/v1/budgets/copy-year'),
+                { from_year: currentYear - 1, to_year: currentYear, include_overrides: false },
+                expect.objectContaining({ headers: { Authorization: 'Bearer fake-token' } }),
+            )
+            expect(await screen.findByText('Groceries UK')).toBeInTheDocument()
+            expect(screen.getByText(`Copied 2 budgets from ${currentYear - 1}.`)).toBeInTheDocument()
+        })
+
+        it('sends include_overrides: true when the checkbox is ticked', async () => {
+            mockFetch([], [])
+            vi.mocked(axios.post).mockResolvedValueOnce({ data: { created: 1, skipped: 0 } })
+            vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByLabelText(/include monthly overrides/i))
+            await userEvent.click(screen.getByRole('button', { name: /copy budgets from/i }))
+
+            expect(axios.post).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ include_overrides: true }),
+                expect.anything(),
+            )
+        })
+
+        it('copies into whichever year is being viewed', async () => {
+            vi.mocked(axios.get).mockResolvedValue({ data: [] })
+            vi.mocked(axios.post).mockResolvedValueOnce({ data: { created: 1, skipped: 0 } })
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await screen.findByText(/no budgets/i)
+            await userEvent.click(screen.getByRole('button', { name: /next/i }))
+            await userEvent.click(
+                await screen.findByRole('button', { name: `Copy budgets from ${currentYear}` }),
+            )
+
+            expect(axios.post).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ from_year: currentYear, to_year: currentYear + 1 }),
+                expect.anything(),
+            )
+        })
+
+        it('says so when the previous year had nothing to copy', async () => {
+            mockFetch([], [])
+            vi.mocked(axios.post).mockResolvedValueOnce({ data: { created: 0, skipped: 0 } })
+            vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: /copy budgets from/i }))
+
+            expect(await screen.findByText(`No budgets found in ${currentYear - 1} to copy.`))
+                .toBeInTheDocument()
+        })
+
+        it('shows an error when the copy fails', async () => {
+            mockFetch([], [])
+            vi.mocked(axios.post).mockRejectedValueOnce(new Error('Network error'))
+
+            render(<MemoryRouter><BudgetsPage /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: /copy budgets from/i }))
+
+            expect(await screen.findByText(/could not copy budgets/i)).toBeInTheDocument()
+        })
     })
 })
