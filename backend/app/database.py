@@ -23,7 +23,24 @@ from app.config import settings
 # pool_pre_ping=True: before using a connection from the pool, SQLAlchemy
 # sends a lightweight "ping" query to check it's still alive. Without this,
 # long-idle connections can go stale and cause mysterious errors.
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+def connect_args_for(database_url: str) -> dict[str, int]:
+    """Driver options for the engine.
+
+    connect_timeout (seconds) makes a paused or unreachable PostgreSQL fail
+    fast instead of hanging the request — /api/v1/health/db relies on this to
+    return its 503 before the caller gives up. SQLite (used in tests) rejects
+    the option, so it only applies to PostgreSQL URLs.
+    """
+    if database_url.startswith("postgresql"):
+        return {"connect_timeout": 5}
+    return {}
+
+
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args=connect_args_for(settings.DATABASE_URL),
+)
 
 
 # --- Session factory ---
