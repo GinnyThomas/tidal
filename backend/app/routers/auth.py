@@ -19,9 +19,9 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.database import get_db
+from app.database import get_db, get_session_factory
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -32,9 +32,8 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.schemas.user import UserCreate, UserResponse
-from app.services import email as email_service
 from app.services import password_reset
-from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.services.auth import create_token_for_user, get_current_user, hash_password, verify_password
 from app.services.categories import seed_default_categories
 
 
@@ -172,7 +171,8 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> dict:
     # Create a JWT. The `sub` (subject) claim identifies who the token belongs to.
     # We use the user's UUID (as a string) — stable, unguessable, and unique.
     # Email would also work as sub, but UUIDs are more stable (emails can change).
-    token = create_access_token(data={"sub": str(user.id)})
+    # The `ver` claim (user.token_version) lets a password reset revoke it.
+    token = create_token_for_user(user)
 
     return {"access_token": token, "token_type": "bearer"}
 
@@ -217,12 +217,12 @@ INVALID_RESET_TOKEN_MESSAGE = "This reset link is invalid or has expired."
 @router.post(
     "/forgot-password",
     response_model=MessageResponse,
-    status_code=status.HTTP_202_ACCEPTED,  # 202 = "accepted for processing" — the email goes out afterwards
+    status_code=status.HTTP_202_ACCEPTED,  # 202 = "accepted for processing" — the work happens afterwards
 )
 def forgot_password(
     body: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    session_factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> dict:
     """
     Starts a password reset: if the email belongs to an active account, emails
@@ -233,24 +233,14 @@ def forgot_password(
         known and unknown emails, so this endpoint can't be used to discover
         who has an account.
 
-    Why BackgroundTasks?
-        Sending via Resend is an HTTP round-trip. Done inline, "account exists"
-        would respond measurably slower than "no account" — a timing leak that
-        undoes the identical response body. As a background task the email is
-        sent after the response, so both paths return equally fast.
+    Why is ALL the work in a background task?
+        Timing. The lookup, the token INSERT + COMMIT and the Resend HTTP call
+        only happen for real accounts; done inline, "account exists" would
+        respond measurably slower than "no account". Here the route does the
+        same thing for every email — queue the task, return — and the task
+        runs after the response has been sent.
     """
-    email = body.email.lower()
-    user = (
-        db.query(User)
-        .filter(func.lower(User.email) == email, User.deleted_at.is_(None))
-        .first()
-    )
-    if user is not None:
-        raw_token = password_reset.create_reset_token(user, db)
-        subject, html = password_reset.build_reset_email(raw_token)
-        # Looked up on the module at call time so tests can swap in a fake sender.
-        background_tasks.add_task(email_service.send_email, user.email, subject, html)
-
+    background_tasks.add_task(password_reset.request_password_reset, body.email, session_factory)
     return {"detail": FORGOT_PASSWORD_MESSAGE}
 
 
@@ -265,6 +255,9 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)) ->
     400 (not 401/404) for a bad token: the request itself can't be fulfilled.
     One message covers unknown, used and expired tokens — the user's next step
     is the same in every case (request a new link).
+
+    Success also bumps the user's token_version, logging out every existing
+    session (see User.token_version).
     """
     if not password_reset.reset_password(body.token, body.new_password, db):
         raise HTTPException(
@@ -287,5 +280,5 @@ def refresh_token(
     Used by the frontend's silent refresh interceptor to keep active users
     logged in indefinitely.
     """
-    token = create_access_token(data={"sub": str(current_user.id)})
+    token = create_token_for_user(current_user)
     return {"access_token": token, "token_type": "bearer"}

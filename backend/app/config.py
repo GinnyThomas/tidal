@@ -11,6 +11,8 @@
 # knows how to read field values from environment variables and .env files.
 # This gives us type validation and clear error messages if anything is missing.
 
+from urllib.parse import urlparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,8 +51,9 @@ class Settings(BaseSettings):
     # --- Password reset ---
 
     # Base URL of the frontend, used to build the link in reset emails.
-    # Production: set to https://tidal-vert.vercel.app in Railway (no trailing slash).
-    FRONTEND_URL: str = "http://localhost:5173"
+    # Optional: when empty, the first ALLOWED_ORIGINS entry is used (Railway
+    # already sets that to the Vercel URL). Read it via `frontend_base_url`.
+    FRONTEND_URL: str = ""
 
     # How long a reset link stays valid. Short, because a reset link is
     # effectively a one-time password delivered over email.
@@ -69,6 +72,17 @@ class Settings(BaseSettings):
     # extra="ignore" means unknown variables in .env won't cause an error —
     # useful when .env contains vars for other tools (Docker, etc.)
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def frontend_base_url(self) -> str:
+        """FRONTEND_URL, else the first ALLOWED_ORIGINS entry — never with a trailing slash."""
+        url = self.FRONTEND_URL or self.ALLOWED_ORIGINS.split(",")[0]
+        return url.strip().rstrip("/")
+
+    @property
+    def frontend_is_local(self) -> bool:
+        """True when the frontend runs on this machine (local dev) rather than a deployed host."""
+        return urlparse(self.frontend_base_url).hostname in {"localhost", "127.0.0.1"}
 
 
 # Create a single shared instance of Settings.

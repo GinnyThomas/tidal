@@ -31,6 +31,7 @@ def test_send_email_without_api_key_logs_instead_of_sending(
 ) -> None:
     """Local dev and tests need no Resend account — the email is logged."""
     monkeypatch.setattr(settings, "RESEND_API_KEY", "")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:5173")
 
     with caplog.at_level(logging.INFO, logger="app.services.email"):
         email_service.send_email("ginny@example.com", "Hello", "<p>link here</p>")
@@ -38,6 +39,22 @@ def test_send_email_without_api_key_logs_instead_of_sending(
     assert fake_post == []
     assert "ginny@example.com" in caplog.text
     assert "link here" in caplog.text
+
+
+def test_send_email_without_api_key_in_production_never_logs_the_body(
+    fake_post, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A forgotten RESEND_API_KEY on Railway must not write live reset links to the logs."""
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://tidal-vert.vercel.app")
+
+    with caplog.at_level(logging.DEBUG, logger="app.services.email"):
+        email_service.send_email("ginny@example.com", "Hello", "<p>secret-reset-link</p>")
+
+    assert fake_post == []
+    assert "secret-reset-link" not in caplog.text
+    assert "RESEND_API_KEY" in caplog.text  # still says loudly that nothing was sent
+    assert any(record.levelno >= logging.ERROR for record in caplog.records)
 
 
 def test_send_email_with_api_key_posts_to_resend(fake_post, monkeypatch: pytest.MonkeyPatch) -> None:

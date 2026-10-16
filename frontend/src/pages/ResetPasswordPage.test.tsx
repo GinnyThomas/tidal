@@ -70,11 +70,23 @@ describe('ResetPasswordPage', () => {
 
     it('shows the API error and a link to request a new one when the token is rejected', async () => {
         vi.mocked(axios.post).mockRejectedValueOnce({
-            response: { data: { detail: 'This reset link is invalid or has expired.' } },
+            response: { status: 400, data: { detail: 'This reset link is invalid or has expired.' } },
         })
         renderAt('/reset-password?token=stale')
         await fillAndSubmit('brandnewpassword', 'brandnewpassword')
         expect(await screen.findByText('This reset link is invalid or has expired.')).toBeInTheDocument()
         expect(screen.getByRole('link', { name: /request a new link/i })).toHaveAttribute('href', '/forgot-password')
+    })
+
+    it('keeps the form for a non-400 error, even one with a string detail', async () => {
+        // e.g. a future 429 rate limit or a 503 — the token itself may be fine.
+        vi.mocked(axios.post).mockRejectedValueOnce({
+            response: { status: 503, data: { detail: 'Service unavailable' } },
+        })
+        renderAt('/reset-password?token=abc123')
+        await fillAndSubmit('brandnewpassword', 'brandnewpassword')
+        expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /reset password/i })).toBeInTheDocument()
+        expect(screen.queryByRole('link', { name: /request a new link/i })).not.toBeInTheDocument()
     })
 })

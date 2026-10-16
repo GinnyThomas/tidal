@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import PasswordToggleButton from '../components/PasswordToggleButton'
 
 const INVALID_LINK_MESSAGE = 'This reset link is invalid or has expired.'
 
@@ -53,9 +54,10 @@ function ResetPasswordPage() {
         } catch (err: unknown) {
             const response = (err as { response?: { status?: number; data?: { detail?: unknown } } })?.response
             const detail = response?.data?.detail
-            if (typeof detail === 'string') {
-                // 400: the token was rejected.
-                setError(detail)
+            if (response?.status === 400) {
+                // Only a 400 means the token itself was rejected (unknown / used /
+                // expired). Other statuses (e.g. 503) say nothing about the token.
+                setError(typeof detail === 'string' ? detail : INVALID_LINK_MESSAGE)
                 setTokenRejected(true)
             } else if (response?.status === 422) {
                 // Pydantic validation (detail is a list) — in practice the 8-char minimum.
@@ -68,16 +70,6 @@ function ResetPasswordPage() {
         }
     }
 
-    const ToggleButton = ({ show, onToggle }: { show: boolean; onToggle: () => void }) => (
-        <button
-            type="button"
-            aria-label={show ? 'Hide password' : 'Show password'}
-            onClick={onToggle}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-        >
-            {show ? '🔒' : '👁️'}
-        </button>
-    )
 
     return (
         <div className="min-h-screen bg-ocean-900 flex items-center justify-center px-4">
@@ -119,7 +111,7 @@ function ResetPasswordPage() {
                                         minLength={8}
                                         required
                                     />
-                                    <ToggleButton show={showNew} onToggle={() => setShowNew(v => !v)} />
+                                    <PasswordToggleButton show={showNew} onToggle={() => setShowNew(v => !v)} />
                                 </div>
                             </div>
 
@@ -137,7 +129,7 @@ function ResetPasswordPage() {
                                         minLength={8}
                                         required
                                     />
-                                    <ToggleButton show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
+                                    <PasswordToggleButton show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
                                 </div>
                             </div>
 

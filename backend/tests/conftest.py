@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-from app.database import Base, get_db
+from app.database import Base, get_db, get_session_factory
 from app.main import app  # Importing app triggers all router and model imports,
                            # which registers all table definitions with Base.metadata.
 
@@ -107,6 +107,8 @@ def test_client() -> Generator[TestClient, None, None]:
 
     # Inject the test database session into all routes that use get_db.
     app.dependency_overrides[get_db] = override_get_db
+    # Background tasks open their own sessions — point them at the same test DB.
+    app.dependency_overrides[get_session_factory] = lambda: TestingSessionLocal
 
     with TestClient(app) as client:
         yield client

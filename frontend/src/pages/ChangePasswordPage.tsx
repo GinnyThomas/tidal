@@ -16,6 +16,7 @@ import { useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import Layout from '../components/Layout'
 import { getApiBaseUrl } from '../lib/api'
+import PasswordToggleButton from '../components/PasswordToggleButton'
 
 function ChangePasswordPage() {
     const [currentPassword, setCurrentPassword] = useState('')
@@ -61,24 +62,6 @@ function ChangePasswordPage() {
         }
     }
 
-    // Reusable toggle button rendered inside each password field container.
-    // type="button" is critical — without it, clicking would submit the form.
-    const ToggleButton = ({
-        show,
-        onToggle,
-    }: {
-        show: boolean
-        onToggle: () => void
-    }) => (
-        <button
-            type="button"
-            aria-label={show ? 'Hide password' : 'Show password'}
-            onClick={onToggle}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-        >
-            {show ? '🔒' : '👁️'}
-        </button>
-    )
 
     return (
         <Layout>
@@ -102,7 +85,7 @@ function ChangePasswordPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <ToggleButton
+                                <PasswordToggleButton
                                     show={showCurrent}
                                     onToggle={() => setShowCurrent(v => !v)}
                                 />
@@ -123,7 +106,7 @@ function ChangePasswordPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <ToggleButton
+                                <PasswordToggleButton
                                     show={showNew}
                                     onToggle={() => setShowNew(v => !v)}
                                 />
@@ -144,7 +127,7 @@ function ChangePasswordPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <ToggleButton
+                                <PasswordToggleButton
                                     show={showConfirm}
                                     onToggle={() => setShowConfirm(v => !v)}
                                 />

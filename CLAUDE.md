@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 671 Tests
+## All Phases Complete — 686 Tests
 
-**210 backend · 461 frontend · 671 total**
+**219 backend · 467 frontend · 686 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -61,7 +61,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ## Models (13 tables)
 
-- `users` — email(lower) · bcrypt · JWT
+- `users` — email(lower) · bcrypt · JWT · token_version (JWT `ver` claim; bump = revoke all sessions)
 - `accounts` — type · currency · opening_balance · calculated dynamically
 - `categories` — hierarchy · is_system · is_hidden · is_income · **group**
 - `transactions` — 4 types · nullable category · promotion_id · is_split · dedup_hash · external_id
@@ -73,7 +73,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `promotions` — type · dates · interest_rate · is_active · urgency computed
 - `group_opening_balances` — group · year · opening_balance · currency
 - `csv_mappings` — saved column mapping per (user, account) · mapping_json
-- `password_reset_tokens` — token_hash (SHA-256, raw token only in email) · expires_at · used_at
+- `password_reset_tokens` — token_hash (SHA-256, raw token only in email) · expires_at · used_at · max one row per user
 
 ---
 
@@ -113,12 +113,17 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 **Password Reset:**
 - Login → "Forgot password?" → `/forgot-password` → email link → `/reset-password?token=…`
   → back to `/login` with a "Password updated" banner (router state `passwordReset`)
-- Same 202 response for known/unknown emails; email sent via `BackgroundTasks`
-  so response time doesn't leak whether the account exists
-- Tokens: 30 min expiry, single use; a successful reset consumes all of the user's
-  outstanding tokens
-- `services/email.py` → Resend HTTP API (Railway blocks SMTP). No `RESEND_API_KEY`
-  = email logged to console. Railway env: `RESEND_API_KEY`, `FRONTEND_URL`
+- Same 202 response for known/unknown emails. The route does no DB work: lookup,
+  token INSERT and email all run in a `BackgroundTasks` task (own session via
+  `get_session_factory`), so response time doesn't leak whether the account exists
+- Tokens: 30 min expiry, single use; a new request replaces the user's previous token.
+  Redeeming is one atomic `UPDATE … WHERE used_at IS NULL RETURNING` (race-safe)
+- Successful reset bumps `users.token_version` → every existing JWT gets 401,
+  including on `/refresh`. Tokens without `ver` (pre-versioning) count as 0
+- `services/email.py` → Resend HTTP API (Railway blocks SMTP). No `RESEND_API_KEY`:
+  localhost frontend → email logged to console; deployed → error logged, never the link
+- Link base = `settings.frontend_base_url`: `FRONTEND_URL`, else first `ALLOWED_ORIGINS`
+  entry, trailing slash stripped. Railway env: `RESEND_API_KEY`
 
 **Cash Flow (Annual View):**
 - Opening balance per group per year (editable inline)
@@ -269,8 +274,9 @@ planned = schedule amounts + budget amounts per category per month:
 - Open Banking / bank sync
 - Google OAuth
 - Password reset: no domain verified with Resend yet, so emails only reach the Resend
-  account owner; no rate limiting on `/forgot-password`; JWTs issued before a
-  reset stay valid until expiry (no revocation)
+  account owner; no rate limiting on `/forgot-password`
+- `/change-password` doesn't bump `token_version` (other sessions stay logged in);
+  doing so needs the endpoint to return a fresh token for the current session
 - Per-schedule actual spend tracking
 
 ---

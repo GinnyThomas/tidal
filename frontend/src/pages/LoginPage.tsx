@@ -11,10 +11,11 @@
 // text match (the emoji lives in a sibling element, not the same text node).
 
 import axios from 'axios'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import PasswordToggleButton from '../components/PasswordToggleButton'
 import DemoButton from '../components/DemoButton'
 
 function LoginPage() {
@@ -24,8 +25,17 @@ function LoginPage() {
     const [error, setError] = useState<string | null>(null)
     const navigate = useNavigate()
     // ResetPasswordPage redirects here with { passwordReset: true } on success.
+    // Read it once into local state, then wipe it from the history entry —
+    // router state survives a reload and Back, which would re-show the banner.
     const location = useLocation()
-    const passwordReset = (location.state as { passwordReset?: boolean } | null)?.passwordReset === true
+    const [passwordReset] = useState(
+        () => (location.state as { passwordReset?: boolean } | null)?.passwordReset === true
+    )
+    useEffect(() => {
+        if (passwordReset) {
+            navigate(location.pathname, { replace: true, state: null })
+        }
+    }, [passwordReset, navigate, location.pathname])
 
     const handleSubmit = async (e: SyntheticEvent) => {
         e.preventDefault()
@@ -103,14 +113,7 @@ function LoginPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <button
-                                    type="button"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                    onClick={() => setShowPassword(v => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                                >
-                                    {showPassword ? '🔒' : '👁️'}
-                                </button>
+                                <PasswordToggleButton show={showPassword} onToggle={() => setShowPassword(v => !v)} />
                             </div>
                             <div className="text-right mt-1.5">
                                 <Link to="/forgot-password" className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
