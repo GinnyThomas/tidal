@@ -23,3 +23,15 @@ import '@testing-library/jest-dom'
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = () => {}
 }
+
+// jsdom also lacks ResizeObserver. HeadlessUI's Combobox (used by
+// CategoryCombobox) constructs one to position its options panel, so without
+// a stub those tests log "ResizeObserver is not defined". Nothing in our tests
+// depends on resize callbacks, so a no-op class is enough.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+    globalThis.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    }
+}
