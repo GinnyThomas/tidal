@@ -12,8 +12,12 @@
 #   - Does it return the right response body?
 # We don't care HOW it does it internally.
 
-from fastapi.testclient import TestClient
+from typing import Generator
 
+from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
+
+from app.database import get_db
 from app.main import app
 
 # TestClient wraps our FastAPI app and lets us make HTTP requests in tests
@@ -45,3 +49,41 @@ def test_health_check_content_type_is_json() -> None:
     # FastAPI sets this automatically, but it's worth asserting explicitly —
     # if someone accidentally changes the return type, this test will catch it.
     assert "application/json" in response.headers["content-type"]
+
+
+# --- Database health check ---
+# GET /api/v1/health/db proves the app can actually reach PostgreSQL.
+# /api/v1/health only proves the process is up ("liveness"); this is the
+# "readiness" check. It's also what the keep-alive workflow pings so that
+# Supabase's free tier sees real query activity and doesn't pause the project.
+
+def test_db_health_check_returns_200_when_database_reachable(test_client) -> None:
+    """With a working database the endpoint runs a query and reports ok."""
+    response = test_client.get("/api/v1/health/db")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "database": "ok"}
+
+
+class _UnreachableSession:
+    """Stand-in session whose queries fail the way a paused database would."""
+
+    def execute(self, *args: object, **kwargs: object) -> None:
+        raise OperationalError("SELECT 1", {}, Exception("connection refused to db.secret-host:5432"))
+
+
+def test_db_health_check_returns_503_when_database_unreachable() -> None:
+    """A failed query must surface as 503 so monitors (and the keep-alive job) fail loudly."""
+    def override_get_db() -> Generator[_UnreachableSession, None, None]:
+        yield _UnreachableSession()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = client.get("/api/v1/health/db")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    # Public endpoint: the body must not leak hostnames or driver errors.
+    assert response.json() == {"status": "unavailable", "database": "unreachable"}
+    assert "secret-host" not in response.text

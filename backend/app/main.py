@@ -9,10 +9,15 @@
 #   uvicorn app.main:app --reload
 #   (the --reload flag restarts the server when you edit files)
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
 from app.routers import accounts, auth, budgets, categories, csv_mappings, opening_balances, plan, promotions, reallocations, schedules, transactions
 
 
@@ -80,3 +85,27 @@ app.include_router(csv_mappings.router)
 def health_check() -> dict[str, str]:
     """Confirms the API is running. Used by monitoring and load balancers."""
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+# --- Database health check ---
+# GET /api/v1/health/db
+#   /health above is a "liveness" check: the process is up.
+#   This is a "readiness" check: the process can actually reach PostgreSQL.
+#
+# It also keeps the Supabase free tier awake. Supabase pauses projects after
+# 7 days without database activity; .github/workflows/keepalive.yml pings this
+# endpoint daily so the `SELECT 1` counts as activity.
+#
+# On failure we return 503 with a fixed body — this endpoint is public, so the
+# driver error (which can include hostnames) is never echoed back.
+@app.get("/api/v1/health/db", response_model=None)
+def db_health_check(db: Session = Depends(get_db)) -> dict[str, str] | JSONResponse:
+    """Confirms the API can query the database. Returns 503 if it can't."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "database": "unreachable"},
+        )
+    return {"status": "ok", "database": "ok"}
