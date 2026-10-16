@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { vi } from 'vitest'
 import LoginPage from './LoginPage'
 import axios from 'axios'
@@ -84,5 +84,46 @@ describe('LoginPage', () => {
     it('renders a Try Demo button', () => {
         render(<MemoryRouter><LoginPage /></MemoryRouter>)
         expect(screen.getByRole('button', { name: /try demo/i })).toBeInTheDocument()
+    })
+
+    // =========================================================================
+    // Forgot password
+    // =========================================================================
+
+    it('links to the forgot password page', () => {
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute('href', '/forgot-password')
+    })
+
+    it('shows a success message when arriving from a password reset', () => {
+        render(
+            <MemoryRouter initialEntries={[{ pathname: '/login', state: { passwordReset: true } }]}>
+                <LoginPage />
+            </MemoryRouter>
+        )
+        expect(screen.getByText(/password updated/i)).toBeInTheDocument()
+    })
+
+    it('clears the reset flag from history so a reload or Back does not show it again', async () => {
+        // Renders the router's current location.state next to the page.
+        function LocationStateProbe() {
+            return <p data-testid="location-state">{JSON.stringify(useLocation().state)}</p>
+        }
+        render(
+            <MemoryRouter initialEntries={[{ pathname: '/login', state: { passwordReset: true } }]}>
+                <LoginPage />
+                <LocationStateProbe />
+            </MemoryRouter>
+        )
+        await waitFor(() => {
+            expect(screen.getByTestId('location-state')).toHaveTextContent('null')
+        })
+        // The banner is still showing for this visit.
+        expect(screen.getByText(/password updated/i)).toBeInTheDocument()
+    })
+
+    it('does not show the success message on a normal visit', () => {
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        expect(screen.queryByText(/password updated/i)).not.toBeInTheDocument()
     })
 })

@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import type { SyntheticEvent } from 'react'
 import { getApiBaseUrl } from '../lib/api'
+import PasswordToggleButton from '../components/PasswordToggleButton'
 import DemoButton from '../components/DemoButton'
 
 function RegisterPage() {
@@ -106,14 +107,7 @@ function RegisterPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <button
-                                    type="button"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                    onClick={() => setShowPassword(v => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                                >
-                                    {showPassword ? '🔒' : '👁️'}
-                                </button>
+                                <PasswordToggleButton show={showPassword} onToggle={() => setShowPassword(v => !v)} />
                             </div>
                         </div>
 
@@ -133,14 +127,7 @@ function RegisterPage() {
                                     className="input-base pr-10"
                                     required
                                 />
-                                <button
-                                    type="button"
-                                    aria-label={showConfirm ? 'Hide password' : 'Show password'}
-                                    onClick={() => setShowConfirm(v => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                                >
-                                    {showConfirm ? '🔒' : '👁️'}
-                                </button>
+                                <PasswordToggleButton show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
                             </div>
                         </div>
 

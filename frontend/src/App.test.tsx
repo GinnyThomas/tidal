@@ -26,4 +26,21 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /log in/i })).toBeInTheDocument()
   })
 
+  it('shows the forgot password page without logging in', () => {
+    render(
+        <MemoryRouter initialEntries={['/forgot-password']}>
+          <App />
+        </MemoryRouter>
+    )
+    expect(screen.getByRole('button', { name: /send reset link/i })).toBeInTheDocument()
+  })
+
+  it('shows the reset password page without logging in', () => {
+    render(
+        <MemoryRouter initialEntries={['/reset-password?token=abc123']}>
+          <App />
+        </MemoryRouter>
+    )
+    expect(screen.getByRole('button', { name: /reset password/i })).toBeInTheDocument()
+  })
 })

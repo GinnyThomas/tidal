@@ -94,6 +94,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+def create_token_for_user(user: User) -> str:
+    """JWT for `user`: `sub` identifies them, `ver` ties the token to their current token_version."""
+    return create_access_token(data={"sub": str(user.id), "ver": user.token_version})
+
+
 def create_access_token(data: dict) -> str:
     """
     Creates a signed JWT (JSON Web Token) containing the given payload data.
@@ -140,6 +145,9 @@ def get_current_user(
         - Invalid JWT signature (tampered token) → JWTError → 401
         - Expired JWT → JWTError → 401
         - User ID in token doesn't match any user → 401
+        - Token's `ver` claim doesn't match user.token_version → 401
+          (the user reset their password after this token was issued).
+          Tokens without `ver` predate versioning and count as version 0.
     """
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -170,6 +178,9 @@ def get_current_user(
 
     user = db.query(User).filter(User.id == user_uuid).first()
     if user is None:
+        raise credentials_error
+
+    if payload.get("ver", 0) != user.token_version:
         raise credentials_error
 
     return user

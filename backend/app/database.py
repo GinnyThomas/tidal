@@ -88,3 +88,14 @@ def get_db() -> Generator[Session, None, None]:
         yield db  # FastAPI injects this session into the route
     finally:
         db.close()  # Always runs — connection returned to pool
+
+
+def get_session_factory() -> sessionmaker[Session]:
+    """
+    FastAPI dependency: the session factory itself, for background tasks.
+
+    A background task runs AFTER the response, by which point get_db's session
+    has already been closed — so the task must open (and close) its own.
+    Being a dependency means tests can override it with their SQLite factory.
+    """
+    return SessionLocal

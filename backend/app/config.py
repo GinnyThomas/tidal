@@ -11,6 +11,8 @@
 # knows how to read field values from environment variables and .env files.
 # This gives us type validation and clear error messages if anything is missing.
 
+from urllib.parse import urlparse
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,10 +48,41 @@ class Settings(BaseSettings):
     # The default covers local Vite development on the standard port.
     ALLOWED_ORIGINS: str = "http://localhost:5173"
 
+    # --- Password reset ---
+
+    # Base URL of the frontend, used to build the link in reset emails.
+    # Optional: when empty, the first ALLOWED_ORIGINS entry is used (Railway
+    # already sets that to the Vercel URL). Read it via `frontend_base_url`.
+    FRONTEND_URL: str = ""
+
+    # How long a reset link stays valid. Short, because a reset link is
+    # effectively a one-time password delivered over email.
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+
+    # Resend (https://resend.com) API key. Empty = don't send, just log the
+    # email to the console — so local dev and tests need no Resend account.
+    RESEND_API_KEY: str = ""
+
+    # Sender address. onboarding@resend.dev works without a verified domain,
+    # BUT Resend then only delivers to the Resend account owner's own email.
+    # Once a domain is verified, change this to e.g. "Tidal <noreply@yourdomain>".
+    EMAIL_FROM: str = "Tidal <onboarding@resend.dev>"
+
     # Tell pydantic-settings to look for a .env file in the working directory.
     # extra="ignore" means unknown variables in .env won't cause an error —
     # useful when .env contains vars for other tools (Docker, etc.)
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def frontend_base_url(self) -> str:
+        """FRONTEND_URL, else the first ALLOWED_ORIGINS entry — never with a trailing slash."""
+        url = self.FRONTEND_URL or self.ALLOWED_ORIGINS.split(",")[0]
+        return url.strip().rstrip("/")
+
+    @property
+    def frontend_is_local(self) -> bool:
+        """True when the frontend runs on this machine (local dev) rather than a deployed host."""
+        return urlparse(self.frontend_base_url).hostname in {"localhost", "127.0.0.1"}
 
 
 # Create a single shared instance of Settings.

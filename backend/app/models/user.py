@@ -14,7 +14,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, Uuid
+from sqlalchemy import DateTime, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -65,6 +65,15 @@ class User(Base):
     # bcrypt output is always 60 characters, but 255 gives room to grow
     # if we ever switch hashing algorithms without breaking existing rows.
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # --- Session revocation ---
+    #
+    # Copied into every JWT as the `ver` claim. get_current_user rejects a
+    # token whose `ver` doesn't match, so bumping this logs out every existing
+    # session at once (done on password reset). Without it a stolen token
+    # could be silently refreshed forever, even after the password changed.
+    # server_default="0": existing rows get 0 when the column is added.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     # --- Preferences ---
     #

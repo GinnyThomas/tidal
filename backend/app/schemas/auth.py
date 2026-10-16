@@ -38,6 +38,30 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Shape of the request body for POST /api/v1/auth/forgot-password."""
+
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """
+    Shape of the request body for POST /api/v1/auth/reset-password.
+
+    token: the raw token from the emailed link (?token=...).
+    new_password: same 8-character minimum as registration and change-password.
+    """
+
+    token: str
+    new_password: str = Field(min_length=8)
+
+
+class MessageResponse(BaseModel):
+    """A plain human-readable message, e.g. the forgot-password acknowledgement."""
+
+    detail: str
+
+
 class TokenResponse(BaseModel):
     """
     Shape of the response body after a successful login.
