@@ -75,6 +75,20 @@ def test_send_email_with_api_key_posts_to_resend(fake_post, monkeypatch: pytest.
     assert call["timeout"] > 0
 
 
+def test_send_email_logs_success(
+    fake_post, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A successful send leaves a trace — silence must not look the same as success."""
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
+
+    with caplog.at_level(logging.INFO, logger="app.services.email"):
+        email_service.send_email("ginny@example.com", "Hello", "<p>secret-body</p>")
+
+    assert "ginny@example.com" in caplog.text
+    assert "email-id" in caplog.text  # Resend's id, to look up in its dashboard
+    assert "secret-body" not in caplog.text
+
+
 def test_send_email_swallows_and_logs_resend_errors(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

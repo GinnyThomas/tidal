@@ -85,9 +85,14 @@ def request_password_reset(email: str, session_factory: sessionmaker[Session]) -
             .first()
         )
         if user is None:
+            # Logs are private, so naming the address here doesn't undo the
+            # anti-enumeration response — it just makes "no email arrived"
+            # diagnosable (typo? different account email?).
+            logger.info("Password reset requested for %s: no active account", email)
             return
         raw_token = create_reset_token(user, db)
         subject, body = build_reset_email(raw_token)
+        logger.info("Password reset requested for %s: sending reset email", user.email)
         email_service.send_email(user.email, subject, body)
     except Exception:
         logger.exception("Password reset request failed")
