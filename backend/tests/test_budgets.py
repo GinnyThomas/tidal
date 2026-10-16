@@ -518,3 +518,199 @@ def test_batch_override_upsert(test_client) -> None:
     assert 1 not in months
     assert months[2] == "200.00"
     assert months[3] == "300.00"
+
+
+# =============================================================================
+# Copy year (rollover) tests
+# =============================================================================
+
+
+def _copy_year(test_client, token: str, **kwargs):
+    """POST /api/v1/budgets/copy-year with 2026 → 2027 defaults."""
+    defaults = {"from_year": 2026, "to_year": 2027}
+    return test_client.post(
+        "/api/v1/budgets/copy-year",
+        json={**defaults, **kwargs},
+        headers=_auth_headers(token),
+    )
+
+
+def _second_category_id(test_client, token: str) -> str:
+    """Return the second seeded system category id."""
+    categories = test_client.get(
+        "/api/v1/categories",
+        headers=_auth_headers(token),
+    ).json()
+    return categories[1]["id"]
+
+
+def test_copy_year_copies_budget_fields(test_client) -> None:
+    """
+    Copying 2026 → 2027 should create a 2027 budget with the same category,
+    default_amount, currency, group and notes, and report the count.
+    """
+    token, _, category_id = _setup(test_client)
+    _create_budget(
+        test_client, token, category_id,
+        default_amount="320.00", currency="EUR", group="España", notes="Mercadona",
+    )
+
+    response = _copy_year(test_client, token)
+
+    assert response.status_code == 200
+    assert response.json() == {"created": 1, "skipped": 0}
+
+    budgets_2027 = test_client.get(
+        "/api/v1/budgets?year=2027", headers=_auth_headers(token),
+    ).json()
+    assert len(budgets_2027) == 1
+    copied = budgets_2027[0]
+    assert copied["category_id"] == category_id
+    assert copied["default_amount"] == "320.00"
+    assert copied["currency"] == "EUR"
+    assert copied["group"] == "España"
+    assert copied["notes"] == "Mercadona"
+
+
+def test_copy_year_leaves_source_year_untouched(test_client) -> None:
+    """The 2026 budgets should still exist after copying them forward."""
+    token, _, category_id = _setup(test_client)
+    _create_budget(test_client, token, category_id)
+
+    _copy_year(test_client, token)
+
+    budgets_2026 = test_client.get(
+        "/api/v1/budgets?year=2026", headers=_auth_headers(token),
+    ).json()
+    assert len(budgets_2026) == 1
+
+
+def test_copy_year_excludes_overrides_by_default(test_client) -> None:
+    """
+    Overrides are usually one-offs (a big December), so by default the copy
+    takes only default_amount and the new budget starts with no overrides.
+    """
+    token, _, category_id = _setup(test_client)
+    budget = _create_budget(test_client, token, category_id)
+    test_client.post(
+        f"/api/v1/budgets/{budget['id']}/overrides",
+        json={"month": 12, "amount": "500.00"},
+        headers=_auth_headers(token),
+    )
+
+    _copy_year(test_client, token)
+
+    copied = test_client.get(
+        "/api/v1/budgets?year=2027", headers=_auth_headers(token),
+    ).json()[0]
+    assert copied["overrides"] == []
+
+
+def test_copy_year_includes_overrides_when_requested(test_client) -> None:
+    """include_overrides=true copies every month override onto the new budget."""
+    token, _, category_id = _setup(test_client)
+    budget = _create_budget(test_client, token, category_id)
+    test_client.post(
+        f"/api/v1/budgets/{budget['id']}/overrides/batch",
+        json={"overrides": [
+            {"month": 3, "amount": "450.00"},
+            {"month": 12, "amount": "500.00"},
+        ]},
+        headers=_auth_headers(token),
+    )
+
+    _copy_year(test_client, token, include_overrides=True)
+
+    copied = test_client.get(
+        "/api/v1/budgets?year=2027", headers=_auth_headers(token),
+    ).json()[0]
+    months = {o["month"]: o["amount"] for o in copied["overrides"]}
+    assert months == {3: "450.00", 12: "500.00"}
+
+
+def test_copy_year_skips_categories_already_budgeted(test_client) -> None:
+    """
+    A category that already has a budget in the target year is left alone —
+    its existing amount wins, and it's counted as skipped (no 409).
+    """
+    token, _, category_id = _setup(test_client)
+    other_category_id = _second_category_id(test_client, token)
+    _create_budget(test_client, token, category_id, default_amount="150.00")
+    _create_budget(test_client, token, other_category_id, default_amount="80.00")
+    _create_budget(test_client, token, category_id, year=2027, default_amount="999.00")
+
+    response = _copy_year(test_client, token)
+
+    assert response.json() == {"created": 1, "skipped": 1}
+    budgets_2027 = {
+        b["category_id"]: b["default_amount"]
+        for b in test_client.get(
+            "/api/v1/budgets?year=2027", headers=_auth_headers(token),
+        ).json()
+    }
+    assert budgets_2027 == {category_id: "999.00", other_category_id: "80.00"}
+
+
+def test_copy_year_is_idempotent(test_client) -> None:
+    """Running the copy twice creates nothing the second time."""
+    token, _, category_id = _setup(test_client)
+    _create_budget(test_client, token, category_id)
+
+    _copy_year(test_client, token)
+    response = _copy_year(test_client, token)
+
+    assert response.json() == {"created": 0, "skipped": 1}
+
+
+def test_copy_year_skips_deleted_categories(test_client) -> None:
+    """
+    A budget whose category has since been soft-deleted isn't carried into
+    the new year — it would be invisible and unreachable there.
+    """
+    token, _, _ = _setup(test_client)
+    category = test_client.post(
+        "/api/v1/categories",
+        json={"name": "Old Gym"},
+        headers=_auth_headers(token),
+    ).json()
+    _create_budget(test_client, token, category["id"])
+    test_client.delete(
+        f"/api/v1/categories/{category['id']}", headers=_auth_headers(token),
+    )
+
+    response = _copy_year(test_client, token)
+
+    assert response.json() == {"created": 0, "skipped": 1}
+    assert test_client.get(
+        "/api/v1/budgets?year=2027", headers=_auth_headers(token),
+    ).json() == []
+
+
+def test_copy_year_only_copies_current_users_budgets(test_client) -> None:
+    """Another user's 2026 budgets must never be copied into my 2027."""
+    token_a, _, category_a = _setup(test_client, "a@example.com")
+    token_b, _, _ = _setup(test_client, "b@example.com")
+    _create_budget(test_client, token_a, category_a)
+
+    response = _copy_year(test_client, token_b)
+
+    assert response.json() == {"created": 0, "skipped": 0}
+    assert test_client.get(
+        "/api/v1/budgets?year=2027", headers=_auth_headers(token_a),
+    ).json() == []
+
+
+def test_copy_year_rejects_same_source_and_target(test_client) -> None:
+    """Copying a year onto itself is meaningless — 422."""
+    token, _, _ = _setup(test_client)
+
+    response = _copy_year(test_client, token, to_year=2026)
+
+    assert response.status_code == 422
+
+
+def test_copy_year_requires_auth(test_client) -> None:
+    response = test_client.post(
+        "/api/v1/budgets/copy-year", json={"from_year": 2026, "to_year": 2027},
+    )
+    assert response.status_code in (401, 403)

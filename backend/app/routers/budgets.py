@@ -12,6 +12,7 @@
 #   GET    /api/v1/budgets/{id}                     — single budget with overrides
 #   PUT    /api/v1/budgets/{id}                     — update default_amount/currency
 #   DELETE /api/v1/budgets/{id}                     — hard delete
+#   POST   /api/v1/budgets/copy-year                — copy a year's budgets into another
 #   POST   /api/v1/budgets/{id}/overrides           — upsert a month override
 #   DELETE /api/v1/budgets/{id}/overrides/{month}   — remove a month override
 #
@@ -29,6 +30,8 @@ from app.models.budget import Budget, BudgetOverride
 from app.models.category import Category
 from app.models.user import User
 from app.schemas.budget import (
+    BudgetCopyYear,
+    BudgetCopyYearResult,
     BudgetCreate,
     BudgetOverrideBatch,
     BudgetOverrideCreate,
@@ -185,6 +188,65 @@ def create_budget(
     db.commit()
     db.refresh(budget)
     return _build_budget_response(budget, category)
+
+
+@router.post("/copy-year", response_model=BudgetCopyYearResult)
+def copy_year(
+    data: BudgetCopyYear,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Copy every budget in from_year into to_year — the year-end rollover.
+
+    Copies default_amount, currency, group and notes; overrides only when
+    include_overrides is set. Safe to run repeatedly: a category that
+    already has a to_year budget is skipped (its existing amount wins), as
+    is a budget whose category has been soft-deleted.
+    """
+    source_budgets = (
+        db.query(Budget)
+        .options(selectinload(Budget.overrides))
+        .filter(Budget.user_id == current_user.id, Budget.year == data.from_year)
+        .all()
+    )
+
+    # Two set lookups instead of a query per budget.
+    already_budgeted = {
+        category_id
+        for (category_id,) in db.query(Budget.category_id).filter(
+            Budget.user_id == current_user.id, Budget.year == data.to_year,
+        )
+    }
+    live_category_ids = {
+        category_id
+        for (category_id,) in db.query(Category.id).filter(
+            Category.user_id == current_user.id, Category.deleted_at.is_(None),
+        )
+    }
+
+    created = 0
+    for source in source_budgets:
+        if source.category_id in already_budgeted or source.category_id not in live_category_ids:
+            continue
+        copy = Budget(
+            user_id=current_user.id,
+            category_id=source.category_id,
+            year=data.to_year,
+            default_amount=source.default_amount,
+            currency=source.currency,
+            group=source.group,
+            notes=source.notes,
+        )
+        if data.include_overrides:
+            copy.overrides = [
+                BudgetOverride(month=o.month, amount=o.amount) for o in source.overrides
+            ]
+        db.add(copy)
+        created += 1
+
+    db.commit()
+    return {"created": created, "skipped": len(source_budgets) - created}
 
 
 @router.get("", response_model=list[BudgetResponse])

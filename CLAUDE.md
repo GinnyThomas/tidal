@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 607 Tests
+## All Phases Complete — 636 Tests
 
-**185 backend · 422 frontend · 607 total**
+**195 backend · 441 frontend · 636 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -54,6 +54,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
                payee search, schedule category filter, batch overrides, Add now
 - ✅ Split transactions (one transaction → multiple category allocations)
 - ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
+- ✅ Year-end rollover (copy budgets to next year, carry closing → opening balance)
 
 ---
 
@@ -80,6 +81,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 `/reallocations` · `/plan` · `/budgets` · `/promotions` · `/opening_balances`
 `/csv-mappings`
 
+Notable `/budgets` sub-route: `POST /copy-year`
 Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST /{id}/convert-to-transfer`
 
 ---
@@ -91,6 +93,15 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 - Group resolution: budget group → schedule group → category group → General
 - Plan view, Annual view, Budgets, Schedules all section by group
 - GROUP_ORDER = ['UK', 'España', 'General'] in `lib/budgetGroups.ts`
+
+**Year-end Rollover:**
+- Budgets page, empty year: "Copy budgets from {year-1}" → `POST /budgets/copy-year`
+  (`include_overrides` checkbox, off by default). Idempotent: categories already
+  budgeted in the target year, or soft-deleted, are skipped and counted
+- Annual view, group with no opening balance: "Use {year-1} closing" fetches the
+  previous year's plan on click and saves its December closing. Flagged as an
+  estimate while the previous year isn't over (closing includes planned amounts)
+- Closing balance maths lives in `lib/cashFlow.ts` → `computeClosingBalances()`
 
 **Cash Flow (Annual View):**
 - Opening balance per group per year (editable inline)
@@ -198,6 +209,7 @@ planned = schedule amounts + budget amounts per category per month:
 - `lib/budgetGroups.ts` — `GROUP_ORDER`
 - `lib/categories.ts` — `sortCategoriesByName()`, `buildCategoryOptions()`
 - `lib/currencies.ts` — `CURRENCIES` dropdown list
+- `lib/cashFlow.ts` — `computeClosingBalances()` (Annual view cash flow)
 - `lib/csvExport.ts` — `escapeCsvCell()`, `buildCsvContent()`, `downloadCsv()`
 - `lib/annualPlanCache.ts` — session cache, invalidated on mutations/logout
 - `lib/axiosConfig.ts` — 401 handler + JWT auto-refresh (< 15 min expiry)
@@ -264,4 +276,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: October 2026 — 607 tests · Live at tidal-vert.vercel.app*
+*Last updated: October 2026 — 636 tests · Live at tidal-vert.vercel.app*
