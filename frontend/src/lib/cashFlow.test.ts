@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { computeClosingBalances } from './cashFlow'
-import type { AnnualPlan } from '../pages/AnnualView'
+import type { AnnualPlan } from './planTypes'
 
 type Row = AnnualPlan['months'][number]['rows'][number]
 

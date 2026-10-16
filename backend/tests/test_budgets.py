@@ -714,3 +714,41 @@ def test_copy_year_requires_auth(test_client) -> None:
         "/api/v1/budgets/copy-year", json={"from_year": 2026, "to_year": 2027},
     )
     assert response.status_code in (401, 403)
+
+
+def test_copy_year_returns_409_when_a_concurrent_copy_wins_the_race(test_client, monkeypatch) -> None:
+    """
+    Two copies at once (two tabs) both see the target year as empty; the
+    second hits the unique constraint on commit. That must be a clean 409,
+    not a 500. Simulated by inserting the conflicting row just before commit.
+    """
+    import uuid as uuid_
+
+    from sqlalchemy.orm import Session
+
+    from app.models.budget import Budget
+
+    token, _, category_id = _setup(test_client)
+    source = _create_budget(test_client, token, category_id)
+
+    original_commit = Session.commit
+    raced = False
+
+    def racing_commit(self) -> None:
+        nonlocal raced
+        if not raced:
+            raced = True
+            self.add(Budget(
+                user_id=uuid_.UUID(source["user_id"]),
+                category_id=uuid_.UUID(category_id),
+                year=2027,
+                default_amount=1,
+            ))
+        original_commit(self)
+
+    monkeypatch.setattr(Session, "commit", racing_commit)
+
+    response = _copy_year(test_client, token)
+
+    assert response.status_code == 409
+    assert "try again" in response.json()["detail"]

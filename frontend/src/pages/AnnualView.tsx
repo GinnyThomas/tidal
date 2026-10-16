@@ -45,45 +45,8 @@ import { fmtCurrency, fmtAmount } from '../lib/formatting'
 import { GROUP_ORDER } from '../lib/budgetGroups'
 import { getApiBaseUrl } from '../lib/api'
 import { buildCsvContent, downloadCsv } from '../lib/csvExport'
-import { computeClosingBalances } from '../lib/cashFlow'
-
-// --- TypeScript types ---
-
-type PlanRow = {
-    category_id: string
-    category_name: string
-    parent_category_id: string | null
-    planned: string
-    actual: string
-    remaining: string
-    pending: string
-    group: string | null
-    is_income: boolean
-}
-
-type MonthlyPlan = {
-    year: number
-    month: number
-    rows: PlanRow[]
-    total_planned: string
-    total_actual: string
-    total_remaining: string
-    total_pending: string
-}
-
-type OpeningBalance = {
-    id: string
-    group: string
-    year: number
-    opening_balance: string
-    currency: string
-}
-
-export type AnnualPlan = {
-    year: number
-    months: MonthlyPlan[]
-    opening_balances: OpeningBalance[]
-}
+import { aggregateByCategory, computeClosingBalances, type CategoryYear } from '../lib/cashFlow'
+import type { AnnualPlan } from '../lib/planTypes'
 
 // --- Display helpers ---
 
@@ -109,6 +72,26 @@ function sumAmounts(amounts: string[]): string {
     return amounts.reduce((acc, a) => acc + parseFloat(a), 0).toFixed(2)
 }
 
+// Session cache key — group '' means unfiltered
+const planCacheKey = (year: number, group: string) => `${year}:${group}`
+
+// GET /plan/{year}, through the session cache.
+async function fetchAnnualPlan(year: number, group: string): Promise<AnnualPlan> {
+    const cacheKey = planCacheKey(year, group)
+    const cached = annualPlanCache.get(cacheKey)
+    if (cached) return cached
+
+    const token = localStorage.getItem('access_token')
+    const params: Record<string, string> = {}
+    if (group) params.group = group
+    const res = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${year}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+    })
+    annualPlanCache.set(cacheKey, res.data)
+    return res.data
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -131,8 +114,8 @@ function AnnualView() {
     // Re-runs whenever year or group changes.
     // Cache key includes group so different filters get separate cache entries.
     useEffect(() => {
-        const cacheKey = `${year}:${filterGroup}`
-        const cached = annualPlanCache.get(cacheKey)
+        // Synchronous cache hit: render straight away with no loading flash
+        const cached = annualPlanCache.get(planCacheKey(year, filterGroup))
         if (cached) {
             setAnnualPlan(cached)
             setLoading(false)
@@ -140,32 +123,36 @@ function AnnualView() {
             return
         }
 
-        const token = localStorage.getItem('access_token')
         setLoading(true)
         setError(null)
-        const params: Record<string, string> = {}
-        if (filterGroup) params.group = filterGroup
-        axios
-            .get(`${getApiBaseUrl()}/api/v1/plan/${year}`, {
-                headers: { Authorization: `Bearer ${token}` },
-                params,
-            })
-            .then((res) => {
-                annualPlanCache.set(cacheKey, res.data)
-                setAnnualPlan(res.data)
-            })
+        fetchAnnualPlan(year, filterGroup)
+            .then(setAnnualPlan)
             .catch(() => {
                 setError('Could not load annual plan. Please try again.')
             })
             .finally(() => {
                 setLoading(false)
             })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [year, filterGroup])
 
-    // Persist an opening balance (create or update), then re-fetch the plan.
-    // Throws on failure — callers decide how to report it.
-    const persistOpeningBalance = async (groupName: string, value: string) => {
+    // Drop every cached year (opening balances feed the next year's carry-
+    // forward too) and fetch this one fresh. Never throws: a failure shows
+    // the page error, and loading always ends.
+    const reloadPlan = async () => {
+        annualPlanCache.clear()
+        setLoading(true)
+        try {
+            setAnnualPlan(await fetchAnnualPlan(year, filterGroup))
+            setError(null)
+        } catch {
+            setError('Could not load annual plan. Please try again.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Create or update a group's opening balance. Throws on failure.
+    const saveOpeningBalance = async (groupName: string, value: string) => {
         const token = localStorage.getItem('access_token')
         const headers = { Authorization: `Bearer ${token}` }
         const ob = annualPlan?.opening_balances?.find(b => b.group === groupName)
@@ -178,56 +165,45 @@ function AnnualView() {
             await axios.post(`${getApiBaseUrl()}/api/v1/opening-balances`,
                 { group: groupName, year, opening_balance: value, currency }, { headers })
         }
-        // Invalidate cache and re-fetch
-        annualPlanCache.clear()
-        setEditingOBGroup(null)
-        setLoading(true)
-        const params: Record<string, string> = {}
-        if (filterGroup) params.group = filterGroup
-        const res = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${year}`, { headers, params })
-        annualPlanCache.set(`${year}:${filterGroup}`, res.data)
-        setAnnualPlan(res.data)
-        setLoading(false)
     }
 
-    // Save opening balance from the inline edit input
-    const saveOpeningBalance = async (groupName: string) => {
+    // Commit the inline edit input
+    const commitOpeningBalanceEdit = async (groupName: string) => {
         try {
-            await persistOpeningBalance(groupName, editingOBValue)
+            await saveOpeningBalance(groupName, editingOBValue)
         } catch {
             setEditingOBGroup(null)
+            return
         }
+        setEditingOBGroup(null)
+        await reloadPlan()
     }
 
     // Carry the previous year's December closing forward as this year's
-    // opening balance. rowsGroup mirrors how the closing row was computed
-    // (see computeClosingBalances): the group's own rows, or null for all.
+    // opening balance. rowsGroup mirrors how the closing row is computed
+    // (see computeClosingBalances): one group's rows, or null for all.
+    //
+    // The previous year is fetched unfiltered: /plan?group= only filters
+    // budgets, and with every budget present the group resolution matches
+    // the unfiltered view's.
+    //
+    // Only a failure to compute or save counts as "could not carry forward".
+    // Once saved, a failed reload is a load error — offering a retry then
+    // would just 409 against the balance that now exists.
     const carryForwardOpeningBalance = async (groupName: string, rowsGroup: string | null) => {
-        const prevYear = year - 1
-        const cacheKey = `${prevYear}:${filterGroup}`
         setCarryingGroup(groupName)
         setCarryErrorGroup(null)
         try {
-            let prevPlan = annualPlanCache.get(cacheKey)
-            if (!prevPlan) {
-                const token = localStorage.getItem('access_token')
-                const params: Record<string, string> = {}
-                if (filterGroup) params.group = filterGroup
-                const res = await axios.get(`${getApiBaseUrl()}/api/v1/plan/${prevYear}`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    params,
-                })
-                prevPlan = res.data as AnnualPlan
-                annualPlanCache.set(cacheKey, prevPlan)
-            }
+            const prevPlan = await fetchAnnualPlan(year - 1, '')
             const closing = computeClosingBalances(prevPlan, groupName, rowsGroup)[11]
-            await persistOpeningBalance(groupName, closing.toFixed(2))
+            await saveOpeningBalance(groupName, closing.toFixed(2))
         } catch {
             setCarryErrorGroup(groupName)
-            setLoading(false)
+            return
         } finally {
             setCarryingGroup(null)
         }
+        await reloadPlan()
     }
 
     // Renders the opening balance cell content — editable inline.
@@ -244,10 +220,10 @@ function AnnualView() {
                     value={editingOBValue}
                     onChange={(e) => setEditingOBValue(e.target.value)}
                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveOpeningBalance(groupName)
+                        if (e.key === 'Enter') commitOpeningBalanceEdit(groupName)
                         if (e.key === 'Escape') setEditingOBGroup(null)
                     }}
-                    onBlur={() => saveOpeningBalance(groupName)}
+                    onBlur={() => commitOpeningBalanceEdit(groupName)}
                     className="input-base text-sm text-right w-32 px-2 py-0.5"
                     autoFocus
                 />
@@ -322,35 +298,14 @@ function AnnualView() {
 
     // --- Aggregate planned and actual amounts per category across all 12 months ---
     //
-    // catMap: category_id → { name, parentId, amounts[12] }
+    // catMap: category_id → { name, parentId, group, isIncome, amounts[12], actuals[12] }
     // amounts[i] = planned amount for month i+1 (amounts[0] = January).
     //
-    // Category rows in the table display planned amounts only.
-    // Cash flow (actuals for past months, planned for current/future) is
-    // computed separately by computeClosingBalances in lib/cashFlow.ts.
-
-    type CatData = { name: string; parentId: string | null; amounts: string[]; group: string | null; isIncome: boolean }
-    const catMap = new Map<string, CatData>()
-
-    annualPlan?.months.forEach((monthPlan, monthIdx) => {
-        monthPlan.rows.forEach((row) => {
-            if (!catMap.has(row.category_id)) {
-                catMap.set(row.category_id, {
-                    name: row.category_name,
-                    parentId: row.parent_category_id,
-                    amounts: Array(12).fill('0.00'),
-                    group: row.group ?? null,
-                    isIncome: row.is_income ?? false,
-                })
-            }
-            // Overwrite the placeholder with the actual planned amount.
-            catMap.get(row.category_id)!.amounts[monthIdx] = row.planned
-            // Update group if not yet set (first non-null group from any month wins)
-            if (row.group && !catMap.get(row.category_id)!.group) {
-                catMap.get(row.category_id)!.group = row.group
-            }
-        })
-    })
+    // Category rows in the table display planned amounts only. Cash flow
+    // (actuals for past months, planned for current/future) is computed by
+    // computeClosingBalances from this same aggregation, so the two can't drift.
+    type CatData = CategoryYear
+    const catMap = annualPlan ? aggregateByCategory(annualPlan) : new Map<string, CatData>()
 
     // Filter to categories that have at least one non-zero planned amount.
     // Categories with zero planned in every month add visual noise without value.
@@ -570,7 +525,7 @@ function AnnualView() {
                                         // Cash flow: opening balance → closing balance per month,
                                         // counting only this group's categories (see lib/cashFlow.ts)
                                         const closingBalances = annualPlan
-                                            ? computeClosingBalances(annualPlan, sectionGroup, sectionGroup)
+                                            ? computeClosingBalances(annualPlan, sectionGroup, sectionGroup, undefined, catMap)
                                             : Array<number>(12).fill(0)
 
                                         return (
@@ -691,10 +646,13 @@ function AnnualView() {
                                     (() => {
                                         // Compute cash flow for the flat view (single group or filtered)
                                         const flatGroup = filterGroup || 'General'
-                                        // All categories count here: the plan is already filtered
-                                        // server-side when a group filter is active
+                                        // /plan?group= only filters budgets — schedules and
+                                        // transactions from every group still arrive — so a
+                                        // filtered view counts only its own group's rows.
+                                        // Unfiltered (a single group section), count everything.
+                                        const flatRowsGroup = filterGroup || null
                                         const flatClosing = annualPlan
-                                            ? computeClosingBalances(annualPlan, flatGroup, null)
+                                            ? computeClosingBalances(annualPlan, flatGroup, flatRowsGroup, undefined, catMap)
                                             : Array<number>(12).fill(0)
 
                                         return (
@@ -704,7 +662,7 @@ function AnnualView() {
                                                     <tr className="bg-ocean-900/40 border-b border-ocean-700/30">
                                                         <td className="px-4 py-2 text-slate-400 text-sm italic sticky left-0 z-[5] bg-ocean-900">Opening Balance</td>
                                                         <td colSpan={12} className="px-3 py-2 text-right text-sm">
-                                                            {renderOBCell(flatGroup, null)}
+                                                            {renderOBCell(flatGroup, flatRowsGroup)}
                                                         </td>
                                                         <td className="px-4 py-2"></td>
                                                     </tr>

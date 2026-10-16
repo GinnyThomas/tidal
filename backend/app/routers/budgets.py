@@ -23,6 +23,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -204,12 +205,12 @@ def copy_year(
     already has a to_year budget is skipped (its existing amount wins), as
     is a budget whose category has been soft-deleted.
     """
-    source_budgets = (
-        db.query(Budget)
-        .options(selectinload(Budget.overrides))
-        .filter(Budget.user_id == current_user.id, Budget.year == data.from_year)
-        .all()
+    source_query = db.query(Budget).filter(
+        Budget.user_id == current_user.id, Budget.year == data.from_year,
     )
+    if data.include_overrides:
+        source_query = source_query.options(selectinload(Budget.overrides))
+    source_budgets = source_query.all()
 
     # Two set lookups instead of a query per budget.
     already_budgeted = {
@@ -245,7 +246,17 @@ def copy_year(
         db.add(copy)
         created += 1
 
-    db.commit()
+    # A concurrent copy (another tab) can insert the same category/year
+    # between our already_budgeted check and this commit. All-or-nothing:
+    # roll back and let the client retry, which will then skip those rows.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Budgets changed while copying. Please try again.",
+        )
     return {"created": created, "skipped": len(source_budgets) - created}
 
 

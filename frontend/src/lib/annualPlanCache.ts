@@ -11,6 +11,6 @@
 //   - Schedule add/update/active toggle (SchedulesPage)
 //   - User logout (Layout)
 
-import type { AnnualPlan } from '../pages/AnnualView'
+import type { AnnualPlan } from './planTypes'
 
 export const annualPlanCache = new Map<string, AnnualPlan>()

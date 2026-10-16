@@ -686,6 +686,68 @@ describe('AnnualView', () => {
             expect(screen.getByText(/estimate/i)).toBeInTheDocument()
         })
 
+        it('does not report a failed carry-forward when the save worked but the reload failed', async () => {
+            // Saying "could not carry forward" here would invite a retry that
+            // then 409s, because the opening balance now exists.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            let saved = false
+            vi.mocked(axios.get).mockImplementation((url: string) => {
+                if (url.endsWith('/2026')) return Promise.resolve({ data: plan2026() })
+                return saved
+                    ? Promise.reject(new Error('Network error'))
+                    : Promise.resolve({ data: plan2027() })
+            })
+            vi.mocked(axios.post).mockImplementation(() => {
+                saved = true
+                return Promise.resolve({ data: {} })
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(await screen.findByText(/could not load annual plan/i)).toBeInTheDocument()
+            expect(screen.queryByText(/could not carry forward/i)).not.toBeInTheDocument()
+        })
+
+        it('while filtered, carries forward only that group\'s money, from the unfiltered previous year', async () => {
+            // /plan?group= only filters budgets — schedules and transactions
+            // from every group still come back, so the client must filter.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2027-01-10'))
+            const mixedPlan = (year: number) => {
+                const rowsByMonth: Record<number, ReturnType<typeof makePlanRow>[]> = {}
+                for (let i = 0; i < 12; i++) {
+                    rowsByMonth[i] = [
+                        makePlanRow({ category_id: 'uk', category_name: 'Rent', planned: '100.00', actual: '100.00', group: 'UK' }),
+                        makePlanRow({ category_id: 'es', category_name: 'Mercado', planned: '50.00', actual: '50.00', group: 'España' }),
+                    ]
+                }
+                return makeAnnualPlan(year, rowsByMonth)
+            }
+            vi.mocked(axios.get).mockImplementation((url: string) =>
+                Promise.resolve({ data: mixedPlan(url.endsWith('/2026') ? 2026 : 2027) }),
+            )
+            vi.mocked(axios.post).mockResolvedValue({ data: {} })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Mercado')
+            await userEvent.selectOptions(screen.getByLabelText('Budget group'), 'España')
+            await userEvent.click(await screen.findByRole('button', { name: 'Use 2026 closing' }))
+
+            expect(axios.get).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/plan/2026`,
+                expect.objectContaining({ params: {} }),
+            )
+            expect(axios.post).toHaveBeenCalledWith(
+                `${getApiBaseUrl()}/api/v1/opening-balances`,
+                { group: 'España', year: 2027, opening_balance: '-600.00', currency: 'EUR' },
+                expect.anything(),
+            )
+        })
+
         it('shows an error if the carry-forward fails', async () => {
             vi.useFakeTimers({ toFake: ['Date'] })
             vi.setSystemTime(new Date('2027-01-10'))
@@ -701,5 +763,59 @@ describe('AnnualView', () => {
 
             expect(await screen.findByText(/could not carry forward/i)).toBeInTheDocument()
         })
+    })
+
+    // =========================================================================
+    // Filtered cash flow + opening balance save robustness
+    // =========================================================================
+
+    it("filtered to one group, the closing balance counts only that group's rows", async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2027-01-10'))
+        try {
+            // Server returns schedule rows from every group even when filtered
+            const rows = [
+                makePlanRow({ category_id: 'uk', category_name: 'Rent', planned: '100.00', group: 'UK' }),
+                makePlanRow({ category_id: 'es', category_name: 'Mercado', planned: '50.00', group: 'España' }),
+            ]
+            vi.mocked(axios.get).mockResolvedValue({ data: makeAnnualPlan(2027, { 0: rows }) })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await screen.findByText('Mercado')
+            await userEvent.selectOptions(screen.getByLabelText('Budget group'), 'España')
+
+            await waitFor(() => {
+                const closingRow = screen.getByText('Closing Balance').closest('tr')!
+                expect(closingRow.querySelectorAll('td')[1].textContent).toBe('-50.00')
+            })
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('does not get stuck loading when the reload after an inline opening balance save fails', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+        vi.setSystemTime(new Date('2027-01-10'))
+        try {
+            let saved = false
+            vi.mocked(axios.get).mockImplementation(() => saved
+                ? Promise.reject(new Error('Network error'))
+                : Promise.resolve({ data: makeAnnualPlan(2027, { 0: [makePlanRow({ category_name: 'Rent' })] }) }))
+            vi.mocked(axios.post).mockImplementation(() => {
+                saved = true
+                return Promise.resolve({ data: {} })
+            })
+
+            render(<MemoryRouter><AnnualView /></MemoryRouter>)
+
+            await userEvent.click(await screen.findByText('Set opening balance'))
+            await userEvent.type(screen.getByRole('spinbutton'), '100{Enter}')
+
+            expect(await screen.findByText(/could not load annual plan/i)).toBeInTheDocument()
+            expect(screen.queryByText(/building your annual plan/i)).not.toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })
