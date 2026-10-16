@@ -49,8 +49,16 @@ function LoginPage() {
             // Store email so Layout can display it in the authenticated nav bar.
             localStorage.setItem('user_email', email.toLowerCase())
             navigate('/dashboard')
-        } catch {
-            setError('Invalid Credentials')
+        } catch (err: unknown) {
+            // Only a 401 means wrong email/password. Anything else (500 when the
+            // backend can't reach the database, network failure, cold start
+            // timeout) must not masquerade as a bad password.
+            const status = (err as { response?: { status?: number } })?.response?.status
+            setError(
+                status === 401
+                    ? 'Invalid Credentials'
+                    : 'Something went wrong. Please try again in a moment.'
+            )
         }
     }
 
