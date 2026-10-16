@@ -9,9 +9,8 @@
 #   uvicorn app.main:app --reload
 #   (the --reload flag restarts the server when you edit files)
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -98,14 +97,12 @@ def health_check() -> dict[str, str]:
 #
 # On failure we return 503 with a fixed body — this endpoint is public, so the
 # driver error (which can include hostnames) is never echoed back.
-@app.get("/api/v1/health/db", response_model=None)
-def db_health_check(db: Session = Depends(get_db)) -> dict[str, str] | JSONResponse:
+@app.get("/api/v1/health/db")
+def db_health_check(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
     """Confirms the API can query the database. Returns 503 if it can't."""
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unavailable", "database": "unreachable"},
-        )
+        response.status_code = 503
+        return {"status": "unavailable", "database": "unreachable"}
     return {"status": "ok", "database": "ok"}

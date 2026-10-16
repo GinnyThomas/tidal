@@ -81,7 +81,7 @@ def test_db_health_check_returns_503_when_database_unreachable() -> None:
     try:
         response = client.get("/api/v1/health/db")
     finally:
-        app.dependency_overrides.clear()
+        app.dependency_overrides.pop(get_db, None)
 
     assert response.status_code == 503
     # Public endpoint: the body must not leak hostnames or driver errors.

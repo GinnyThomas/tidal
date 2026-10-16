@@ -23,7 +23,8 @@ permissions: {} # needs no repo access
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # curl worst case: 4 attempts x 60s + 3 x 20s delay = 300s, so leave headroom.
+    timeout-minutes: 10
     steps:
       - name: Ping database health endpoint
         # --retry covers Railway cold starts (~30s) and a briefly waking DB.
