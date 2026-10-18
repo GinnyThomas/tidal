@@ -44,6 +44,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from app.services.dedup import compute_dedup_hash
+from app.services.importer import ImportRow, import_rows
 
 from collections import defaultdict
 from decimal import Decimal
@@ -501,101 +502,18 @@ def import_transactions(
                 detail=f"Unknown category_id(s): {unknown_ids}",
             )
 
-    # Fetch existing external_ids and hashes for this account in one query each.
-    # Used for server-side dedup.
-    existing_external_ids: set[str] = set()
-    existing_hashes: set[str] = set()
-
-    ext_rows = (
-        db.query(Transaction.external_id)
-        .filter(
-            Transaction.account_id == import_in.account_id,
-            Transaction.external_id.isnot(None),
-            Transaction.deleted_at.is_(None),
-        )
-        .all()
-    )
-    existing_external_ids = {row[0] for row in ext_rows}
-
-    hash_rows = (
-        db.query(Transaction.dedup_hash)
-        .filter(
-            Transaction.account_id == import_in.account_id,
-            Transaction.dedup_hash.isnot(None),
-            Transaction.deleted_at.is_(None),
-        )
-        .all()
-    )
-    existing_hashes = {row[0] for row in hash_rows}
-
-    created = 0
-    skipped = 0
-    skipped_rows: list[dict] = []
-    new_transactions: list[Transaction] = []
-
-    for i, row in enumerate(import_in.transactions):
-        # external_id dedup takes precedence
-        if row.external_id and row.external_id in existing_external_ids:
-            skipped += 1
-            skipped_rows.append({"row_index": i, "reason": f"Duplicate external_id: {row.external_id}"})
-            continue
-
-        # Bank CSV exports use a signed amount column (negative = debit,
-        # positive = credit). `amount` must always be a positive magnitude —
-        # direction is derived from transaction_type (and account_type for
-        # credit cards) elsewhere, e.g. _calculate_balance() in
-        # routers/accounts.py. Hash on the same magnitude used for storage so
-        # this matches the dedup hash computed for manually-entered
-        # transactions (whose amount is also always a positive magnitude).
-        amount = abs(row.amount)
-
-        h = compute_dedup_hash(
-            account_id=import_in.account_id,
-            date_=row.date,
-            amount=amount,
-            payee=row.payee,
-        )
-        if h in existing_hashes:
-            skipped += 1
-            skipped_rows.append({"row_index": i, "reason": "Duplicate transaction (hash match)"})
-            continue
-
-        tx = Transaction(
-            user_id=current_user.id,
-            account_id=import_in.account_id,
-            category_id=row.category_id,
+    rows = [
+        ImportRow(
             date=row.date,
-            amount=amount,
-            currency=account.currency,
-            # TODO(refunds): CSV imports currently have no refund signal — all positive
-            # amounts become 'income'. Revisit as part of the refunds refactor.
-            transaction_type="income" if row.amount > 0 else "expense",
-            status="cleared",
+            amount=row.amount,
             payee=row.payee,
-            note=row.notes,
+            notes=row.notes,
             external_id=row.external_id,
-            dedup_hash=h,
+            category_id=row.category_id,
         )
-        new_transactions.append(tx)
-        # Track within-batch dedup: add both hash and external_id to the sets
-        # so duplicate rows within the same import file are also deduplicated.
-        existing_hashes.add(h)
-        if row.external_id:
-            existing_external_ids.add(row.external_id)
-        created += 1
-
-    if new_transactions:
-        db.add_all(new_transactions)
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Import failed due to a database error. No transactions were created.",
-            )
-
-    return {"created": created, "skipped_duplicates": skipped, "skipped_rows": skipped_rows}
+        for row in import_in.transactions
+    ]
+    return import_rows(db, current_user.id, account, rows)
 
 
 @router.post(
