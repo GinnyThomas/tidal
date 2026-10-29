@@ -247,6 +247,10 @@ planned = schedule amounts + budget amounts per category per month:
 
 - sa.Uuid(as_uuid=True) in all migrations
 - NOT NULL columns need server_default in migration
+- New tables: `op.execute('ALTER TABLE public.x ENABLE ROW LEVEL SECURITY')` in the
+  creating migration (Supabase advisor `rls_disabled_in_public`). The Data API roles
+  (anon/authenticated) are locked out by `36f77bf75b7b`; the app is the owner, so RLS
+  doesn't touch it. Check with `POSTGRES_TEST_URL=… pytest tests/test_migrations_rls.py`
 - ALLOWED_ORIGINS in Railway: no trailing slash
 - Migrations: direct URL :5432; app uses pooled :6543
 - `from datetime import date as date_` — Pydantic v2 shadowing
