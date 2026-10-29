@@ -87,9 +87,11 @@ class Transaction(Base):
     # --- Promotion link ---
     # References a promotion this payment is against (e.g. BNPL instalment).
     # Nullable — most transactions are not linked to a promotion.
+    # SET NULL matches the database (migration 9c897e2d3a1b): deleting a
+    # promotion unlinks any soft-deleted transactions still pointing at it.
     promotion_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("promotions.id"),
+        ForeignKey("promotions.id", ondelete="SET NULL"),
         nullable=True,
     )
 
