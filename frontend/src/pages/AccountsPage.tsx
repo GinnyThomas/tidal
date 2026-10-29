@@ -130,6 +130,12 @@ function AccountsPage() {
                             Import CSV
                         </button>
                         <button
+                            onClick={() => navigate('/bank-feeds')}
+                            className="btn-secondary cursor-pointer"
+                        >
+                            Bank Feeds
+                        </button>
+                        <button
                             onClick={() => {
                                 setShowForm((prev) => !prev)
                                 // Opening the add form closes any open edit form

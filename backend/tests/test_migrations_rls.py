@@ -16,7 +16,7 @@
 #   POSTGRES_TEST_URL=postgresql://localhost/tidal_migrations_test \
 #     python -m pytest tests/test_migrations_rls.py -v
 # The connecting user must be able to CREATE ROLE (a local superuser can).
-# CI runs it against a Postgres service (.github/workflows/migrations.yml).
+# CI runs it against a Postgres service (.github/workflows/backend-tests.yml).
 
 import os
 import subprocess
@@ -25,6 +25,8 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.exc import ProgrammingError
 
@@ -98,6 +100,21 @@ def migrated_engine() -> Generator[Engine, None, None]:
     _alembic("upgrade", "head")
     yield engine
     engine.dispose()
+
+
+def _revision_before_head() -> str:
+    """The revision one step back from head.
+
+    "-1" is ambiguous at a merge point, so name a parent instead: downgrading
+    to either parent of a merge undoes only the merge itself.
+    """
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+    down_revision = script.get_revision(script.get_current_head()).down_revision
+    if isinstance(down_revision, (tuple, list)):
+        return down_revision[0]
+    assert down_revision is not None, "head has no parent to downgrade to"
+    return down_revision
 
 
 def _public_tables(engine: Engine) -> list[str]:
@@ -208,10 +225,12 @@ def test_objects_created_later_are_out_of_reach_of_api_roles(
 
 
 def test_downgrade_then_upgrade_round_trips(migrated_engine: Engine) -> None:
-    _alembic("downgrade", "-1")
+    _alembic("downgrade", _revision_before_head())
     _alembic("upgrade", "head")
 
-    assert "users" in _public_tables(migrated_engine)
+    tables = _public_tables(migrated_engine)
+    for table in ("users", "bank_connections", "bank_account_links"):
+        assert table in tables
     _assert_locked_down(migrated_engine)
 
 

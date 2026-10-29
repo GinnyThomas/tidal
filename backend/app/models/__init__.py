@@ -25,9 +25,11 @@ from app.models.transaction_split import TransactionSplit
 from app.models.reallocation import Reallocation
 from app.models.csv_mapping import CsvMapping
 from app.models.password_reset_token import PasswordResetToken
+from app.models.bank_connection import BankAccountLink, BankConnection
 
 __all__ = [
     "User", "Account", "Budget", "BudgetOverride", "Category",
     "GroupOpeningBalance", "Promotion", "Schedule", "Transaction",
     "TransactionSplit", "Reallocation", "CsvMapping", "PasswordResetToken",
+    "BankConnection", "BankAccountLink",
 ]

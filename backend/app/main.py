@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.logging_config import configure_logging
-from app.routers import accounts, auth, budgets, categories, csv_mappings, opening_balances, plan, promotions, reallocations, schedules, transactions
+from app.routers import accounts, auth, bank_feeds, budgets, categories, csv_mappings, opening_balances, plan, promotions, reallocations, schedules, transactions
 
 # Before anything logs: make app.* INFO lines visible (see app/logging_config.py).
 configure_logging()
@@ -73,6 +73,7 @@ app.include_router(promotions.router)
 app.include_router(reallocations.router)
 app.include_router(plan.router)
 app.include_router(csv_mappings.router)
+app.include_router(bank_feeds.router)
 
 
 # --- Health check endpoint ---

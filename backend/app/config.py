@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     # Once a domain is verified, change this to e.g. "Tidal <noreply@yourdomain>".
     EMAIL_FROM: str = "Tidal <onboarding@resend.dev>"
 
+    # --- Bank feeds (Enable Banking) ---
+
+    # Application id from the Enable Banking control panel (the JWT `kid`).
+    # Empty = bank feeds switched off: /bank-feeds endpoints return 503.
+    ENABLE_BANKING_APPLICATION_ID: str = ""
+
+    # The application's RSA private key, PEM. In Railway, paste it on one
+    # line with literal "\n" for the newlines — the client converts them.
+    ENABLE_BANKING_PRIVATE_KEY: str = ""
+
     # Tell pydantic-settings to look for a .env file in the working directory.
     # extra="ignore" means unknown variables in .env won't cause an error —
     # useful when .env contains vars for other tools (Docker, etc.)
