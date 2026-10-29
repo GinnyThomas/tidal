@@ -87,6 +87,17 @@ def test_delete_promotion(test_client):
     assert resp.status_code == 404
 
 
+def test_transaction_promotion_fk_sets_null_on_delete() -> None:
+    # The delete endpoint only blocks on *live* transactions, so a
+    # soft-deleted transaction can still point at a promotion being deleted.
+    # The database (migration 9c897e2d3a1b) handles that with ON DELETE SET
+    # NULL; the model must say the same, or `alembic check` reports drift.
+    from app.models.transaction import Transaction
+
+    [fk] = Transaction.__table__.c.promotion_id.foreign_keys
+    assert fk.ondelete == "SET NULL"
+
+
 # =============================================================================
 # Urgency
 # =============================================================================
