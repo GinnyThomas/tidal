@@ -253,8 +253,12 @@ planned = schedule amounts + budget amounts per category per month:
 - NOT NULL columns need server_default in migration
 - New tables: `op.execute('ALTER TABLE public.x ENABLE ROW LEVEL SECURITY')` in the
   creating migration (Supabase advisor `rls_disabled_in_public`). The Data API roles
-  (anon/authenticated) are locked out by `36f77bf75b7b`; the app is the owner, so RLS
-  doesn't touch it. Check with `POSTGRES_TEST_URL=… pytest tests/test_migrations_rls.py`
+  (anon/authenticated) are locked out by `36f77bf75b7b` + `fe459eb10289` (object grants,
+  default privileges and schema USAGE, also revoked from PUBLIC); the app is the owner, so RLS doesn't touch
+  it. CI (`backend-tests.yml`) runs `tests/test_migrations_rls.py` against Postgres and
+  fails on any table without RLS. Locally:
+  `POSTGRES_TEST_URL=postgresql://localhost/tidal_migrations_test pytest tests/test_migrations_rls.py`
+  (refuses non-local URLs and databases without "test" in the name: it drops the schema)
 - ALLOWED_ORIGINS in Railway: no trailing slash
 - Migrations: Supabase **session pooler** (`postgres.<ref>@aws-0-eu-west-1.pooler.supabase.com:5432`);
   the direct `db.*` host is IPv6-only and unreachable from home. App uses pooled :6543
