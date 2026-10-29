@@ -263,4 +263,21 @@ describe('AccountsPage', () => {
         // The router should navigate to /transactions — the sentinel text appears
         expect(await screen.findByText('Transactions Page')).toBeInTheDocument()
     })
+
+    it('Bank Feeds button navigates to the bank feeds page', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: [makeAccount()] })
+
+        render(
+            <MemoryRouter initialEntries={['/accounts']}>
+                <Routes>
+                    <Route path="/accounts" element={<AccountsPage />} />
+                    <Route path="/bank-feeds" element={<p>Bank Feeds Page</p>} />
+                </Routes>
+            </MemoryRouter>
+        )
+
+        await userEvent.click(await screen.findByRole('button', { name: /bank feeds/i }))
+
+        expect(await screen.findByText('Bank Feeds Page')).toBeInTheDocument()
+    })
 })

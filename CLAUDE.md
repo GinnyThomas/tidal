@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 699 Tests
+## All Phases Complete — 770 Tests
 
-**229 backend · 470 frontend · 699 total**
+**280 backend · 490 frontend · 770 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -56,10 +56,11 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
 - ✅ Year-end rollover (copy budgets to next year, carry closing → opening balance)
 - ✅ Password reset (forgot-password email via Resend, single-use hashed tokens)
+- 🚧 Bank feeds, step 1 of 3 (Open Banking via Enable Banking: connect, link, manual sync)
 
 ---
 
-## Models (13 tables)
+## Models (15 tables)
 
 - `users` — email(lower) · bcrypt · JWT · token_version (JWT `ver` claim; bump = revoke all sessions)
 - `accounts` — type · currency · opening_balance · calculated dynamically
@@ -74,14 +75,16 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `group_opening_balances` — group · year · opening_balance · currency
 - `csv_mappings` — saved column mapping per (user, account) · mapping_json
 - `password_reset_tokens` — token_hash (SHA-256, raw token only in email) · expires_at · used_at · max one row per user
+- `bank_connections` — one Open Banking consent · provider · institution · state (single-use CSRF) · session_id · valid_until
+- `bank_account_links` — bank account in a consent → optional Tidal account · iban_last4 only · last_synced_at
 
 ---
 
-## Routers (11)
+## Routers (12)
 
 `/auth` · `/accounts` · `/categories` · `/transactions` · `/schedules`
 `/reallocations` · `/plan` · `/budgets` · `/promotions` · `/opening_balances`
-`/csv-mappings`
+`/csv-mappings` · `/bank-feeds`
 
 Notable `/auth` sub-routes: `POST /forgot-password` (always 202) · `POST /reset-password`
 Notable `/budgets` sub-route: `POST /copy-year`
@@ -128,6 +131,27 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   "Email … sent (Resend id …)", or an ERROR. Search `reset`, not just `email`
 - LoginPage shows "Invalid Credentials" only for a 401, "valid email" for a 422; other failures (e.g. DB
   unreachable → 500) show a generic error
+
+**Bank Feeds (step 1 of 3 — `/bank-feeds`, `BankFeedsPage.tsx`):**
+- Open Banking via **Enable Banking** (licensed aggregator; free "restricted" mode for
+  your OWN accounts only — other users would need a commercial contract)
+- Provider-neutral `BankFeedProvider` protocol in `services/bank_feeds/provider.py`;
+  `enable_banking.py` signs an RS256 JWT per request (`kid` = application id)
+- Flow: pick bank → `POST /connections` (stores random `state`) → bank consent →
+  `/bank-feeds/callback?code&state` → `POST /connections/complete` (state must be this
+  user's pending connection; cleared after use) → link each bank account to a Tidal
+  account (same currency, else 422) → "Sync now"
+- Sync goes through `services/importer.py` — the SAME code path as CSV import, so
+  `external_id` (bank `entry_reference`) + `dedup_hash` stop double imports
+- Sync window: first 90 days; then from last sync minus 7 days (late bookings)
+- Booked transactions only, imported as `cleared` and uncategorised
+- Consent expiry → status "expired" (computed) → sync 409, UI asks to reconnect
+- Env: `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY` (PEM, `\n` ok).
+  Unset → endpoints 503, page says "not set up". Register redirect URL
+  `{frontend}/bank-feeds/callback` in the Enable Banking control panel
+- Next: step 2 (real accounts, review step before import), step 3 (scheduled sync,
+  pending → booked reconciliation, re-link by `identification_hash` on reconnect,
+  clean up abandoned pending connections, payee auto-categorisation)
 
 **Cash Flow (Annual View):**
 - Opening balance per group per year (editable inline)
@@ -288,7 +312,7 @@ planned = schedule amounts + budget amounts per category per month:
 - Annual CSV export writes hardcoded totals, not live `=SUM()` formulas
   (needs a careful exception in `escapeCsvCell()` formula-injection protection)
 - Currency consolidation (exchange_rate exists, no conversion logic)
-- Open Banking / bank sync
+- Bank feeds: steps 2–3 still to do (see Bank Feeds above)
 - Google OAuth
 - Password reset: no domain verified with Resend yet, so emails only reach the Resend
   account owner; no rate limiting on `/forgot-password`

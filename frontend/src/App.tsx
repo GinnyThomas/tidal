@@ -13,6 +13,8 @@ import AnnualView from './pages/AnnualView.tsx'
 import BudgetsPage from './pages/BudgetsPage.tsx'
 import PromotionsPage from './pages/PromotionsPage.tsx'
 import ImportCsvPage from './pages/ImportCsvPage.tsx'
+import BankFeedsPage from './pages/BankFeedsPage.tsx'
+import BankFeedCallbackPage from './pages/BankFeedCallbackPage.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
 import CatchUpProvider from './components/CatchUpProvider.tsx'
 
@@ -43,6 +45,8 @@ function App() {
       <Route path="/budgets"         element={<ProtectedRoute><BudgetsPage /></ProtectedRoute>} />
       <Route path="/promotions"     element={<ProtectedRoute><PromotionsPage /></ProtectedRoute>} />
       <Route path="/import-csv"      element={<ProtectedRoute><ImportCsvPage /></ProtectedRoute>} />
+      <Route path="/bank-feeds"      element={<ProtectedRoute><BankFeedsPage /></ProtectedRoute>} />
+      <Route path="/bank-feeds/callback" element={<ProtectedRoute><BankFeedCallbackPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     </CatchUpProvider>
