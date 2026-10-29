@@ -208,7 +208,9 @@ def test_objects_created_later_are_out_of_reach_of_api_roles(
 
 
 def test_downgrade_then_upgrade_round_trips(migrated_engine: Engine) -> None:
-    _alembic("downgrade", "-1")
+    # Back to the first lock-down migration by name: "-1" is ambiguous once a
+    # merge migration has two parents.
+    _alembic("downgrade", "36f77bf75b7b")
     _alembic("upgrade", "head")
 
     assert "users" in _public_tables(migrated_engine)
