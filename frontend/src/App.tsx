@@ -15,6 +15,8 @@ import PromotionsPage from './pages/PromotionsPage.tsx'
 import ImportCsvPage from './pages/ImportCsvPage.tsx'
 import BankFeedsPage from './pages/BankFeedsPage.tsx'
 import BankFeedCallbackPage from './pages/BankFeedCallbackPage.tsx'
+import PrivacyPage from './pages/PrivacyPage.tsx'
+import TermsPage from './pages/TermsPage.tsx'
 import ProtectedRoute from './components/ProtectedRoute.tsx'
 import CatchUpProvider from './components/CatchUpProvider.tsx'
 
@@ -33,6 +35,8 @@ function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       {/* /dashboard is the primary view — Monthly Plan */}
       <Route path="/dashboard" element={<ProtectedRoute><MonthlyPlanView /></ProtectedRoute>} />
       <Route path="/plan" element={<ProtectedRoute><MonthlyPlanView /></ProtectedRoute>} />

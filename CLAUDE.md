@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 771 Tests
+## All Phases Complete — 781 Tests
 
-**281 backend · 490 frontend · 771 total**
+**281 backend · 500 frontend · 781 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs

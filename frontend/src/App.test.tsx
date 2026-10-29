@@ -43,4 +43,22 @@ describe('App', () => {
     )
     expect(screen.getByRole('button', { name: /reset password/i })).toBeInTheDocument()
   })
+
+  it('shows the privacy policy without logging in', () => {
+    render(
+        <MemoryRouter initialEntries={['/privacy']}>
+          <App />
+        </MemoryRouter>
+    )
+    expect(screen.getByRole('heading', { level: 1, name: /privacy policy/i })).toBeInTheDocument()
+  })
+
+  it('shows the terms of use without logging in', () => {
+    render(
+        <MemoryRouter initialEntries={['/terms']}>
+          <App />
+        </MemoryRouter>
+    )
+    expect(screen.getByRole('heading', { level: 1, name: /terms of use/i })).toBeInTheDocument()
+  })
 })
