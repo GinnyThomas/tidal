@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 760 Tests
+## All Phases Complete — 770 Tests
 
-**273 backend · 487 frontend · 760 total**
+**280 backend · 490 frontend · 770 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -127,6 +127,10 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   localhost frontend → email logged to console; deployed → error logged, never the link
 - Link base = `settings.frontend_base_url`: `FRONTEND_URL`, else first `ALLOWED_ORIGINS`
   entry, trailing slash stripped. Railway env: `RESEND_API_KEY`
+- Logs (Railway): "no active account" (nothing sent), "sending reset email",
+  "Email … sent (Resend id …)", or an ERROR. Search `reset`, not just `email`
+- LoginPage shows "Invalid Credentials" only for a 401, "valid email" for a 422; other failures (e.g. DB
+  unreachable → 500) show a generic error
 
 **Bank Feeds (step 1 of 3 — `/bank-feeds`, `BankFeedsPage.tsx`):**
 - Open Banking via **Enable Banking** (licensed aggregator; free "restricted" mode for
@@ -276,7 +280,12 @@ planned = schedule amounts + budget amounts per category per month:
   (anon/authenticated) are locked out by `36f77bf75b7b`; the app is the owner, so RLS
   doesn't touch it. Check with `POSTGRES_TEST_URL=… pytest tests/test_migrations_rls.py`
 - ALLOWED_ORIGINS in Railway: no trailing slash
-- Migrations: direct URL :5432; app uses pooled :6543
+- Migrations: Supabase **session pooler** (`postgres.<ref>@aws-0-eu-west-1.pooler.supabase.com:5432`);
+  the direct `db.*` host is IPv6-only and unreachable from home. App uses pooled :6543
+- Run migrations BEFORE merging code that needs them — Railway auto-deploys on merge
+- Changing the Supabase DB password → also update `DATABASE_URL` in Railway (then Deploy).
+  Check with `GET /api/v1/health/db`
+- Logging: `app/logging_config.py` makes `app.*` INFO visible (uvicorn only configures its own loggers)
 - `from datetime import date as date_` — Pydantic v2 shadowing
 - `group` reserved in PostgreSQL — quote as `"group"` in raw SQL
 - Supabase "No rows returned" = UPDATE/DELETE succeeded
@@ -322,8 +331,8 @@ cd frontend && npm run dev
 cd backend && python -m pytest tests/ -v
 cd frontend && npm run test:run
 
-# Production migrations
-DATABASE_URL="postgresql://postgres:PASSWORD@db.msframaqmymeunoqmtjr.supabase.co:5432/postgres" alembic upgrade head
+# Production migrations (session pooler — see Important Reminders)
+DATABASE_URL='postgresql://postgres.msframaqmymeunoqmtjr:PASSWORD@aws-0-eu-west-1.pooler.supabase.com:5432/postgres' alembic upgrade head
 
 # Refresh demo
 cd backend && ./scripts/refresh_demo.sh
@@ -331,4 +340,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: October 2026 — 641 tests · Live at tidal-vert.vercel.app*
+*Last updated: October 2026 — 699 tests · Live at tidal-vert.vercel.app*

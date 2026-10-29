@@ -51,3 +51,16 @@ def send_email(to: str, subject: str, html: str) -> None:
         # than the account owner — that will show up here.
         detail = exc.response.text if isinstance(exc, httpx.HTTPStatusError) else str(exc)
         logger.error("Failed to send email to %s: %s", to, detail)
+        return
+
+    # The email has gone out by now, so an unreadable body must not raise:
+    # the caller would log a failure for an email that was actually sent.
+    logger.info("Email %r sent to %s (Resend id %s)", subject, to, _resend_id(response))
+
+
+def _resend_id(response: httpx.Response) -> str | None:
+    """Resend's id for the sent email (searchable in its dashboard), or None if the body isn't readable."""
+    try:
+        return response.json().get("id")
+    except (ValueError, AttributeError):
+        return None

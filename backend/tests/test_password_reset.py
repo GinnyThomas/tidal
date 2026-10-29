@@ -9,6 +9,7 @@
 # app.services.email.send_email with a fake that records each call. We pull
 # the raw token out of the recorded link, exactly as a user would click it.
 
+import logging
 import re
 
 import pytest
@@ -292,3 +293,30 @@ def test_jwt_issued_before_versioning_still_works_until_a_reset(test_client) -> 
     response = test_client.post("/api/v1/auth/refresh", headers={"Authorization": f"Bearer {legacy_jwt}"})
 
     assert response.status_code == 200
+
+
+# =============================================================================
+# Observability — which outcome happened must be visible in the (private) logs
+# =============================================================================
+
+
+def test_forgot_password_logs_when_no_account_matches(
+    test_client, sent_emails, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="app.services.password_reset"):
+        test_client.post(FORGOT_URL, json={"email": "nobody@example.com"})
+
+    assert "no active account" in caplog.text
+    assert "nobody@example.com" in caplog.text
+
+
+def test_forgot_password_logs_when_email_is_sent(
+    test_client, sent_emails, caplog: pytest.LogCaptureFixture
+) -> None:
+    _register(test_client)
+
+    with caplog.at_level(logging.INFO, logger="app.services.password_reset"):
+        test_client.post(FORGOT_URL, json={"email": "ginny@example.com"})
+
+    assert "reset email" in caplog.text
+    assert "ginny@example.com" in caplog.text

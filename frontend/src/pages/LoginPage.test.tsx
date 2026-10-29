@@ -23,12 +23,43 @@ describe('LoginPage', () => {
     })
 
     it('shows an error message when login fails', async () => {
-        vi.mocked(axios.post).mockRejectedValueOnce(new Error('Invalid credentials'))
+        vi.mocked(axios.post).mockRejectedValueOnce({ response: { status: 401 } })
         render(<MemoryRouter><LoginPage /></MemoryRouter>)
         await userEvent.type(screen.getByLabelText(/email/i), 'test@test.com')
         await userEvent.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'wrongpassword')
         await userEvent.click(screen.getByRole('button', { name: /log in/i }))
         expect(await screen.findByText(/invalid credentials/i)).toBeInTheDocument()
+    })
+
+    it('shows a generic error, not "invalid credentials", when the server fails', async () => {
+        // e.g. the backend can't reach the database → 500
+        vi.mocked(axios.post).mockRejectedValueOnce({ response: { status: 500 } })
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        await userEvent.type(screen.getByLabelText(/email/i), 'test@test.com')
+        await userEvent.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'correctpassword')
+        await userEvent.click(screen.getByRole('button', { name: /log in/i }))
+        expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+        expect(screen.queryByText(/invalid credentials/i)).not.toBeInTheDocument()
+    })
+
+    it('says the email is not valid, not "try again", when the server rejects its format', async () => {
+        // The browser accepts some addresses (e.g. ginny@localhost) that the backend's EmailStr rejects → 422
+        vi.mocked(axios.post).mockRejectedValueOnce({ response: { status: 422 } })
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        await userEvent.type(screen.getByLabelText(/email/i), 'ginny@localhost')
+        await userEvent.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'somepassword')
+        await userEvent.click(screen.getByRole('button', { name: /log in/i }))
+        expect(await screen.findByText(/valid email address/i)).toBeInTheDocument()
+        expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+    })
+
+    it('shows a generic error when the server cannot be reached', async () => {
+        vi.mocked(axios.post).mockRejectedValueOnce(new Error('Network Error'))
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        await userEvent.type(screen.getByLabelText(/email/i), 'test@test.com')
+        await userEvent.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'correctpassword')
+        await userEvent.click(screen.getByRole('button', { name: /log in/i }))
+        expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
     })
 
     it('saves the token to localStorage on successful login', async () => {
