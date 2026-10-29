@@ -98,6 +98,39 @@ def test_transaction_promotion_fk_sets_null_on_delete() -> None:
     assert fk.ondelete == "SET NULL"
 
 
+def test_delete_promotion_linked_via_split_returns_409(test_client):
+    # The link lives on a split, not on the parent transaction, so the
+    # Transaction.promotion_id check alone doesn't see it. Without a guard,
+    # Postgres rejects the hard delete (plain FK on transaction_splits) and
+    # SQLite silently leaves the split pointing at a missing promotion.
+    token, account_id, _ = _setup(test_client)
+    cats = test_client.get("/api/v1/categories", headers=_auth_headers(token)).json()
+    promo = _create_promotion(test_client, token)
+
+    resp = test_client.post(
+        "/api/v1/transactions",
+        json={
+            "account_id": account_id,
+            "date": str(date.today()),
+            "amount": "100.00",
+            "transaction_type": "expense",
+            "splits": [
+                {"category_id": cats[0]["id"], "amount": "60.00", "promotion_id": promo["id"]},
+                {"category_id": cats[1]["id"], "amount": "40.00"},
+            ],
+        },
+        headers=_auth_headers(token),
+    )
+    assert resp.status_code == 201
+    assert resp.json()["promotion_id"] is None
+
+    resp = test_client.delete(f"/api/v1/promotions/{promo['id']}", headers=_auth_headers(token))
+    assert resp.status_code == 409
+
+    resp = test_client.get(f"/api/v1/promotions/{promo['id']}", headers=_auth_headers(token))
+    assert resp.status_code == 200
+
+
 # =============================================================================
 # Urgency
 # =============================================================================
