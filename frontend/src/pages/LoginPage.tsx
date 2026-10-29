@@ -50,15 +50,20 @@ function LoginPage() {
             localStorage.setItem('user_email', email.toLowerCase())
             navigate('/dashboard')
         } catch (err: unknown) {
-            // Only a 401 means wrong email/password. Anything else (500 when the
-            // backend can't reach the database, network failure, cold start
-            // timeout) must not masquerade as a bad password.
+            // Only a 401 means wrong email/password. A 422 is the backend's
+            // EmailStr rejecting an address the browser accepted (e.g.
+            // ginny@localhost) — retrying won't help, so say what's wrong.
+            // Anything else (500 when the backend can't reach the database,
+            // network failure, cold start timeout) must not masquerade as a
+            // bad password.
             const status = (err as { response?: { status?: number } })?.response?.status
-            setError(
-                status === 401
-                    ? 'Invalid Credentials'
-                    : 'Something went wrong. Please try again in a moment.'
-            )
+            if (status === 401) {
+                setError('Invalid Credentials')
+            } else if (status === 422) {
+                setError('Please enter a valid email address.')
+            } else {
+                setError('Something went wrong. Please try again in a moment.')
+            }
         }
     }
 

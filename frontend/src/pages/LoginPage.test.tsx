@@ -42,6 +42,17 @@ describe('LoginPage', () => {
         expect(screen.queryByText(/invalid credentials/i)).not.toBeInTheDocument()
     })
 
+    it('says the email is not valid, not "try again", when the server rejects its format', async () => {
+        // The browser accepts some addresses (e.g. ginny@localhost) that the backend's EmailStr rejects → 422
+        vi.mocked(axios.post).mockRejectedValueOnce({ response: { status: 422 } })
+        render(<MemoryRouter><LoginPage /></MemoryRouter>)
+        await userEvent.type(screen.getByLabelText(/email/i), 'ginny@localhost')
+        await userEvent.type(screen.getByLabelText(/^password$/i, { selector: 'input' }), 'somepassword')
+        await userEvent.click(screen.getByRole('button', { name: /log in/i }))
+        expect(await screen.findByText(/valid email address/i)).toBeInTheDocument()
+        expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument()
+    })
+
     it('shows a generic error when the server cannot be reached', async () => {
         vi.mocked(axios.post).mockRejectedValueOnce(new Error('Network Error'))
         render(<MemoryRouter><LoginPage /></MemoryRouter>)

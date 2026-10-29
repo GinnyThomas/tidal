@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 697 Tests
+## All Phases Complete — 699 Tests
 
-**228 backend · 469 frontend · 697 total**
+**229 backend · 470 frontend · 699 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -126,7 +126,7 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   entry, trailing slash stripped. Railway env: `RESEND_API_KEY`
 - Logs (Railway): "no active account" (nothing sent), "sending reset email",
   "Email … sent (Resend id …)", or an ERROR. Search `reset`, not just `email`
-- LoginPage shows "Invalid Credentials" only for a 401; other failures (e.g. DB
+- LoginPage shows "Invalid Credentials" only for a 401, "valid email" for a 422; other failures (e.g. DB
   unreachable → 500) show a generic error
 
 **Cash Flow (Annual View):**
@@ -312,4 +312,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: October 2026 — 697 tests · Live at tidal-vert.vercel.app*
+*Last updated: October 2026 — 699 tests · Live at tidal-vert.vercel.app*
