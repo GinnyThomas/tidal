@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 770 Tests
+## All Phases Complete — 771 Tests
 
-**280 backend · 490 frontend · 770 total**
+**281 backend · 490 frontend · 771 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -344,4 +344,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: October 2026 — 699 tests · Live at tidal-vert.vercel.app*
+*Last updated: October 2026 — 771 tests · Live at tidal-vert.vercel.app*

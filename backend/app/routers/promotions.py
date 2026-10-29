@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.promotion import Promotion
 from app.models.transaction import Transaction
+from app.models.transaction_split import TransactionSplit
 from app.models.user import User
 from app.schemas.promotion import (
     PromotionCreate,
@@ -209,7 +210,17 @@ def delete_promotion(
         )
         .count()
     )
-    if linked_count > 0:
+    # Split transactions carry the link on their splits, not the parent row
+    linked_split_count = (
+        db.query(TransactionSplit)
+        .join(Transaction, TransactionSplit.transaction_id == Transaction.id)
+        .filter(
+            TransactionSplit.promotion_id == promotion.id,
+            Transaction.deleted_at.is_(None),
+        )
+        .count()
+    )
+    if linked_count + linked_split_count > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete promotion with linked transactions. Remove the links first.",
