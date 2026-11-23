@@ -10,7 +10,7 @@ It provides context about the project, the developer, and how we work together.
 **Name:** Ginny Thomas
 **Background:** Full Stack Engineer, 4 years production Scala/Play at HMRC via Capgemini.
 Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
-**Relocating:** Barcelona, June 2026. Actively job hunting.
+**Location:** Back in the UK (autumn 2026), UK bank accounts. Actively job hunting.
 **Learning goals:** Understand every decision. Explain confidently in interviews.
 
 ---
@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 781 Tests
+## All Phases Complete — 843 Tests
 
-**281 backend · 500 frontend · 781 total**
+**335 backend (+11 Postgres-only, skipped locally) · 508 frontend · 843 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -56,7 +56,8 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
 - ✅ Year-end rollover (copy budgets to next year, carry closing → opening balance)
 - ✅ Password reset (forgot-password email via Resend, single-use hashed tokens)
-- 🚧 Bank feeds, step 1 of 3 (Open Banking via Enable Banking: connect, link, manual sync)
+- 🚧 Bank feeds, step 1 of 3 (Open Banking: connect, link, manual sync) — Enable Banking (EEA)
+               and BankSync (UK, via Salt Edge)
 
 ---
 
@@ -75,7 +76,8 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `group_opening_balances` — group · year · opening_balance · currency
 - `csv_mappings` — saved column mapping per (user, account) · mapping_json
 - `password_reset_tokens` — token_hash (SHA-256, raw token only in email) · expires_at · used_at · max one row per user
-- `bank_connections` — one Open Banking consent · provider · institution · state (single-use CSRF) · session_id · valid_until
+- `bank_connections` — one Open Banking consent · provider · institution · state (single-use CSRF) · session_id
+  (BankSync: its bank id) · valid_until (NULL = provider doesn't say)
 - `bank_account_links` — bank account in a consent → optional Tidal account · iban_last4 only · last_synced_at
 
 ---
@@ -133,23 +135,50 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   unreachable → 500) show a generic error
 
 **Bank Feeds (step 1 of 3 — `/bank-feeds`, `BankFeedsPage.tsx`):**
-- Open Banking via **Enable Banking** (licensed aggregator; free "restricted" mode for
-  your OWN accounts only — other users would need a commercial contract)
-- Provider-neutral `BankFeedProvider` protocol in `services/bank_feeds/provider.py`;
-  `enable_banking.py` signs an RS256 JWT per request (`kid` = application id)
-- Flow: pick bank → `POST /connections` (stores random `state`) → bank consent →
+- Two providers. **Enable Banking** (licensed aggregator; free "restricted" mode for
+  your OWN accounts only, EEA banks only — no UK). **BankSync** (banksync.io, $7/mo
+  Standard plan, resells Salt Edge's FCA-authorised UK access) for UK banks
+- Provider-neutral protocols in `services/bank_feeds/provider.py`, two `flow`s:
+  `consent` (`ConsentFlowProvider`: Tidal runs the bank consent) and `pre_connected`
+  (`PreConnectedProvider`: banks connected in the provider's own app, read by API key).
+  `enable_banking.py` signs an RS256 JWT per request (`kid` = application id);
+  `banksync.py` sends `X-API-Key`
+- Registry in `services/bank_feeds/__init__.py`: `get_bank_feed_provider()` = Enable
+  Banking (503 if unset), `get_bank_feed_providers()` = every provider THIS user may use.
+  Sync uses the provider recorded on the connection (`BankConnection.provider`)
+- Consent flow: pick bank → `POST /connections` (stores random `state`) → bank consent →
   `/bank-feeds/callback?code&state` → `POST /connections/complete` (state must be this
   user's pending connection; cleared after use) → link each bank account to a Tidal
   account (same currency, else 422) → "Sync now"
+- BankSync flow: connect banks in BankSync's app → "Refresh from BankSync" →
+  `POST /providers/banksync/refresh` mirrors its banks/accounts into bank_connections /
+  bank_account_links (matched by provider ids, so links survive; banks/accounts gone at
+  BankSync are forgotten) → link → "Sync now". No Remove button: removing and reconnecting
+  happen in BankSync. Monzo pots arrive as separate savings accounts
+- **BankSync key = one person's banks.** Offered only to the user whose email is
+  `BANKSYNC_OWNER_EMAIL`; everyone else (the public demo account!) gets 404 / no section
+- BankSync mapping (checked against real Monzo data, Nov 2026): `amount` negative = money
+  out; `external_id` = `reference` when it is a Monzo `tx_…` id (same as the Monzo CSV template, so
+  sync and CSV dedup against each other), else BankSync's own tx id (other banks may put the payer's free-text reference there); payee = `merchantName` (who was paid) else
+  `description`, the other text in the note; consent expiry from `saltedgeConsentExpiresAt`,
+  `reauthPendingAt` / `connectionStatus.connected=false` → stored as already expired.
+  Those three fields are undocumented, so all are optional. History reaches ~90 days only
+- BankSync rate limit: 10 req/min (Standard). A 429 → our 429 + `Retry-After`; a 401/403
+  (e.g. expired key) → 502 telling you to replace the key. Refresh costs 1 + one request
+  per bank, so 10+ banks can never refresh. A sync with > 50 pages fails (502) rather
+  than import part and move `last_synced_at` on
 - Sync goes through `services/importer.py` — the SAME code path as CSV import, so
   `external_id` (bank `entry_reference`) + `dedup_hash` stop double imports
 - Sync window: first 90 days; then from last sync minus 7 days (late bookings)
 - Booked transactions only, imported as `cleared` and uncategorised
 - Consent expiry → status "expired" (computed) → sync 409, UI asks to reconnect
 - Env: `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY` (PEM, `\n` ok).
-  Unset → endpoints 503, page says "not set up". Register redirect URL
-  `{frontend}/bank-feeds/callback` in the Enable Banking control panel
-- Next: step 2 (real accounts, review step before import), step 3 (scheduled sync,
+  Unset → consent endpoints 503. Register redirect URL
+  `{frontend}/bank-feeds/callback` in the Enable Banking control panel.
+  `BANKSYNC_API_KEY` (scope `banks:read` only; keys can expire) + `BANKSYNC_OWNER_EMAIL`.
+  No provider available to the user → page says "not set up"
+- Next: auto-pair transfers (both legs of a Monzo pot move share one `reference`),
+  step 2 (review step before import), step 3 (scheduled sync,
   pending → booked reconciliation, re-link by `identification_hash` on reconnect,
   clean up abandoned pending connections, payee auto-categorisation)
 
@@ -344,4 +373,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: October 2026 — 771 tests · Live at tidal-vert.vercel.app*
+*Last updated: November 2026 — 843 tests · Live at tidal-vert.vercel.app*
