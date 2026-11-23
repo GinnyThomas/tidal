@@ -78,6 +78,16 @@ class Settings(BaseSettings):
     # line with literal "\n" for the newlines — the client converts them.
     ENABLE_BANKING_PRIVATE_KEY: str = ""
 
+    # --- Bank feeds (BankSync) ---
+
+    # API key from BankSync → workspace menu → Developers (scope banks:read).
+    # Empty = BankSync switched off.
+    BANKSYNC_API_KEY: str = ""
+
+    # The key reads ONE person's banks, so BankSync is offered only to the
+    # Tidal user with this email. Empty = offered to nobody.
+    BANKSYNC_OWNER_EMAIL: str = ""
+
     # Tell pydantic-settings to look for a .env file in the working directory.
     # extra="ignore" means unknown variables in .env won't cause an error —
     # useful when .env contains vars for other tools (Docker, etc.)

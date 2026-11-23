@@ -2,6 +2,12 @@
 //
 // Purpose: Connect banks via Open Banking and pull their transactions in.
 //
+// Two kinds of provider (GET /bank-feeds/providers says which are on offer):
+//   - consent (Enable Banking): Tidal runs the bank consent, steps 1–2 below.
+//   - pre_connected (BankSync): banks are connected in the provider's own
+//     app; "Refresh from BankSync" mirrors them here, then steps 3–4 apply.
+//     Removing or reconnecting those banks happens in BankSync, not here.
+//
 // Flow:
 //   1. Pick a country and bank → "Connect" → the browser goes to the bank's
 //      consent screen (window.location, not the router — it's another site).
@@ -31,11 +37,18 @@ type BankAccountLink = {
 
 type BankConnection = {
     id: string
+    provider: string
     institution_name: string
     institution_country: string
     status: 'active' | 'expired'
     valid_until: string | null
     accounts: BankAccountLink[]
+}
+
+type Provider = {
+    name: string
+    display_name: string
+    flow: 'consent' | 'pre_connected'
 }
 
 type Institution = {
@@ -74,6 +87,7 @@ function BankFeedsPage() {
     const location = useLocation()
     const connectedBank = (location.state as { connected?: string } | null)?.connected
 
+    const [providers, setProviders] = useState<Provider[]>([])
     const [connections, setConnections] = useState<BankConnection[]>([])
     const [accounts, setAccounts] = useState<Account[]>([])
     const [loading, setLoading] = useState(true)
@@ -87,6 +101,10 @@ function BankFeedsPage() {
     const [connectError, setConnectError] = useState<string | null>(null)
     const [connecting, setConnecting] = useState(false)
 
+    // Pre-connected providers: which one is refreshing, and its last error.
+    const [refreshingName, setRefreshingName] = useState<string | null>(null)
+    const [refreshError, setRefreshError] = useState<string | null>(null)
+
     // Per bank-account messages, keyed by link id.
     const [syncingId, setSyncingId] = useState<string | null>(null)
     const [messages, setMessages] = useState<Record<string, { text: string, isError: boolean }>>({})
@@ -94,10 +112,12 @@ function BankFeedsPage() {
     useEffect(() => {
         setError(null)
         Promise.all([
+            axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/providers`, authHeaders()),
             axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/connections`, authHeaders()),
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, authHeaders()),
         ])
-            .then(([connRes, accRes]) => {
+            .then(([provRes, connRes, accRes]) => {
+                setProviders(provRes.data)
                 setConnections(connRes.data)
                 setAccounts(accRes.data)
             })
@@ -105,9 +125,14 @@ function BankFeedsPage() {
             .finally(() => setLoading(false))
     }, [refreshKey])
 
+    const consentProvider = providers.find(p => p.flow === 'consent')
+    const preConnectedProviders = providers.filter(p => p.flow === 'pre_connected')
+    const flowOf = (providerName: string) => providers.find(p => p.name === providerName)
+
     useEffect(() => {
         setInstitutions([])
         setBank('')
+        if (!consentProvider) return
         axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/institutions`, { ...authHeaders(), params: { country } })
             .then(res => {
                 setInstitutions(res.data)
@@ -117,7 +142,7 @@ function BankFeedsPage() {
                 if (err?.response?.status === 503) setNotConfigured(true)
                 else setConnectError('Could not load the list of banks.')
             })
-    }, [country])
+    }, [country, consentProvider])
 
     const handleConnect = async () => {
         setConnectError(null)
@@ -132,6 +157,24 @@ function BankFeedsPage() {
         } catch (err) {
             setConnectError(errorDetail(err, 'Could not start connecting. Please try again.'))
             setConnecting(false)
+        }
+    }
+
+    const handleRefresh = async (provider: Provider) => {
+        setRefreshError(null)
+        setRefreshingName(provider.name)
+        try {
+            const res = await axios.post(
+                `${getApiBaseUrl()}/api/v1/bank-feeds/providers/${provider.name}/refresh`,
+                {},
+                authHeaders(),
+            )
+            // The response is this provider's banks in full; other providers' are untouched.
+            setConnections(prev => [...prev.filter(c => c.provider !== provider.name), ...res.data])
+        } catch (err) {
+            setRefreshError(errorDetail(err, `Could not refresh from ${provider.display_name}. Please try again.`))
+        } finally {
+            setRefreshingName(null)
         }
     }
 
@@ -201,7 +244,31 @@ function BankFeedsPage() {
 
                 {error && <p className="text-coral-400 mb-6">{error}</p>}
 
-                {/* --- Connect a bank --- */}
+                {providers.length === 0 && (
+                    <p className="text-slate-400 text-sm mb-8">Bank feeds are not set up on this server.</p>
+                )}
+
+                {/* --- Pre-connected providers (BankSync) --- */}
+                {preConnectedProviders.map(provider => (
+                    <div key={provider.name} className="card mb-8">
+                        <h3 className="text-lg font-semibold text-slate-100 mb-2">{provider.display_name}</h3>
+                        <p className="text-slate-400 text-sm mb-4">
+                            Connect and reconnect your banks in {provider.display_name}'s own app, then refresh here
+                            to see their accounts.
+                        </p>
+                        <button
+                            onClick={() => handleRefresh(provider)}
+                            disabled={refreshingName !== null}
+                            className="btn-primary cursor-pointer disabled:opacity-60"
+                        >
+                            {refreshingName === provider.name ? 'Refreshing…' : `Refresh from ${provider.display_name}`}
+                        </button>
+                        {refreshError && <p className="text-coral-400 text-sm mt-3">{refreshError}</p>}
+                    </div>
+                ))}
+
+                {/* --- Connect a bank (consent-flow provider) --- */}
+                {consentProvider && (
                 <div className="card mb-8">
                     <h3 className="text-lg font-semibold text-slate-100 mb-4">Connect a bank</h3>
                     {notConfigured ? (
@@ -236,6 +303,7 @@ function BankFeedsPage() {
                         </p>
                     )}
                 </div>
+                )}
 
                 {/* --- Connected banks --- */}
                 {connections.length === 0 ? (
@@ -244,6 +312,8 @@ function BankFeedsPage() {
                     <div className="space-y-6">
                         {connections.map(connection => {
                             const expired = connection.status === 'expired'
+                            const provider = flowOf(connection.provider)
+                            const preConnected = provider?.flow === 'pre_connected'
                             return (
                                 <div key={connection.id} className="card">
                                     <div className="flex items-center justify-between mb-4">
@@ -251,13 +321,18 @@ function BankFeedsPage() {
                                             <h3 className="text-lg font-semibold text-slate-100">{connection.institution_name}</h3>
                                             <p className={`text-xs ${expired ? 'text-coral-400' : 'text-slate-400'}`}>
                                                 {expired
-                                                    ? 'Consent expired. Remove and connect again to keep syncing.'
+                                                    ? (preConnected
+                                                        ? `Consent expired. Reconnect this bank in ${provider.display_name}, then refresh.`
+                                                        : 'Consent expired. Remove and connect again to keep syncing.')
                                                     : connection.valid_until && `Access until ${fmtDate(connection.valid_until)}`}
                                             </p>
                                         </div>
-                                        <button onClick={() => handleRemove(connection)} className="btn-secondary cursor-pointer">
-                                            Remove
-                                        </button>
+                                        {/* A refresh would bring a pre-connected bank straight back. */}
+                                        {!preConnected && (
+                                            <button onClick={() => handleRemove(connection)} className="btn-secondary cursor-pointer">
+                                                Remove
+                                            </button>
+                                        )}
                                     </div>
 
                                     <ul className="divide-y divide-ocean-700">

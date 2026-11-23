@@ -3,9 +3,10 @@
 # Tests for /api/v1/bank-feeds — connecting a bank, linking its accounts to
 # Tidal accounts, and syncing transactions.
 #
-# The real provider (Enable Banking) is swapped for FakeProvider via
-# FastAPI's dependency_overrides, the same way conftest swaps get_db.
-# The client itself is tested in test_enable_banking.py.
+# The real providers are swapped for fakes via FastAPI's dependency_overrides,
+# the same way conftest swaps get_db: FakeProvider stands in for a consent-flow
+# provider (Enable Banking), FakePreConnectedProvider for BankSync. The
+# clients themselves are tested in test_enable_banking.py and test_banksync.py.
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -14,7 +15,7 @@ import pytest
 
 from app.config import settings
 from app.main import app
-from app.services.bank_feeds import get_bank_feed_provider
+from app.services.bank_feeds import get_bank_feed_provider, get_bank_feed_providers
 from app.services.bank_feeds.provider import (
     AuthStart,
     BankFeedError,
@@ -22,6 +23,7 @@ from app.services.bank_feeds.provider import (
     Institution,
     LinkedSession,
     ProviderAccount,
+    RemoteConnection,
 )
 
 
@@ -32,6 +34,8 @@ from app.services.bank_feeds.provider import (
 
 class FakeProvider:
     name = "fake"
+    display_name = "Fake Consent"
+    flow = "consent"
 
     def __init__(self) -> None:
         self.institutions = [Institution(name="Monzo", country="GB", logo=None, max_consent_days=90)]
@@ -69,10 +73,64 @@ class FakeProvider:
         return self.transactions
 
 
+class FakePreConnectedProvider:
+    name = "fake_pre"
+    display_name = "Fake Pre-connected"
+    flow = "pre_connected"
+
+    def __init__(self) -> None:
+        self.connections = [_remote()]
+        self.transactions: list[FeedTransaction] = []
+        self.fetch_calls: list[tuple[str, date]] = []
+        self.error: BankFeedError | None = None
+
+    def list_connections(self) -> list[RemoteConnection]:
+        if self.error:
+            raise self.error
+        return self.connections
+
+    def fetch_transactions(self, account_uid: str, date_from: date) -> list[FeedTransaction]:
+        self.fetch_calls.append((account_uid, date_from))
+        if self.error:
+            raise self.error
+        return self.transactions
+
+
+def _remote(
+    connection_id: str = "bank-1",
+    accounts: list[ProviderAccount] | None = None,
+    valid_until: datetime | None = None,
+    needs_reauth: bool = False,
+    name: str = "Monzo",
+) -> RemoteConnection:
+    return RemoteConnection(
+        connection_id=connection_id,
+        institution_name=name,
+        country="GB",
+        valid_until=valid_until if valid_until is not None else datetime.now(timezone.utc) + timedelta(days=180),
+        needs_reauth=needs_reauth,
+        accounts=accounts if accounts is not None else [
+            ProviderAccount(uid="bank-1:acc-1", identification_hash=None, name="Personal Account",
+                            currency="GBP", iban_last4="3177"),
+        ],
+    )
+
+
 @pytest.fixture
 def provider(test_client) -> FakeProvider:
     fake = FakeProvider()
     app.dependency_overrides[get_bank_feed_provider] = lambda: fake
+    app.dependency_overrides[get_bank_feed_providers] = lambda: {fake.name: fake}
+    return fake
+
+
+@pytest.fixture
+def pre_provider(test_client) -> FakePreConnectedProvider:
+    """A pre-connected provider alongside the consent-flow one."""
+    consent = FakeProvider()
+    fake = FakePreConnectedProvider()
+    app.dependency_overrides[get_bank_feed_provider] = lambda: consent
+    app.dependency_overrides[get_bank_feed_providers] = lambda: {consent.name: consent, fake.name: fake}
     return fake
 
 
@@ -556,3 +614,282 @@ def test_sync_another_users_link_returns_404(test_client, provider) -> None:
     response = _sync(test_client, other, link_id)
 
     assert response.status_code == 404
+
+
+# =============================================================================
+# Providers available to the user
+# =============================================================================
+
+
+def _providers(test_client, token: str):
+    return test_client.get("/api/v1/bank-feeds/providers", headers=_auth(token))
+
+
+def test_providers_lists_configured_providers_with_their_flow(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+
+    response = _providers(test_client, token)
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"name": "fake", "display_name": "Fake Consent", "flow": "consent"},
+        {"name": "fake_pre", "display_name": "Fake Pre-connected", "flow": "pre_connected"},
+    ]
+
+
+def _configure_banksync(monkeypatch, owner: str = "owner@example.com") -> None:
+    monkeypatch.setattr(settings, "ENABLE_BANKING_APPLICATION_ID", "")
+    monkeypatch.setattr(settings, "ENABLE_BANKING_PRIVATE_KEY", "")
+    monkeypatch.setattr(settings, "BANKSYNC_API_KEY", "bsk_test")
+    monkeypatch.setattr(settings, "BANKSYNC_OWNER_EMAIL", owner)
+
+
+def test_banksync_is_offered_to_its_owner(test_client, monkeypatch) -> None:
+    _configure_banksync(monkeypatch, owner="Owner@Example.com")
+    token = _register_and_login(test_client, "owner@example.com")
+
+    names = [p["name"] for p in _providers(test_client, token).json()]
+
+    assert names == ["banksync"]
+
+
+def test_banksync_is_hidden_from_everyone_else(test_client, monkeypatch) -> None:
+    # The API key reads ONE person's banks: nobody else may see them.
+    _configure_banksync(monkeypatch)
+    token = _register_and_login(test_client, "demo@example.com")
+
+    assert _providers(test_client, token).json() == []
+    response = test_client.post("/api/v1/bank-feeds/providers/banksync/refresh", headers=_auth(token))
+    assert response.status_code == 404
+
+
+def test_banksync_needs_an_owner_to_be_offered(test_client, monkeypatch) -> None:
+    _configure_banksync(monkeypatch, owner="")
+    token = _register_and_login(test_client, "owner@example.com")
+
+    assert _providers(test_client, token).json() == []
+
+
+def test_providers_requires_authentication(test_client) -> None:
+    assert test_client.get("/api/v1/bank-feeds/providers").status_code in (401, 403)
+
+
+# =============================================================================
+# Refreshing a pre-connected provider
+# =============================================================================
+
+
+def _refresh(test_client, token: str, name: str = "fake_pre"):
+    return test_client.post(f"/api/v1/bank-feeds/providers/{name}/refresh", headers=_auth(token))
+
+
+def test_refresh_creates_connections_and_accounts(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+
+    response = _refresh(test_client, token)
+
+    assert response.status_code == 200, response.text
+    [connection] = response.json()
+    assert connection["provider"] == "fake_pre"
+    assert connection["institution_name"] == "Monzo"
+    assert connection["status"] == "active"
+    assert [a["name"] for a in connection["accounts"]] == ["Personal Account"]
+    listed = test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()
+    assert [c["id"] for c in listed] == [connection["id"]]
+
+
+def test_refresh_twice_keeps_connection_and_account_links(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    [connection] = _refresh(test_client, token).json()
+    link_id = connection["accounts"][0]["id"]
+    account_id = _create_account(test_client, token)
+    test_client.put(f"/api/v1/bank-feeds/links/{link_id}", json={"account_id": account_id}, headers=_auth(token))
+
+    [again] = _refresh(test_client, token).json()
+
+    assert again["id"] == connection["id"]
+    assert again["accounts"][0]["id"] == link_id
+    assert again["accounts"][0]["account_id"] == account_id
+
+
+def test_refresh_updates_names_adds_and_removes_accounts(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    _refresh(test_client, token)
+    pre_provider.connections = [_remote(name="Monzo Bank", accounts=[
+        ProviderAccount(uid="bank-1:acc-1", identification_hash=None, name="Current",
+                        currency="GBP", iban_last4="3177"),
+        ProviderAccount(uid="bank-1:acc-2", identification_hash=None, name="Holiday pot",
+                        currency="GBP", iban_last4=None),
+    ])]
+    _refresh(test_client, token)
+    pre_provider.connections = [_remote(accounts=[
+        ProviderAccount(uid="bank-1:acc-2", identification_hash=None, name="Holiday pot",
+                        currency="GBP", iban_last4=None),
+    ])]
+
+    [connection] = _refresh(test_client, token).json()
+
+    assert connection["institution_name"] == "Monzo"
+    assert [a["name"] for a in connection["accounts"]] == ["Holiday pot"]
+
+
+def test_refresh_forgets_banks_removed_at_the_provider(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    _refresh(test_client, token)
+    pre_provider.connections = []
+
+    assert _refresh(test_client, token).json() == []
+    assert test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json() == []
+
+
+def test_refresh_leaves_other_providers_connections_alone(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    consent = app.dependency_overrides[get_bank_feed_provider]()
+    _connect(test_client, token, consent)
+    pre_provider.connections = []
+
+    _refresh(test_client, token)
+
+    assert len(test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()) == 1
+
+
+def test_refresh_leaves_other_users_connections_alone(test_client, pre_provider) -> None:
+    owner = _register_and_login(test_client, "owner@example.com")
+    _refresh(test_client, owner)
+    other = _register_and_login(test_client, "other@example.com")
+    pre_provider.connections = []
+
+    _refresh(test_client, other)
+
+    assert len(test_client.get("/api/v1/bank-feeds/connections", headers=_auth(owner)).json()) == 1
+
+
+def test_refresh_reports_connection_needing_reauth_as_expired(test_client, pre_provider) -> None:
+    pre_provider.connections = [_remote(needs_reauth=True)]
+    token = _register_and_login(test_client)
+
+    [connection] = _refresh(test_client, token).json()
+
+    assert connection["status"] == "expired"
+
+
+def test_refresh_reauth_then_healthy_is_active_again(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    pre_provider.connections = [_remote(needs_reauth=True)]
+    _refresh(test_client, token)
+    pre_provider.connections = [_remote()]
+
+    [connection] = _refresh(test_client, token).json()
+
+    assert connection["status"] == "active"
+
+
+def test_connection_without_known_expiry_counts_as_active(test_client, pre_provider) -> None:
+    pre_provider.connections = [RemoteConnection(
+        connection_id="bank-1", institution_name="Monzo", country="GB",
+        valid_until=None, needs_reauth=False, accounts=[],
+    )]
+    token = _register_and_login(test_client)
+
+    [connection] = _refresh(test_client, token).json()
+
+    assert connection["status"] == "active"
+    assert connection["valid_until"] is None
+
+
+def test_refresh_unknown_provider_returns_404(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+
+    assert _refresh(test_client, token, "nope").status_code == 404
+
+
+def test_refresh_consent_flow_provider_returns_404(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+
+    assert _refresh(test_client, token, "fake").status_code == 404
+
+
+def test_refresh_provider_error_returns_502(test_client, pre_provider) -> None:
+    pre_provider.error = BankFeedError("down", status_code=500)
+    token = _register_and_login(test_client)
+
+    assert _refresh(test_client, token).status_code == 502
+
+
+def test_refresh_rate_limited_returns_429_with_retry_after(test_client, pre_provider) -> None:
+    pre_provider.error = BankFeedError("slow down", status_code=429, retry_after=42)
+    token = _register_and_login(test_client)
+
+    response = _refresh(test_client, token)
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "42"
+    assert "42 seconds" in response.json()["detail"]
+
+
+# =============================================================================
+# Syncing a pre-connected provider's account
+# =============================================================================
+
+
+def _refresh_and_link(test_client, token: str) -> tuple[str, str]:
+    [connection] = _refresh(test_client, token).json()
+    link_id = connection["accounts"][0]["id"]
+    account_id = _create_account(test_client, token)
+    test_client.put(f"/api/v1/bank-feeds/links/{link_id}", json={"account_id": account_id}, headers=_auth(token))
+    return link_id, account_id
+
+
+def test_sync_uses_the_provider_that_created_the_connection(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _refresh_and_link(test_client, token)
+    pre_provider.transactions = [_feed_tx("tx_1", "-5.75", "Co-op")]
+
+    response = _sync(test_client, token, link_id)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["created"] == 1
+    assert pre_provider.fetch_calls[0][0] == "bank-1:acc-1"
+
+
+def test_sync_when_provider_no_longer_available_returns_503(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _refresh_and_link(test_client, token)
+    app.dependency_overrides[get_bank_feed_providers] = lambda: {}
+
+    assert _sync(test_client, token, link_id).status_code == 503
+
+
+def test_sync_connection_needing_reauth_returns_409(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _refresh_and_link(test_client, token)
+    pre_provider.connections = [_remote(needs_reauth=True)]
+    _refresh(test_client, token)
+
+    response = _sync(test_client, token, link_id)
+
+    assert response.status_code == 409
+    assert pre_provider.fetch_calls == []
+
+
+def test_sync_rate_limited_returns_429(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _refresh_and_link(test_client, token)
+    pre_provider.error = BankFeedError("slow down", status_code=429, retry_after=30)
+
+    response = _sync(test_client, token, link_id)
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "30"
+
+
+def test_refresh_with_rejected_api_key_says_so(test_client, pre_provider) -> None:
+    # A BankSync key can expire (30/60/90 days); "try again" wouldn't help.
+    pre_provider.error = BankFeedError("Invalid or expired API key", status_code=401)
+    token = _register_and_login(test_client)
+
+    response = _refresh(test_client, token)
+
+    assert response.status_code == 502
+    assert "rejected" in response.json()["detail"]
+    assert "API key" in response.json()["detail"]

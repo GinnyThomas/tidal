@@ -11,6 +11,7 @@ vi.mock('axios')
 
 const makeConnection = (overrides = {}) => ({
     id: 'conn-1',
+    provider: 'enable_banking',
     institution_name: 'Monzo',
     institution_country: 'GB',
     status: 'active',
@@ -36,8 +37,16 @@ const INSTITUTIONS = [
     { name: 'Virgin Money', country: 'GB', logo: null, max_consent_days: 90 },
 ]
 
-function mockGets({ connections = [makeConnection()] as unknown[], institutions = INSTITUTIONS } = {}) {
+const ENABLE_BANKING = { name: 'enable_banking', display_name: 'Enable Banking', flow: 'consent' }
+const BANKSYNC = { name: 'banksync', display_name: 'BankSync', flow: 'pre_connected' }
+
+function mockGets({
+    connections = [makeConnection()] as unknown[],
+    institutions = INSTITUTIONS,
+    providers = [ENABLE_BANKING] as unknown[],
+} = {}) {
     vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url.endsWith('/bank-feeds/providers')) return Promise.resolve({ data: providers })
         if (url.endsWith('/bank-feeds/connections')) return Promise.resolve({ data: connections })
         if (url.endsWith('/bank-feeds/institutions')) return Promise.resolve({ data: institutions })
         if (url.endsWith('/api/v1/accounts')) return Promise.resolve({ data: ACCOUNTS })
@@ -70,14 +79,13 @@ describe('BankFeedsPage', () => {
         expect(await screen.findByText(/no banks connected yet/i)).toBeInTheDocument()
     })
 
-    it('shows a message when bank feeds are not configured on the server', async () => {
-        vi.mocked(axios.get).mockImplementation((url: string) => {
-            if (url.endsWith('/bank-feeds/institutions')) return Promise.reject({ response: { status: 503 } })
-            if (url.endsWith('/bank-feeds/connections')) return Promise.resolve({ data: [] })
-            return Promise.resolve({ data: ACCOUNTS })
-        })
+    it('shows a message when no bank feed provider is available', async () => {
+        mockGets({ connections: [], providers: [] })
         renderPage()
         expect(await screen.findByText(/not set up on this server/i)).toBeInTheDocument()
+        expect(axios.get).not.toHaveBeenCalledWith(
+            expect.stringContaining('/bank-feeds/institutions'), expect.anything(),
+        )
     })
 
     it('lists connected banks with their accounts', async () => {
@@ -211,5 +219,66 @@ describe('BankFeedsPage', () => {
             expect.stringContaining('/api/v1/bank-feeds/connections/conn-1'),
             expect.anything(),
         )
+    })
+
+    // --- Pre-connected providers (BankSync) ---
+
+    describe('with BankSync', () => {
+        const banksyncConnection = (overrides = {}) => makeConnection({
+            id: 'conn-bs', provider: 'banksync', valid_until: '2027-05-22T17:35:17Z', ...overrides,
+        })
+
+        it('offers a refresh instead of the bank picker when only BankSync is available', async () => {
+            mockGets({ connections: [], providers: [BANKSYNC] })
+            renderPage()
+            expect(await screen.findByRole('button', { name: /refresh from banksync/i })).toBeInTheDocument()
+            expect(screen.queryByRole('heading', { name: /connect a bank/i })).not.toBeInTheDocument()
+            expect(screen.queryByText(/not set up on this server/i)).not.toBeInTheDocument()
+        })
+
+        it('shows both when both providers are available', async () => {
+            mockGets({ connections: [], providers: [ENABLE_BANKING, BANKSYNC] })
+            renderPage()
+            expect(await screen.findByRole('button', { name: /refresh from banksync/i })).toBeInTheDocument()
+            expect(screen.getByRole('heading', { name: /connect a bank/i })).toBeInTheDocument()
+        })
+
+        it('refreshes from BankSync and shows its banks', async () => {
+            mockGets({ connections: [], providers: [BANKSYNC] })
+            vi.mocked(axios.post).mockResolvedValueOnce({ data: [banksyncConnection()] })
+            renderPage()
+            await userEvent.click(await screen.findByRole('button', { name: /refresh from banksync/i }))
+
+            expect(axios.post).toHaveBeenCalledWith(
+                expect.stringContaining('/api/v1/bank-feeds/providers/banksync/refresh'),
+                {},
+                expect.anything(),
+            )
+            expect(await screen.findByRole('heading', { name: /monzo/i })).toBeInTheDocument()
+        })
+
+        it('shows the reason when a refresh fails', async () => {
+            mockGets({ connections: [], providers: [BANKSYNC] })
+            vi.mocked(axios.post).mockRejectedValueOnce({
+                response: { status: 429, data: { detail: 'The bank feed provider is busy. Try again in 42 seconds.' } },
+            })
+            renderPage()
+            await userEvent.click(await screen.findByRole('button', { name: /refresh from banksync/i }))
+            expect(await screen.findByText(/try again in 42 seconds/i)).toBeInTheDocument()
+        })
+
+        it('does not offer Remove for a BankSync bank', async () => {
+            // Refresh would bring it straight back; banks are removed in BankSync.
+            mockGets({ connections: [banksyncConnection()], providers: [BANKSYNC] })
+            renderPage()
+            await screen.findByRole('heading', { name: /monzo/i })
+            expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+        })
+
+        it('tells you to reconnect in BankSync when its consent has expired', async () => {
+            mockGets({ connections: [banksyncConnection({ status: 'expired' })], providers: [BANKSYNC] })
+            renderPage()
+            expect(await screen.findByText(/reconnect this bank in banksync/i)).toBeInTheDocument()
+        })
     })
 })
