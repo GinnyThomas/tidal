@@ -19,8 +19,11 @@
 # Field notes (checked against a real Monzo connection on 2026-11-23):
 #   - amount is negative for money out (= creditAmount - debitAmount),
 #     on current, savings and credit card accounts alike.
-#   - reference is the bank's own transaction id (Monzo: tx_…), the same
-#     value the Monzo CSV template stores, so it is our external_id.
+#   - reference is Monzo's own transaction id (tx_…), the same value the
+#     Monzo CSV template stores, so it is our external_id. Other banks may
+#     put the payer's free-text reference there ("Allowance"), which would
+#     dedup different payments away, so anything not shaped like a Monzo id
+#     falls back to BankSync's own transaction id.
 #   - saltedgeConsentExpiresAt / reauthPendingAt / connectionStatus come
 #     back on each bank but are NOT in the published docs, so every one
 #     of them is optional here.
@@ -28,6 +31,7 @@
 #     Retry-After, which we pass up rather than sleeping inside a request.
 
 import json
+import re
 from datetime import date as date_, datetime
 from decimal import Decimal
 
@@ -46,6 +50,10 @@ _PAYEE_MAX_LENGTH = 100  # transactions.payee is String(100)
 _MAX_PAGES = 50
 # BankSync only reaches UK banks through Salt Edge today.
 _DEFAULT_COUNTRY = "GB"
+# Monzo transaction ids, e.g. tx_0000AbCdEf123.
+_MONZO_TX_ID = re.compile(r"^tx_[0-9A-Za-z]+$")
+# What a field missing or of the wrong type raises while mapping JSON.
+_MAPPING_ERRORS = (KeyError, TypeError, ValueError, AttributeError, ArithmeticError)
 
 
 class BankSyncProvider:
@@ -77,18 +85,32 @@ class BankSyncProvider:
                 status_code=response.status_code,
             )
         # parse_float=Decimal keeps amounts exact: 5.75 never becomes 5.7499999…
-        return json.loads(response.text, parse_float=Decimal)
+        try:
+            body = json.loads(response.text, parse_float=Decimal)
+        except ValueError as exc:
+            raise BankFeedError(f"BankSync GET {path} returned invalid JSON") from exc
+        if not isinstance(body, dict):
+            raise BankFeedError(f"BankSync GET {path} returned unexpected JSON")
+        return body
 
     # --- PreConnectedProvider ---
 
     def list_connections(self) -> list[RemoteConnection]:
+        # Costs 1 + one request per bank against the 10/minute limit, so a
+        # workspace with 10+ banks can't refresh (it gets a 429 every time)
+        # until BankSync offers accounts in the banks listing.
         banks = self._get("/v1/banks").get("data") or []
         connections: list[RemoteConnection] = []
-        for bank in banks:
-            if bank.get("deletedAt"):
-                continue
-            accounts = self._get(f"/v1/banks/{bank['id']}/accounts").get("data") or []
-            connections.append(_map_bank(bank, accounts))
+        try:
+            for bank in banks:
+                if bank.get("deletedAt"):
+                    continue
+                accounts = self._get(f"/v1/banks/{bank['id']}/accounts").get("data") or []
+                connections.append(_map_bank(bank, accounts))
+        except _MAPPING_ERRORS as exc:
+            # A 502 the user can retry, not a 500. The repr names the field,
+            # not bank data.
+            raise BankFeedError(f"BankSync returned an unexpected bank or account: {exc!r}") from exc
         return connections
 
     def fetch_transactions(self, account_uid: str, date_from: date_) -> list[FeedTransaction]:
@@ -98,14 +120,21 @@ class BankSyncProvider:
         transactions: list[FeedTransaction] = []
         for _ in range(_MAX_PAGES):
             body = self._get(path, params=params)
-            transactions.extend(
-                _map_transaction(tx) for tx in body.get("data") or [] if not tx.get("pending")
-            )
+            try:
+                transactions.extend(
+                    _map_transaction(tx) for tx in body.get("data") or [] if not tx.get("pending")
+                )
+            except _MAPPING_ERRORS as exc:
+                # Fail the whole sync rather than skip a row: nothing is
+                # imported, last_synced_at stays put, and a retry sees it again.
+                raise BankFeedError(f"BankSync returned an unexpected transaction: {exc!r}") from exc
             meta = body.get("meta") or {}
             if not meta.get("hasMore") or not meta.get("cursor"):
-                break
+                return transactions
             params = {**params, "cursor": meta["cursor"]}
-        return transactions
+        # Still more pages after the cap. Importing a part and reporting
+        # success would move last_synced_at on and lose the rest for good.
+        raise BankFeedError(f"BankSync GET {path}: more than {_MAX_PAGES} pages, sync stopped")
 
 
 # =============================================================================
@@ -123,8 +152,12 @@ def _parse_retry_after(value: str | None) -> int | None:
 def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    # Python 3.11+ accepts the trailing "Z".
-    return datetime.fromisoformat(value)
+    # Python 3.11+ accepts the trailing "Z". Only used for undocumented,
+    # optional fields, so an unreadable value counts as "not given".
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _country(bank: dict) -> str:
@@ -177,5 +210,12 @@ def _map_transaction(tx: dict) -> FeedTransaction:
         amount=Decimal(tx["amount"]),
         payee=payee,
         notes=notes,
-        external_id=tx.get("reference") or str(tx["id"]),
+        external_id=_external_id(tx),
     )
+
+
+def _external_id(tx: dict) -> str:
+    reference = tx.get("reference")
+    if isinstance(reference, str) and _MONZO_TX_ID.match(reference):
+        return reference
+    return str(tx["id"])

@@ -209,6 +209,24 @@ def test_missing_consent_expiry_gives_none() -> None:
     assert connection.valid_until is None
 
 
+def test_unparseable_consent_expiry_gives_none() -> None:
+    # An undocumented field: a value we can't read must not break the refresh.
+    provider, _ = _provider(_connections_handler([_bank(saltedgeConsentExpiresAt="next spring")], [_account()]))
+
+    [connection] = provider.list_connections()
+
+    assert connection.valid_until is None
+
+
+def test_malformed_bank_raises_bank_feed_error() -> None:
+    bank = _bank()
+    del bank["id"]
+    provider, _ = _provider(_connections_handler([bank], [_account()]))
+
+    with pytest.raises(BankFeedError):
+        provider.list_connections()
+
+
 def test_deleted_banks_are_skipped() -> None:
     provider, requests = _provider(_connections_handler([_bank(deletedAt="2026-11-22T00:00:00Z")], []))
 
@@ -240,14 +258,16 @@ def test_fetch_transactions_follows_cursor_pages() -> None:
     assert requests[1].url.params["cursor"] == "c1"
 
 
-def test_fetch_transactions_stops_after_page_limit() -> None:
-    # A cursor that never ends must not hang the request.
+def test_fetch_transactions_stops_after_page_limit_with_an_error() -> None:
+    # A cursor that never ends must not hang the request. Nor may it pass as
+    # a complete sync: last_synced_at would move on and skip the rest for good.
     def handler(request: httpx.Request) -> httpx.Response:
         return _ok([], meta={"count": 0, "cursor": "again", "hasMore": True})
 
     provider, requests = _provider(handler)
 
-    provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
+    with pytest.raises(BankFeedError):
+        provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
 
     assert len(requests) == 50
 
@@ -281,6 +301,33 @@ def test_external_id_falls_back_to_banksync_id() -> None:
     [tx] = provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
 
     assert tx.external_id == "333"
+
+
+def test_external_id_ignores_a_payment_reference() -> None:
+    # Outside Monzo, `reference` can be the text the payer typed. Two
+    # "Allowance" payments in one account must not dedup against each other.
+    provider, _ = _provider(_transactions_handler([[
+        _tx(id="1", reference="Allowance"),
+        _tx(id="2", reference="Allowance"),
+    ]]))
+
+    transactions = provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
+
+    assert [tx.external_id for tx in transactions] == ["1", "2"]
+
+
+def test_non_json_response_raises_bank_feed_error() -> None:
+    provider, _ = _provider(lambda r: httpx.Response(200, text="<html>maintenance</html>"))
+
+    with pytest.raises(BankFeedError):
+        provider.list_connections()
+
+
+def test_malformed_transaction_raises_bank_feed_error() -> None:
+    provider, _ = _provider(_transactions_handler([[_tx(amount=None)]]))
+
+    with pytest.raises(BankFeedError):
+        provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
 
 
 def test_pending_transactions_are_skipped() -> None:

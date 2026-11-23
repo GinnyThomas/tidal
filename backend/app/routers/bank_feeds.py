@@ -35,6 +35,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -203,6 +204,18 @@ def refresh_provider(
         )
         .all()
     }
+    if not remotes and existing:
+        # Every bank gone at once is far more likely a provider hiccup, or a
+        # key for another workspace, than the user disconnecting them all.
+        # Deleting would throw away every account link, so keep them.
+        logger.warning("%s returned no banks for user %s; keeping %d connection(s)",
+                       name, current_user.id, len(existing))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"{provider.display_name} returned no banks, so Tidal kept your existing connections. "
+                   "Please try again later.",
+        )
+
     now = datetime.now(timezone.utc)
     kept: list[BankConnection] = []
 
@@ -237,7 +250,16 @@ def refresh_provider(
 
     for gone in existing.values():
         db.delete(gone)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # uq_bank_connections_user_provider_session: a refresh running at the
+        # same time (another tab) inserted the same bank first.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Another refresh is already running. Please try again in a moment.",
+        )
     logger.info("Refreshed %s for user %s: %d connection(s)", name, current_user.id, len(kept))
     return [_connection_response(c) for c in kept]
 

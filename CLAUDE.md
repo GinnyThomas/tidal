@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 833 Tests
+## All Phases Complete — 843 Tests
 
-**327 backend (+11 Postgres-only, skipped locally) · 506 frontend · 833 total**
+**335 backend (+11 Postgres-only, skipped locally) · 508 frontend · 843 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -158,13 +158,15 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 - **BankSync key = one person's banks.** Offered only to the user whose email is
   `BANKSYNC_OWNER_EMAIL`; everyone else (the public demo account!) gets 404 / no section
 - BankSync mapping (checked against real Monzo data, Nov 2026): `amount` negative = money
-  out; `external_id` = `reference` (Monzo `tx_…` id, same as the Monzo CSV template, so
-  sync and CSV dedup against each other); payee = `merchantName` (who was paid) else
+  out; `external_id` = `reference` when it is a Monzo `tx_…` id (same as the Monzo CSV template, so
+  sync and CSV dedup against each other), else BankSync's own tx id (other banks may put the payer's free-text reference there); payee = `merchantName` (who was paid) else
   `description`, the other text in the note; consent expiry from `saltedgeConsentExpiresAt`,
   `reauthPendingAt` / `connectionStatus.connected=false` → stored as already expired.
   Those three fields are undocumented, so all are optional. History reaches ~90 days only
 - BankSync rate limit: 10 req/min (Standard). A 429 → our 429 + `Retry-After`; a 401/403
-  (e.g. expired key) → 502 telling you to replace the key
+  (e.g. expired key) → 502 telling you to replace the key. Refresh costs 1 + one request
+  per bank, so 10+ banks can never refresh. A sync with > 50 pages fails (502) rather
+  than import part and move `last_synced_at` on
 - Sync goes through `services/importer.py` — the SAME code path as CSV import, so
   `external_id` (bank `entry_reference`) + `dedup_hash` stop double imports
 - Sync window: first 90 days; then from last sync minus 7 days (late bookings)
@@ -371,4 +373,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: November 2026 — 833 tests · Live at tidal-vert.vercel.app*
+*Last updated: November 2026 — 843 tests · Live at tidal-vert.vercel.app*

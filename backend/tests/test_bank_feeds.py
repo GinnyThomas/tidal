@@ -8,13 +8,17 @@
 # provider (Enable Banking), FakePreConnectedProvider for BankSync. The
 # clients themselves are tested in test_enable_banking.py and test_banksync.py.
 
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
+from app.database import get_db
 from app.main import app
+from app.models.bank_connection import BankConnection
 from app.services.bank_feeds import get_bank_feed_provider, get_bank_feed_providers
 from app.services.bank_feeds.provider import (
     AuthStart,
@@ -735,11 +739,56 @@ def test_refresh_updates_names_adds_and_removes_accounts(test_client, pre_provid
 
 def test_refresh_forgets_banks_removed_at_the_provider(test_client, pre_provider) -> None:
     token = _register_and_login(test_client)
+    pre_provider.connections = [_remote("bank-1"), _remote("bank-2", accounts=[], name="Barclays")]
     _refresh(test_client, token)
+    pre_provider.connections = [_remote("bank-1")]
+
+    assert [c["institution_name"] for c in _refresh(test_client, token).json()] == ["Monzo"]
+    listed = test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()
+    assert [c["institution_name"] for c in listed] == ["Monzo"]
+
+
+def test_refresh_with_no_banks_keeps_existing_connections(test_client, pre_provider) -> None:
+    # An empty answer is more likely a provider hiccup or a key for another
+    # workspace than "every bank disconnected", so nothing is deleted.
+    token = _register_and_login(test_client)
+    [connection] = _refresh(test_client, token).json()
+    link_id = connection["accounts"][0]["id"]
+    account_id = _create_account(test_client, token)
+    test_client.put(f"/api/v1/bank-feeds/links/{link_id}", json={"account_id": account_id}, headers=_auth(token))
     pre_provider.connections = []
 
-    assert _refresh(test_client, token).json() == []
-    assert test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json() == []
+    response = _refresh(test_client, token)
+
+    assert response.status_code == 502
+    [kept] = test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()
+    assert kept["accounts"][0]["account_id"] == account_id
+
+
+def test_refresh_with_no_banks_and_none_stored_returns_empty(test_client, pre_provider) -> None:
+    token = _register_and_login(test_client)
+    pre_provider.connections = []
+
+    response = _refresh(test_client, token)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_same_provider_connection_cannot_be_stored_twice(test_client, pre_provider) -> None:
+    # Two refreshes racing must not both insert the same bank.
+    token = _register_and_login(test_client)
+    [connection] = _refresh(test_client, token).json()
+    db = next(app.dependency_overrides[get_db]())
+    existing = db.get(BankConnection, uuid.UUID(connection["id"]))
+    db.add(BankConnection(
+        user_id=existing.user_id, provider=existing.provider, status="active",
+        session_id=existing.session_id, institution_name="Monzo", institution_country="GB",
+    ))
+
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
 
 
 def test_refresh_leaves_other_providers_connections_alone(test_client, pre_provider) -> None:

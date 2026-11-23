@@ -46,7 +46,8 @@ function mockGets({
     providers = [ENABLE_BANKING] as unknown[],
 } = {}) {
     vi.mocked(axios.get).mockImplementation((url: string) => {
-        if (url.endsWith('/bank-feeds/providers')) return Promise.resolve({ data: providers })
+        // Fresh objects per call, like a real response: identity must not matter.
+        if (url.endsWith('/bank-feeds/providers')) return Promise.resolve({ data: structuredClone(providers) })
         if (url.endsWith('/bank-feeds/connections')) return Promise.resolve({ data: connections })
         if (url.endsWith('/bank-feeds/institutions')) return Promise.resolve({ data: institutions })
         if (url.endsWith('/api/v1/accounts')) return Promise.resolve({ data: ACCOUNTS })
@@ -219,6 +220,41 @@ describe('BankFeedsPage', () => {
             expect.stringContaining('/api/v1/bank-feeds/connections/conn-1'),
             expect.anything(),
         )
+    })
+
+    it('keeps the chosen bank when a connection is removed', async () => {
+        mockGets()
+        vi.stubGlobal('confirm', vi.fn(() => true))
+        vi.mocked(axios.delete).mockResolvedValueOnce({})
+        renderPage()
+        await screen.findByRole('option', { name: 'Virgin Money' })
+        await userEvent.selectOptions(screen.getByLabelText(/^bank$/i), 'Virgin Money')
+
+        await userEvent.click(screen.getByRole('button', { name: /remove/i }))
+        await vi.waitFor(() => expect(vi.mocked(axios.get).mock.calls.length).toBeGreaterThanOrEqual(7))
+        // Let the reload's re-render and effects run before checking.
+        await new Promise(resolve => setTimeout(resolve, 50))
+
+        // The reload after Remove fetches providers again, but the consent
+        // provider is the same, so the bank list isn't reloaded or reset.
+        expect(screen.getByLabelText(/^bank$/i)).toHaveValue('Virgin Money')
+        const institutionCalls = vi.mocked(axios.get).mock.calls
+            .filter(([url]) => String(url).endsWith('/bank-feeds/institutions'))
+        expect(institutionCalls).toHaveLength(1)
+    })
+
+    it('still lists connections when the providers request fails', async () => {
+        mockGets()
+        const fallback = vi.mocked(axios.get).getMockImplementation()!
+        vi.mocked(axios.get).mockImplementation((url: string, config?: unknown) =>
+            url.endsWith('/bank-feeds/providers')
+                ? Promise.reject(new Error('404'))
+                : fallback(url, config),
+        )
+        renderPage()
+        expect(await screen.findByRole('heading', { name: /monzo/i })).toBeInTheDocument()
+        expect(screen.getByText(/could not load the bank feed providers/i)).toBeInTheDocument()
+        expect(screen.queryByText(/not set up on this server/i)).not.toBeInTheDocument()
     })
 
     // --- Pre-connected providers (BankSync) ---

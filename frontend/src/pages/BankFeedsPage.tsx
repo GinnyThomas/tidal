@@ -88,6 +88,9 @@ function BankFeedsPage() {
     const connectedBank = (location.state as { connected?: string } | null)?.connected
 
     const [providers, setProviders] = useState<Provider[]>([])
+    // Set when /providers fails: connections still show, but we can't tell
+    // which providers exist, so don't claim bank feeds aren't set up.
+    const [providersError, setProvidersError] = useState<string | null>(null)
     const [connections, setConnections] = useState<BankConnection[]>([])
     const [accounts, setAccounts] = useState<Account[]>([])
     const [loading, setLoading] = useState(true)
@@ -111,13 +114,22 @@ function BankFeedsPage() {
 
     useEffect(() => {
         setError(null)
+        setProvidersError(null)
+        // Fetched on its own terms, so a failure here (e.g. a backend that
+        // hasn't deployed the route yet) doesn't hide existing connections.
+        const providersRequest = axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/providers`, authHeaders())
+            .then(res => res.data as Provider[])
+            .catch(() => {
+                setProvidersError('Could not load the bank feed providers, so connecting and refreshing are unavailable. Please try again later.')
+                return null
+            })
         Promise.all([
-            axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/providers`, authHeaders()),
+            providersRequest,
             axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/connections`, authHeaders()),
             axios.get(`${getApiBaseUrl()}/api/v1/accounts`, authHeaders()),
         ])
-            .then(([provRes, connRes, accRes]) => {
-                setProviders(provRes.data)
+            .then(([provs, connRes, accRes]) => {
+                if (provs) setProviders(provs)
                 setConnections(connRes.data)
                 setAccounts(accRes.data)
             })
@@ -128,11 +140,14 @@ function BankFeedsPage() {
     const consentProvider = providers.find(p => p.flow === 'consent')
     const preConnectedProviders = providers.filter(p => p.flow === 'pre_connected')
     const flowOf = (providerName: string) => providers.find(p => p.name === providerName)
+    // A boolean, not the object: every providers reload makes new objects,
+    // which would re-run the effect below and reset the chosen bank.
+    const hasConsentProvider = consentProvider !== undefined
 
     useEffect(() => {
         setInstitutions([])
         setBank('')
-        if (!consentProvider) return
+        if (!hasConsentProvider) return
         axios.get(`${getApiBaseUrl()}/api/v1/bank-feeds/institutions`, { ...authHeaders(), params: { country } })
             .then(res => {
                 setInstitutions(res.data)
@@ -142,7 +157,7 @@ function BankFeedsPage() {
                 if (err?.response?.status === 503) setNotConfigured(true)
                 else setConnectError('Could not load the list of banks.')
             })
-    }, [country, consentProvider])
+    }, [country, hasConsentProvider])
 
     const handleConnect = async () => {
         setConnectError(null)
@@ -244,7 +259,9 @@ function BankFeedsPage() {
 
                 {error && <p className="text-coral-400 mb-6">{error}</p>}
 
-                {providers.length === 0 && (
+                {providersError && <p className="text-coral-400 text-sm mb-8">{providersError}</p>}
+
+                {providers.length === 0 && !providersError && (
                     <p className="text-slate-400 text-sm mb-8">Bank feeds are not set up on this server.</p>
                 )}
 
