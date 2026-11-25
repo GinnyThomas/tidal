@@ -49,6 +49,8 @@ type Schedule = {
     next_occurrence: string | null
     auto_generate: boolean
     active: boolean
+    // When it was marked inactive (null while active). Read-only: set by the server
+    deactivated_on?: string | null
     group: string | null
     payee: string | null
     note: string | null
@@ -158,14 +160,16 @@ function SchedulesPage() {
     const handleActiveToggle = async (schedule: Schedule) => {
         const token = localStorage.getItem('access_token')
         try {
-            await axios.patch(
+            const res = await axios.patch<Schedule>(
                 `${getApiBaseUrl()}/api/v1/schedules/${schedule.id}/toggle-active`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Updates local state after the request succeeds (without a full re-fetch)
+            // Replace the row with the server's copy (without a full re-fetch):
+            // toggling also changes deactivated_on and next_occurrence, which
+            // only the server computes.
             setSchedules(prev =>
-                prev.map(s => s.id === schedule.id ? { ...s, active: !s.active } : s)
+                prev.map(s => s.id === schedule.id ? res.data : s)
             )
             // Active/inactive changes affect planned amounts in the annual plan
             annualPlanCache.clear()
@@ -256,6 +260,7 @@ function SchedulesPage() {
                 {/* Button enables keyboard access and the click-to-toggle behaviour */}
                 <button
                     onClick={(e) => { e.stopPropagation(); handleActiveToggle(s) }}
+                    title={!s.active && s.deactivated_on ? `Inactive since ${s.deactivated_on}` : undefined}
                     className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
                         s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
                     }`}
