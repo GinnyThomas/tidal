@@ -20,7 +20,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Uuid
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -30,6 +30,12 @@ class BankConnection(Base):
     """A user's consent for Tidal to read their accounts at one bank."""
 
     __tablename__ = "bank_connections"
+    __table_args__ = (
+        # One row per provider bank/session per user, so two refreshes racing
+        # can't both insert the same bank. NULL session_ids (pending consents)
+        # never clash: NULLs are distinct in unique constraints.
+        UniqueConstraint("user_id", "provider", "session_id", name="uq_bank_connections_user_provider_session"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
 

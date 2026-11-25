@@ -42,6 +42,8 @@ _MAX_PAGES = 50
 
 class EnableBankingProvider:
     name = "enable_banking"
+    display_name = "Enable Banking"
+    flow = "consent"
 
     def __init__(self, application_id: str, private_key_pem: str, client: httpx.Client | None = None) -> None:
         self._application_id = application_id

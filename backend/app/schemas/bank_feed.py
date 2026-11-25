@@ -9,6 +9,16 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ProviderResponse(BaseModel):
+    """A bank feed provider the current user may use."""
+
+    name: str
+    display_name: str
+    # consent: Tidal runs the bank consent (pick a bank, redirect back).
+    # pre_connected: banks are connected in the provider's own app.
+    flow: Literal["consent", "pre_connected"]
+
+
 class InstitutionResponse(BaseModel):
     name: str
     country: str
@@ -50,6 +60,8 @@ class BankAccountLinkResponse(BaseModel):
 
 class BankConnectionResponse(BaseModel):
     id: uuid.UUID
+    # Which provider created it, e.g. "enable_banking" or "banksync".
+    provider: str
     institution_name: str
     institution_country: str
     status: Literal["active", "expired"]
