@@ -144,6 +144,13 @@ class Schedule(Base):
     # not a deletion.
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # deactivated_on: the date the schedule last went active → inactive; null
+    # while active. The plan stops an inactive schedule here (see
+    # effective_end_date() in services/plan.py) but keeps its earlier months as
+    # history. Kept apart from end_date so pausing never rewrites the user's
+    # own end date. Set by the router only; not in ScheduleCreate/Update.
+    deactivated_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     # --- Optional group ---
     # Grouping label for filtering in the plan view (e.g. "UK", "España").
     group: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)

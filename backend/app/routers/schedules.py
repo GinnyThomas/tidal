@@ -132,6 +132,26 @@ def _get_category_or_404(
     return category
 
 
+def _set_active(schedule: Schedule, active: bool, today: date) -> None:
+    """
+    Sets the active flag and records when an active → inactive change happened.
+
+    Why deactivated_on: the plan includes inactive schedules on purpose (their
+    past months are real history), so it needs to know when one stopped; it
+    bounds the schedule at min(end_date, deactivated_on). A separate column,
+    not end_date, because end_date is the user's own data (when a loan or
+    contract ends) and pause → resume must not lose it.
+
+    Only an actual change moves the date: editing an already-inactive schedule
+    keeps it, reactivating clears it.
+    """
+    if schedule.active and not active:
+        schedule.deactivated_on = today
+    elif active:
+        schedule.deactivated_on = None
+    schedule.active = active
+
+
 def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
     """
     Build a dict matching ScheduleResponse, adding category_name and
@@ -160,10 +180,12 @@ def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
         "end_date": sched.end_date,
         "auto_generate": sched.auto_generate,
         "active": sched.active,
+        "deactivated_on": sched.deactivated_on,
         "group": sched.group,
         "note": sched.note,
         "created_at": sched.created_at,
-        "next_occurrence": get_next_occurrence(sched),
+        # An inactive schedule never fires, whatever its dates say
+        "next_occurrence": get_next_occurrence(sched) if sched.active else None,
         "category_name": category.name if category else None,
         "category_icon": category.icon if category else None,
         "category_is_income": category.is_income if category else False,
@@ -237,6 +259,8 @@ def create_schedule(
         group=schedule_in.group,
         note=schedule_in.note,
     )
+    if not schedule.active:
+        schedule.deactivated_on = date.today()
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
@@ -391,6 +415,10 @@ def update_schedule(
     for field, value in update_data.items():
         if field in ("frequency", "schedule_type") and value is not None and hasattr(value, 'value'):
             value = value.value
+        if field == "active":
+            if value is not None:
+                _set_active(schedule, value, date.today())
+            continue
         setattr(schedule, field, value)
 
     db.commit()
@@ -412,8 +440,9 @@ def toggle_active(
     """
     Flips the active flag on a schedule.
 
-    If the schedule is currently active, it becomes inactive (paused).
-    If it is inactive, it becomes active again.
+    If the schedule is currently active, it becomes inactive (paused) and
+    deactivated_on records today. If it is inactive, it becomes active again
+    and deactivated_on is cleared. end_date is never touched (see _set_active).
 
     Why a dedicated endpoint instead of PUT?
     Toggle is a common, well-understood UI action ("pause / resume").
@@ -424,7 +453,7 @@ def toggle_active(
     more specific path first and doesn't try to parse "toggle-active" as a UUID.
     """
     schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
-    schedule.active = not schedule.active
+    _set_active(schedule, not schedule.active, date.today())
     db.commit()
     db.refresh(schedule)
     category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None

@@ -11,9 +11,15 @@
 #   - Update: changes are reflected in subsequent GET
 #   - Soft delete: DELETE returns 204, subsequent GET returns 404
 #   - Active filter: inactive schedules excluded from default list
+#   - Deactivation: records deactivated_on, never touches end_date
 #
 # Pattern: same helpers as test_transactions.py.
 # Each test gets a fresh SQLite database from conftest.py's test_client fixture.
+
+from datetime import date, timedelta
+
+from app.models.schedule import Schedule
+from app.services.plan import effective_end_date
 
 
 # =============================================================================
@@ -609,3 +615,236 @@ def test_catchup_idempotent_second_call(test_client) -> None:
         headers=_auth_headers(token),
     )
     assert resp2.json()["count"] == 0
+
+
+
+# =============================================================================
+# Deactivation records deactivated_on and never touches end_date
+#
+# The annual plan includes inactive schedules on purpose (their past months
+# are real history), so it needs to know when a schedule stopped. That goes
+# in deactivated_on, set on active → inactive and cleared on reactivation.
+# end_date is the user's own data (when the standing order or contract ends)
+# and is left alone, so pausing then resuming loses nothing.
+# =============================================================================
+
+
+def _create_schedule(test_client, token, account_id, category_id, **overrides) -> dict:
+    response = test_client.post(
+        "/api/v1/schedules",
+        json={**_SCHEDULE, "account_id": account_id, "category_id": category_id,
+              "start_date": "2026-01-01", "frequency": "monthly", **overrides},
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def _toggle(test_client, token, sched_id: str) -> dict:
+    response = test_client.patch(
+        f"/api/v1/schedules/{sched_id}/toggle-active",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _put(test_client, token, sched_id: str, body: dict) -> dict:
+    response = test_client.put(
+        f"/api/v1/schedules/{sched_id}", json=body, headers=_auth_headers(token),
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _planned_for(test_client, token, category_id: str, month: date) -> str | None:
+    """The category's planned amount in that month's plan, or None if it has no row."""
+    plan = test_client.get(
+        f"/api/v1/plan/{month.year}/{month.month}", headers=_auth_headers(token),
+    ).json()
+    rows = [r for r in plan["rows"] if r["category_id"] == category_id]
+    return rows[0]["planned"] if rows else None
+
+
+def _next_month(d: date) -> date:
+    return date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+
+
+def _previous_month(d: date) -> date:
+    return date(d.year - (d.month == 1), (d.month - 2) % 12 + 1, 1)
+
+
+def _monthly_since_last_year(test_client, token, account_id, category_id, **overrides) -> dict:
+    """A monthly schedule on the 1st that has been running since January last year."""
+    start = date(date.today().year - 1, 1, 1).isoformat()
+    return _create_schedule(
+        test_client, token, account_id, category_id,
+        start_date=start, day_of_month=1, **overrides,
+    )
+
+
+def test_new_schedule_has_no_deactivated_on(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+
+    sched = _create_schedule(test_client, token, account_id, category_id)
+
+    assert sched["deactivated_on"] is None
+
+
+def test_toggle_inactive_records_today_and_leaves_empty_end_date(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+
+    body = _toggle(test_client, token, sched["id"])
+
+    assert body["active"] is False
+    assert body["deactivated_on"] == date.today().isoformat()
+    assert body["end_date"] is None
+    # Persisted, not just in the response
+    fetched = test_client.get(f"/api/v1/schedules/{sched['id']}", headers=_auth_headers(token)).json()
+    assert fetched["deactivated_on"] == date.today().isoformat()
+
+
+def test_toggle_inactive_keeps_users_future_end_date(test_client) -> None:
+    """A loan or contract end date is the user's data: pausing must not rewrite it."""
+    token, account_id, category_id = _setup(test_client)
+    future = (date.today() + timedelta(days=700)).isoformat()
+    sched = _create_schedule(test_client, token, account_id, category_id, end_date=future)
+
+    body = _toggle(test_client, token, sched["id"])
+
+    assert body["end_date"] == future
+
+
+def test_pause_then_resume_restores_the_schedule(test_client) -> None:
+    """The reported problem with the first version: resume left a dead schedule."""
+    token, account_id, category_id = _setup(test_client)
+    future = (date.today() + timedelta(days=700)).isoformat()
+    sched = _monthly_since_last_year(test_client, token, account_id, category_id, end_date=future)
+    next_occurrence = sched["next_occurrence"]
+
+    _toggle(test_client, token, sched["id"])
+    body = _toggle(test_client, token, sched["id"])
+
+    assert body["active"] is True
+    assert body["deactivated_on"] is None
+    assert body["end_date"] == future
+    assert body["next_occurrence"] == next_occurrence
+    assert _planned_for(test_client, token, category_id, _next_month(date.today())) == "1200.00"
+
+
+def test_inactive_schedule_has_no_next_occurrence(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _monthly_since_last_year(test_client, token, account_id, category_id)
+
+    body = _toggle(test_client, token, sched["id"])
+
+    assert body["next_occurrence"] is None
+
+
+def test_update_to_inactive_records_deactivated_on(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+
+    body = _put(test_client, token, sched["id"], {"active": False})
+
+    assert body["deactivated_on"] == date.today().isoformat()
+    assert body["end_date"] is None
+
+
+def test_update_to_inactive_keeps_end_date_sent_in_same_request(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+    future = (date.today() + timedelta(days=60)).isoformat()
+
+    body = _put(test_client, token, sched["id"], {"active": False, "end_date": future})
+
+    assert body["end_date"] == future
+    assert body["deactivated_on"] == date.today().isoformat()
+
+
+def test_update_to_active_clears_deactivated_on(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+    _toggle(test_client, token, sched["id"])
+
+    body = _put(test_client, token, sched["id"], {"active": True})
+
+    assert body["deactivated_on"] is None
+
+
+def test_editing_an_inactive_schedule_keeps_deactivated_on(test_client) -> None:
+    """Only the active → inactive change records the date. Clearing end_date in
+    the edit form (it always sends end_date) can't bring the schedule back."""
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+    _toggle(test_client, token, sched["id"])
+
+    body = _put(test_client, token, sched["id"], {"name": "Old rent", "end_date": None})
+
+    assert body["deactivated_on"] == date.today().isoformat()
+
+
+def test_deactivated_on_is_not_client_settable(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+    sched = _create_schedule(test_client, token, account_id, category_id)
+
+    body = _put(test_client, token, sched["id"], {"deactivated_on": "2020-01-01"})
+
+    assert body["deactivated_on"] is None
+
+
+def test_create_inactive_schedule_records_today(test_client) -> None:
+    token, account_id, category_id = _setup(test_client)
+
+    sched = _create_schedule(test_client, token, account_id, category_id, active=False)
+
+    assert sched["deactivated_on"] == date.today().isoformat()
+    assert sched["end_date"] is None
+
+
+def test_deactivated_schedule_stops_appearing_in_later_plan_months(test_client) -> None:
+    """The original bug: an inactive schedule kept filling the annual plan."""
+    token, account_id, category_id = _setup(test_client)
+    sched = _monthly_since_last_year(test_client, token, account_id, category_id)
+    assert _planned_for(test_client, token, category_id, _next_month(date.today())) == "1200.00"
+
+    _toggle(test_client, token, sched["id"])
+
+    assert _planned_for(test_client, token, category_id, _next_month(date.today())) is None
+
+
+def test_deactivated_schedule_still_counts_in_past_months(test_client) -> None:
+    """Past months are history: deactivating today doesn't rewrite them."""
+    token, account_id, category_id = _setup(test_client)
+    sched = _monthly_since_last_year(test_client, token, account_id, category_id)
+
+    _toggle(test_client, token, sched["id"])
+
+    assert _planned_for(test_client, token, category_id, _previous_month(date.today())) == "1200.00"
+
+
+# effective_end_date(): the plan's bound for a schedule, tested directly
+
+
+def _sched(active: bool, end_date: date | None, deactivated_on: date | None) -> Schedule:
+    return Schedule(active=active, end_date=end_date, deactivated_on=deactivated_on)
+
+
+def test_effective_end_active_schedule_uses_end_date_only() -> None:
+    # A stale deactivated_on on an active schedule is ignored
+    assert effective_end_date(_sched(True, date(2027, 6, 30), date(2026, 1, 1))) == date(2027, 6, 30)
+    assert effective_end_date(_sched(True, None, None)) is None
+
+
+def test_effective_end_inactive_without_end_date_is_deactivated_on() -> None:
+    assert effective_end_date(_sched(False, None, date(2026, 11, 25))) == date(2026, 11, 25)
+
+
+def test_effective_end_inactive_is_the_earlier_of_the_two() -> None:
+    assert effective_end_date(_sched(False, date(2027, 6, 30), date(2026, 11, 25))) == date(2026, 11, 25)
+    assert effective_end_date(_sched(False, date(2026, 3, 31), date(2026, 11, 25))) == date(2026, 3, 31)
+
+
+def test_effective_end_inactive_without_deactivated_on_falls_back_to_end_date() -> None:
+    assert effective_end_date(_sched(False, None, None)) is None

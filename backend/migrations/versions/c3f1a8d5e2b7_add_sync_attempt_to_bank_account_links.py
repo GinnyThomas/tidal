@@ -7,7 +7,7 @@ expired BankSync API key) without anyone reading Railway logs.
 Both columns are nullable, so existing rows need no default.
 
 Revision ID: c3f1a8d5e2b7
-Revises: a7c3e9f2b4d1
+Revises: b8d2f4a6c1e3
 Create Date: 2026-11-25 12:00:00.000000
 
 """
@@ -19,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'c3f1a8d5e2b7'
-down_revision: Union[str, Sequence[str], None] = 'a7c3e9f2b4d1'
+down_revision: Union[str, Sequence[str], None] = 'b8d2f4a6c1e3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

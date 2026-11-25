@@ -59,6 +59,22 @@ from app.schemas.plan import MonthlyPlan, PlanRow, ScheduleRow
 # =============================================================================
 
 
+def effective_end_date(schedule: Schedule) -> date | None:
+    """
+    The last date a schedule can fire: its end_date, or for an inactive
+    schedule the earlier of end_date and deactivated_on.
+
+    Inactive schedules stay in the plan on purpose (their past months are real
+    history), so they're bounded by the day they were paused rather than
+    dropped. Both bounds are inclusive.
+    """
+    if schedule.active or schedule.deactivated_on is None:
+        return schedule.end_date
+    if schedule.end_date is None:
+        return schedule.deactivated_on
+    return min(schedule.end_date, schedule.deactivated_on)
+
+
 def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> int:
     """
     Returns how many times a schedule fires in the given year/month.
@@ -68,13 +84,14 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
     """
     first_day = date(year, month, 1)
     last_day = date(year, month, calendar.monthrange(year, month)[1])
+    end_date = effective_end_date(schedule)
 
     # Schedule hasn't started yet
     if schedule.start_date > last_day:
         return 0
 
     # Schedule ended before this month started
-    if schedule.end_date is not None and schedule.end_date < first_day:
+    if end_date is not None and end_date < first_day:
         return 0
 
     freq = schedule.frequency
@@ -98,7 +115,7 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
         fire_day = min(fire_day, calendar.monthrange(year, month)[1])
         fire_date = date(year, month, fire_day)
         if schedule.start_date <= fire_date and (
-            schedule.end_date is None or fire_date <= schedule.end_date
+            end_date is None or fire_date <= end_date
         ):
             return 1
         return 0
@@ -113,7 +130,7 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
         fire_day = min(fire_day, calendar.monthrange(year, month)[1])
         fire_date = date(year, month, fire_day)
         if schedule.start_date <= fire_date and (
-            schedule.end_date is None or fire_date <= schedule.end_date
+            end_date is None or fire_date <= end_date
         ):
             return 1
         return 0
@@ -134,7 +151,7 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
         fire_day = min(fire_day, calendar.monthrange(year, month)[1])
         fire_date = date(year, month, fire_day)
         if schedule.start_date <= fire_date and (
-            schedule.end_date is None or fire_date <= schedule.end_date
+            end_date is None or fire_date <= end_date
         ):
             return 1
         return 0
@@ -171,8 +188,8 @@ def _count_occurrences_in_month(schedule: Schedule, year: int, month: int) -> in
 
         # The effective window end is the earlier of last_day and end_date
         effective_end = last_day
-        if schedule.end_date is not None:
-            effective_end = min(effective_end, schedule.end_date)
+        if end_date is not None:
+            effective_end = min(effective_end, end_date)
 
         if first_occurrence > effective_end:
             return 0
@@ -196,11 +213,12 @@ def get_next_occurrence(schedule: Schedule, reference_date: date | None = None) 
     a schedule's timeline.
     """
     earliest = reference_date or date.today()
+    end_date = effective_end_date(schedule)
     freq = schedule.frequency
     interval = schedule.interval or 1
 
     # Schedule ended
-    if schedule.end_date is not None and schedule.end_date < earliest:
+    if end_date is not None and end_date < earliest:
         return None
 
     # --- Monthly-pattern frequencies (monthly, quarterly, annually) ---
@@ -231,7 +249,7 @@ def get_next_occurrence(schedule: Schedule, reference_date: date | None = None) 
             clamped_day = min(fire_day, calendar.monthrange(y, m)[1])
             candidate = date(y, m, clamped_day)
             if candidate >= earliest and candidate >= schedule.start_date:
-                if schedule.end_date is None or candidate <= schedule.end_date:
+                if end_date is None or candidate <= end_date:
                     return candidate
             # Advance by step_months using 0-based arithmetic
             total = y * 12 + (m - 1) + step_months
@@ -256,7 +274,7 @@ def get_next_occurrence(schedule: Schedule, reference_date: date | None = None) 
             steps_needed = (days_since_start + step - 1) // step
             candidate = schedule.start_date + timedelta(days=steps_needed * step)
 
-        if schedule.end_date is not None and candidate > schedule.end_date:
+        if end_date is not None and candidate > end_date:
             return None
         return candidate
 

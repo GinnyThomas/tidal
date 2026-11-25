@@ -105,6 +105,8 @@ class ScheduleResponse(BaseModel):
     end_date: Optional[date]
     auto_generate: bool
     active: bool
+    # When it was marked inactive; null while active. Read-only (set by the router)
+    deactivated_on: Optional[date] = None
     group: Optional[str]
     note: Optional[str]
     created_at: datetime
