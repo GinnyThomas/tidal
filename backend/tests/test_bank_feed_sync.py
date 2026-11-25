@@ -264,3 +264,27 @@ def test_sync_account_rate_limit_error_says_so(test_client, db) -> None:
 
     db.refresh(link)
     assert "busy" in link.last_sync_error
+
+
+def test_sync_account_import_failure_is_recorded_and_window_kept(test_client, db, monkeypatch) -> None:
+    # e.g. the database rejected the insert: import_rows rolls back and raises.
+    from fastapi import HTTPException
+
+    user = _user(test_client, db)
+    link = _link(db, user)
+    fake = FakeProvider()
+    fake.transactions = [_feed_tx("e1")]
+
+    def failing_import(*_args, **_kwargs):
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Import failed due to a database error.")
+
+    monkeypatch.setattr(bank_feed_sync, "import_rows", failing_import)
+
+    with pytest.raises(HTTPException):
+        sync_account(db, link, {"fake": fake})
+
+    db.refresh(link)
+    assert link.last_synced_at is None  # the next sync re-reads the same window
+    assert link.last_sync_attempt_at is not None
+    assert "couldn't save" in link.last_sync_error

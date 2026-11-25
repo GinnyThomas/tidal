@@ -385,3 +385,76 @@ def test_transaction_with_no_names_gets_unknown_payee() -> None:
     [tx] = provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 8, 25))
 
     assert tx.payee == "Unknown"
+
+
+# =============================================================================
+# Pacing (the daily job turns it on; web requests never wait)
+# =============================================================================
+
+
+class _Clock:
+    """Stands in for time.monotonic / time.sleep: sleeping moves the clock on."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch) -> _Clock:
+    from app.services.bank_feeds import banksync
+
+    fake = _Clock()
+    monkeypatch.setattr(banksync.time, "monotonic", fake.monotonic)
+    monkeypatch.setattr(banksync.time, "sleep", fake.sleep)
+    return fake
+
+
+def test_requests_are_not_paced_by_default(clock) -> None:
+    provider, requests = _provider(_transactions_handler([[_tx(id="1")], [_tx(id="2")], [_tx(id="3")]]))
+
+    provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 11, 1))
+
+    assert len(requests) == 3
+    assert clock.sleeps == []
+
+
+def test_paced_provider_spaces_every_request_including_pages(clock) -> None:
+    # A multi-page account must not burst past BankSync's 10 requests a minute.
+    provider, requests = _provider(_transactions_handler([[_tx(id="1")], [_tx(id="2")], [_tx(id="3")]]))
+    provider.pace_requests(7)
+
+    provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 11, 1))
+
+    assert len(requests) == 3
+    assert clock.sleeps == [7, 7]  # none before the first request
+
+
+def test_pacing_counts_time_already_spent_elsewhere(clock) -> None:
+    provider, _ = _provider(_transactions_handler([[_tx()]]))
+    provider.pace_requests(7)
+    provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 11, 1))
+    clock.now += 5  # e.g. importing the first account took 5 seconds
+
+    provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 11, 1))
+
+    assert clock.sleeps == [2]
+
+
+def test_pacing_spaces_requests_that_failed(clock) -> None:
+    # A 429 still counted against the limit.
+    provider, _ = _provider(lambda request: httpx.Response(429, headers={"Retry-After": "30"}))
+    provider.pace_requests(7)
+
+    for _ in range(2):
+        with pytest.raises(BankFeedError):
+            provider.fetch_transactions(f"{BANK_ID}:{ACCOUNT_ID}", date(2026, 11, 1))
+
+    assert clock.sleeps == [7]

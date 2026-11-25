@@ -18,6 +18,13 @@
 # so two syncs of one account running together (a click during the daily
 # run) could both insert the same transaction; the lock makes the second one
 # give up straight away instead. SQLite (tests) ignores FOR UPDATE.
+#
+# Trade-off (accepted): the lock, and so its transaction and pooled DB
+# connection, is held while the provider is called, so a locked account
+# never costs a provider request. A call is normally one quick page; a
+# slow provider pins one connection for up to the HTTP timeout per page.
+# The alternative (fetch first, lock only for the import) would spend a
+# BankSync request on every sync that then finds the account locked.
 
 import logging
 from datetime import date, datetime, timedelta, timezone
@@ -38,6 +45,8 @@ FIRST_SYNC_DAYS = 90
 # Later syncs re-read this much of the previous window: banks can book a
 # transaction days after it happened. Dedup drops the ones we already have.
 SYNC_OVERLAP_DAYS = 7
+
+_IMPORT_ERROR = "Tidal couldn't save the imported transactions. The next sync will try again."
 
 SkipReason = Literal["unlinked", "expired", "provider_unavailable", "account_missing", "locked"]
 
@@ -108,6 +117,18 @@ def _is_lock_contention(exc: OperationalError) -> bool:
     return getattr(exc.orig, "pgcode", None) == _LOCK_NOT_AVAILABLE
 
 
+def _record_import_failure(db: Session, link_id, attempted_at: datetime) -> None:
+    # Best effort: never hide the original error behind a second one.
+    try:
+        failed = db.get(BankAccountLink, link_id)
+        if failed is not None:
+            failed.last_sync_attempt_at = attempted_at
+            failed.last_sync_error = _IMPORT_ERROR
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
 def sync_account(db: Session, link: BankAccountLink, providers: dict[str, BankFeedProvider]) -> dict:
     """
     Imports the bank account's booked transactions into its linked Tidal account.
@@ -170,8 +191,15 @@ def sync_account(db: Session, link: BankAccountLink, providers: dict[str, BankFe
     link.last_synced_at = now
     link.last_sync_attempt_at = now
     link.last_sync_error = None
-    result = import_rows(db, link.user_id, account, rows)
-    db.commit()  # import_rows only commits when it created something
+    try:
+        result = import_rows(db, link.user_id, account, rows)
+        db.commit()  # import_rows only commits when it created something
+    except Exception:
+        # Rolled back: no transactions, and last_synced_at stays put so the
+        # next sync re-reads this window. Record the attempt, then re-raise.
+        db.rollback()
+        _record_import_failure(db, link.id, now)
+        raise
     logger.info(
         "Bank sync for link %s: %d fetched, %d created, %d duplicates",
         link.id, len(feed), result["created"], result["skipped_duplicates"],

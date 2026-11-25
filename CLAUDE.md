@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 879 Tests
+## All Phases Complete — 903 Tests
 
-**367 backend (+12 Postgres-only, skipped locally) · 512 frontend · 879 total**
+**390 backend (+12 Postgres-only, skipped locally) · 513 frontend · 903 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -175,7 +175,10 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   it can quote transactions). Route maps them to 409/404/503 and 429/502
 - Locks the link row (`FOR UPDATE NOWAIT`) until commit, so "Sync now" during the daily run
   can't double-import (import dedup works on a snapshot). Contention = Postgres `55P03` →
-  409 "already running" / job skips it. Real lock tested in `test_bank_feed_sync_postgres.py`
+  409 "already running" / job skips it. Real lock tested in `test_bank_feed_sync_postgres.py`.
+  Held across the provider call on purpose (a locked account costs no BankSync request), so a
+  slow provider pins one pooled connection meanwhile. An import failure is recorded on the link
+  ("couldn't save"), `last_synced_at` untouched
 - `providers_for_user(user)` (plain function) holds the `BANKSYNC_OWNER_EMAIL` gate;
   `get_bank_feed_providers()` is just its `Depends` wrapper. Never bypass it
 - Sync goes through `services/importer.py` — the SAME code path as CSV import, so
@@ -185,8 +188,9 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 - **Daily sync job** `app/jobs/sync_bank_feeds.py` (`python -m app.jobs.sync_bank_feeds`), run
   by a separate Railway cron service (same repo, root `backend`, schedule `0 6 * * *` UTC).
   No HTTP endpoint. Syncs every linked account on an active connection of every non-deleted
-  user, one at a time, 7s apart (BankSync 10/min), one retry after a 429 (`Retry-After`, else
-  60s). Never refreshes (doesn't add/remove banks or accounts). Exit 1 if any account failed
+  user, one at a time; turns on `BankSyncProvider.pace_requests(7)`, which spaces EVERY
+  request 7s apart, pages included (10/min; web requests are never paced), one retry after a
+  429 (`Retry-After`, else 60s). Never refreshes (doesn't add/remove banks or accounts). Exit 1 if any account failed
   (incl. provider not configured), so Railway marks the run red. Logs link ids + counts only.
   Its logger is named `app.jobs…` explicitly: under `python -m`, `__name__` is `__main__`
   and `configure_logging()` wouldn't print it
@@ -406,4 +410,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: November 2026 — 879 tests · Live at tidal-vert.vercel.app*
+*Last updated: November 2026 — 903 tests · Live at tidal-vert.vercel.app*

@@ -18,8 +18,9 @@
 # the Bank Feeds page shows them.
 #
 # Pacing: BankSync allows 10 requests a minute, so accounts are synced one
-# at a time with a pause between provider calls, and a 429 is retried once
-# after the wait the provider asks for.
+# at a time and the job turns on the provider's own request pacing
+# (pace_requests), which spaces EVERY request, each page of a long account
+# included. A 429 is retried once after the wait the provider asks for.
 #
 # Exit code: 0 if every account synced or was skipped for an expected reason
 # (not linked, consent expired, already syncing); 1 if any failed, so the
@@ -31,6 +32,7 @@ import logging
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -47,7 +49,7 @@ from app.services.bank_feeds.provider import BankFeedProvider
 # outside the `app` logger configure_logging() prints, so Railway saw nothing.
 logger = logging.getLogger("app.jobs.sync_bank_feeds")
 
-# Seconds between provider calls: 7s keeps a run under 10 requests a minute.
+# Seconds between provider requests: 7s keeps a run under 10 requests a minute.
 PACE_SECONDS = 7
 # How long to wait after a 429 that doesn't say (seconds).
 DEFAULT_RETRY_AFTER = 60
@@ -81,18 +83,27 @@ def _record_unexpected_error(db: Session, link_id: uuid.UUID) -> None:
     try:
         link = db.get(BankAccountLink, link_id)
         if link is not None:
+            link.last_sync_attempt_at = datetime.now(timezone.utc)
             link.last_sync_error = _UNEXPECTED_ERROR
             db.commit()
     except Exception:
         db.rollback()
 
 
-def _sync_one(db: Session, link_id: uuid.UUID, providers: dict[str, BankFeedProvider]) -> tuple[str, bool]:
+def _with_pacing(providers: dict[str, BankFeedProvider]) -> dict[str, BankFeedProvider]:
+    # Only providers with a rate limit offer pace_requests (BankSync).
+    for provider in providers.values():
+        pace = getattr(provider, "pace_requests", None)
+        if pace is not None:
+            pace(PACE_SECONDS)
+    return providers
+
+
+def _sync_one(db: Session, link_id: uuid.UUID, providers: dict[str, BankFeedProvider]) -> str:
     """Syncs one account, retrying once after a 429.
 
-    Returns (outcome, called_provider): outcome is "synced", "skipped" or "failed".
+    Returns "synced", "skipped" or "failed".
     """
-    called_provider = False
     for attempt in (1, 2):
         link = db.get(BankAccountLink, link_id)
         try:
@@ -100,29 +111,28 @@ def _sync_one(db: Session, link_id: uuid.UUID, providers: dict[str, BankFeedProv
         except SyncSkipped as exc:
             if exc.reason in _FAILING_SKIPS:
                 logger.error("Link %s not synced: %s", link_id, exc.reason)
-                return "failed", called_provider
+                return "failed"
             logger.info("Link %s skipped: %s", link_id, exc.reason)
-            return "skipped", called_provider
+            return "skipped"
         except SyncFailed as exc:
-            called_provider = True
             if exc.error.status_code == 429 and attempt == 1:
                 wait = exc.error.retry_after or DEFAULT_RETRY_AFTER
                 logger.warning("Link %s rate limited; retrying in %ds", link_id, wait)
                 time.sleep(wait)
                 continue
             logger.error("Link %s failed: %s", link_id, describe_error(exc.error))
-            return "failed", called_provider
+            return "failed"
         except Exception as exc:
             # The type only: database errors can quote the row being written.
             db.rollback()
             logger.error("Link %s failed unexpectedly (%s)", link_id, type(exc).__name__)
             _record_unexpected_error(db, link_id)
-            return "failed", True
+            return "failed"
         logger.info(
             "Link %s synced: %d created, %d duplicates",
             link_id, result["created"], result["skipped_duplicates"],
         )
-        return "synced", True
+        return "synced"
     raise AssertionError("unreachable")  # pragma: no cover
 
 
@@ -135,16 +145,11 @@ def main(session_factory: sessionmaker | None = None) -> int:
     with factory() as db:
         targets = _links_to_sync(db)
         logger.info("Bank feed sync starting: %d linked account(s)", len(targets))
-        pause = False
         for link_id, user in targets:
             if user.id not in providers_by_user:
                 # The same gate as the routes: BankSync only for its owner.
-                providers_by_user[user.id] = providers_for_user(user)
-            if pause:
-                time.sleep(PACE_SECONDS)
-            outcome, called_provider = _sync_one(db, link_id, providers_by_user[user.id])
-            counts[outcome] += 1
-            pause = pause or called_provider
+                providers_by_user[user.id] = _with_pacing(providers_for_user(user))
+            counts[_sync_one(db, link_id, providers_by_user[user.id])] += 1
 
     logger.info(
         "Bank feed sync finished: %d synced, %d skipped, %d failed",

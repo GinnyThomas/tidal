@@ -29,9 +29,12 @@
 #     of them is optional here.
 #   - Rate limit is 10 requests/minute on the Standard plan; a 429 carries
 #     Retry-After, which we pass up rather than sleeping inside a request.
+#     The daily job (no user waiting) calls pace_requests() so EVERY request,
+#     page by page, is spaced out; web requests never wait.
 
 import json
 import re
+import time
 from datetime import date as date_, datetime
 from decimal import Decimal
 
@@ -64,10 +67,29 @@ class BankSyncProvider:
     def __init__(self, api_key: str, client: httpx.Client | None = None) -> None:
         self._client = client or httpx.Client(base_url=API_URL, timeout=30.0)
         self._headers = {"X-API-Key": api_key}
+        # Minimum seconds between requests; 0 = no pacing (web requests).
+        self._min_interval = 0.0
+        self._last_request_at: float | None = None
+
+    def pace_requests(self, seconds: float) -> None:
+        """Waits so requests are at least `seconds` apart, pages included.
+
+        For the daily job only: it may sleep, a web request must not.
+        """
+        self._min_interval = seconds
 
     # --- HTTP plumbing ---
 
+    def _wait_for_pace(self) -> None:
+        if self._min_interval and self._last_request_at is not None:
+            wait = self._last_request_at + self._min_interval - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+        # Stamped before the call: a failed request (a 429 too) still counts.
+        self._last_request_at = time.monotonic()
+
     def _get(self, path: str, params: dict | None = None) -> dict:
+        self._wait_for_pace()
         try:
             response = self._client.get(path, params=params, headers=self._headers)
         except httpx.HTTPError as exc:

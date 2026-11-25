@@ -181,16 +181,43 @@ def test_provider_not_available_counts_as_a_failure(test_client, db, factory, sl
     assert job.main(factory) == 1
 
 
-def test_paces_provider_calls(test_client, db, factory, fake, sleeps) -> None:
-    user = seed_user(test_client, db)
-    for uid in ("a", "b", "c"):
-        seed_link(db, user, uid=uid)
+class PacedProvider(FakeProvider):
+    """Records pace_requests() like BankSyncProvider, which paces every request."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.paced_at: list[float] = []
+
+    def pace_requests(self, seconds: float) -> None:
+        self.paced_at.append(seconds)
+
+
+def test_turns_on_request_pacing_for_providers_that_offer_it(
+    test_client, db, factory, sleeps, monkeypatch,
+) -> None:
+    # Pacing lives in the provider, per request, so a multi-page account
+    # can't burst past BankSync's 10 requests a minute.
+    paced = PacedProvider()
+    monkeypatch.setattr(job, "providers_for_user", lambda user: {paced.name: paced})
+    seed_link(db, seed_user(test_client, db))
 
     job.main(factory)
 
-    # A pause between calls, none before the first: under BankSync's 10/min.
-    assert sleeps == [job.PACE_SECONDS, job.PACE_SECONDS]
+    assert paced.paced_at and set(paced.paced_at) == {job.PACE_SECONDS}
     assert job.PACE_SECONDS * 10 >= 60
+
+
+def test_does_not_sleep_between_accounts_itself(test_client, db, factory, fake, sleeps) -> None:
+    # Skipped accounts make no request, so nothing to wait for; the
+    # provider spaces the requests that are made.
+    user = seed_user(test_client, db)
+    seed_link(db, user, uid="a")
+    seed_link(db, user, uid="expired", valid_until=datetime.now(timezone.utc) - timedelta(days=1))
+    seed_link(db, user, uid="c")
+
+    job.main(factory)
+
+    assert sleeps == []
 
 
 def test_retries_once_after_rate_limit(test_client, db, factory, per_account, sleeps) -> None:
@@ -247,6 +274,7 @@ def test_unexpected_error_is_recorded_and_the_run_continues(
     assert [uid for uid, _ in per_account.fetch_calls] == ["fine"]
     db.refresh(broken)
     assert broken.last_sync_error is not None
+    assert broken.last_sync_attempt_at is not None
 
 
 # =============================================================================
