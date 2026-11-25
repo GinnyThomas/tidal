@@ -158,14 +158,16 @@ function SchedulesPage() {
     const handleActiveToggle = async (schedule: Schedule) => {
         const token = localStorage.getItem('access_token')
         try {
-            await axios.patch(
+            const res = await axios.patch<Schedule>(
                 `${getApiBaseUrl()}/api/v1/schedules/${schedule.id}/toggle-active`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )
-            // Updates local state after the request succeeds (without a full re-fetch)
+            // Replace the row with the server's copy (without a full re-fetch):
+            // deactivating also ends the schedule today, so end_date and
+            // next_occurrence change too, and the edit form reads this state.
             setSchedules(prev =>
-                prev.map(s => s.id === schedule.id ? { ...s, active: !s.active } : s)
+                prev.map(s => s.id === schedule.id ? res.data : s)
             )
             // Active/inactive changes affect planned amounts in the annual plan
             annualPlanCache.clear()

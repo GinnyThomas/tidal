@@ -238,6 +238,9 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 - 0-based month arithmetic to avoid off-by-one errors
 - "Add now" button pre-populates AddTransactionForm, scrolls to form
 - `category_is_income` included in ScheduleResponse for correct income/expense type
+- Plan includes inactive schedules (past months are history), bounded by `end_date`. So going
+  active → inactive (toggle, PUT or create) sets an empty/future `end_date` to today
+  (`_end_on_deactivate()`); a past one is kept. Reactivating leaves `end_date` alone
 
 ---
 

@@ -132,6 +132,23 @@ def _get_category_or_404(
     return category
 
 
+def _end_on_deactivate(schedule: Schedule, today: date) -> None:
+    """
+    Ends a schedule that has just been marked inactive: an empty or future
+    end_date becomes today; a past end_date is kept.
+
+    Why: the plan includes inactive schedules on purpose (their past months
+    are real history), bounded only by end_date. Without an end date an
+    inactive schedule kept planning every future month.
+
+    Call it only on the active → inactive change, so later edits to an
+    inactive schedule's end date are left as the user set them. Reactivating
+    doesn't clear the end date either: the user edits it if they want it gone.
+    """
+    if schedule.end_date is None or schedule.end_date > today:
+        schedule.end_date = today
+
+
 def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
     """
     Build a dict matching ScheduleResponse, adding category_name and
@@ -237,6 +254,8 @@ def create_schedule(
         group=schedule_in.group,
         note=schedule_in.note,
     )
+    if not schedule.active:
+        _end_on_deactivate(schedule, date.today())
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
@@ -387,11 +406,16 @@ def update_schedule(
     if "to_account_id" in update_data and update_data["to_account_id"] is not None:
         _get_account_or_404(update_data["to_account_id"], current_user.id, db)
 
+    was_active = schedule.active
+
     # Enum fields need .value to store the plain string in the database
     for field, value in update_data.items():
         if field in ("frequency", "schedule_type") and value is not None and hasattr(value, 'value'):
             value = value.value
         setattr(schedule, field, value)
+
+    if was_active and not schedule.active:
+        _end_on_deactivate(schedule, date.today())
 
     db.commit()
     db.refresh(schedule)
@@ -412,8 +436,9 @@ def toggle_active(
     """
     Flips the active flag on a schedule.
 
-    If the schedule is currently active, it becomes inactive (paused).
-    If it is inactive, it becomes active again.
+    If the schedule is currently active, it becomes inactive and is ended
+    today (see _end_on_deactivate). If it is inactive, it becomes active
+    again with its end date unchanged.
 
     Why a dedicated endpoint instead of PUT?
     Toggle is a common, well-understood UI action ("pause / resume").
@@ -425,6 +450,8 @@ def toggle_active(
     """
     schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
     schedule.active = not schedule.active
+    if not schedule.active:
+        _end_on_deactivate(schedule, date.today())
     db.commit()
     db.refresh(schedule)
     category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None

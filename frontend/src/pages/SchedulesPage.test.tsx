@@ -146,7 +146,7 @@ describe('SchedulesPage', () => {
             [makeAccount()],
             [makeSchedule({ id: 'sch-001', active: true })],
         )
-        vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
+        vi.mocked(axios.patch).mockResolvedValueOnce({ data: makeSchedule({ id: 'sch-001', active: false }) })
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
 
@@ -170,7 +170,7 @@ describe('SchedulesPage', () => {
             [makeAccount()],
             [makeSchedule({ id: 'sch-001', active: false })],
         )
-        vi.mocked(axios.patch).mockResolvedValueOnce({ data: {} })
+        vi.mocked(axios.patch).mockResolvedValueOnce({ data: makeSchedule({ id: 'sch-001', active: true }) })
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
 
@@ -186,6 +186,27 @@ describe('SchedulesPage', () => {
 
         // Optimistic update: badge now shows "Active"
         expect(await screen.findByRole('button', { name: /^active$/i })).toBeInTheDocument()
+    })
+
+    it('takes the end date and next occurrence from the server after deactivating', async () => {
+        // The server ends a deactivated schedule today. Keeping the stale local
+        // copy would show an old next occurrence, and the edit form (filled from
+        // this state) would send the empty end date back on save.
+        mockFetch(
+            [makeAccount()],
+            [makeSchedule({ id: 'sch-001', active: true, end_date: null, next_occurrence: '2026-05-01' })],
+        )
+        vi.mocked(axios.patch).mockResolvedValueOnce({
+            data: makeSchedule({ id: 'sch-001', active: false, end_date: '2026-04-20', next_occurrence: null }),
+        })
+
+        render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
+
+        expect(await screen.findByText('2026-05-01')).toBeInTheDocument()
+        await userEvent.click(screen.getByRole('button', { name: /^active$/i }))
+
+        expect(await screen.findByRole('button', { name: /^inactive$/i })).toBeInTheDocument()
+        expect(screen.queryByText('2026-05-01')).not.toBeInTheDocument()
     })
 
     // =========================================================================
