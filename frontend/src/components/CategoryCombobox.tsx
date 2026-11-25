@@ -6,12 +6,17 @@
 // Features:
 //   - Type to filter by category name or parent name (substring, case-insensitive)
 //   - Hierarchical labels: "Parent → Child" for subcategories
-//   - Optional "— No category —" option
+//   - Optional "— No category —" option. When chosen, the input stays empty and
+//     shows it as a placeholder, so clicking in and typing searches immediately
+//   - Clicking into a chosen category selects all its text, so typing replaces it
+//   - The list opens on focus: scroll and pick, or type to filter
 //   - Full keyboard navigation (arrow keys, Enter, Escape)
 //   - ARIA roles handled by Headless UI
 
 import { Combobox, ComboboxButton, ComboboxInput, ComboboxOption, ComboboxOptions } from '@headlessui/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+
+const NO_CATEGORY_LABEL = '— No category —'
 
 type Category = {
     id: string
@@ -44,7 +49,7 @@ function buildComboboxItems(categories: Category[], includeNoCategory: boolean):
     const items: ComboboxItem[] = []
 
     if (includeNoCategory) {
-        items.push({ id: null, label: '— No category —', searchText: 'no category', parentName: null, childName: null })
+        items.push({ id: null, label: NO_CATEGORY_LABEL, searchText: 'no category', parentName: null, childName: null })
     }
 
     // Build parent → children map in one pass
@@ -92,13 +97,17 @@ function CategoryCombobox({
     value,
     onChange,
     includeNoCategory = true,
-    placeholder = 'Select category…',
+    placeholder,
     disabled = false,
     required = false,
     id,
     ariaLabel,
 }: CategoryComboboxProps) {
     const [query, setQuery] = useState('')
+    // True between the mousedown that focuses the input and its mouseup: that
+    // mouseup would otherwise collapse the select-all to a caret. A second click
+    // while already focused places the caret as normal.
+    const justFocused = useRef(false)
 
     const showNoCategory = includeNoCategory && !required
     const allItems = useMemo(
@@ -111,6 +120,7 @@ function CategoryCombobox({
         : allItems.filter(item => item.searchText.includes(query.toLowerCase()))
 
     const selectedItem = allItems.find(item => item.id === value) ?? null
+    const effectivePlaceholder = placeholder ?? (showNoCategory ? NO_CATEGORY_LABEL : 'Select category…')
 
     return (
         <Combobox
@@ -120,15 +130,30 @@ function CategoryCombobox({
                 setQuery('')
             }}
             onClose={() => setQuery('')}
+            // Open the list as soon as the input gets focus, so a click lets you
+            // scroll and pick without typing (the select-all still lets you type over)
+            immediate
             disabled={disabled}
         >
             <div className="relative">
                 <ComboboxInput
                     id={id}
                     className="input-base w-full pr-8"
-                    displayValue={(item: ComboboxItem | null) => item?.label ?? ''}
+                    // "No category" is the absence of a value: show it as the placeholder,
+                    // not as editable text
+                    displayValue={(item: ComboboxItem | null) => item?.id ? item.label : ''}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder={placeholder}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onMouseDown={(e) => {
+                        justFocused.current = document.activeElement !== e.currentTarget
+                    }}
+                    onMouseUp={(e) => {
+                        if (justFocused.current) {
+                            e.preventDefault()
+                            justFocused.current = false
+                        }
+                    }}
+                    placeholder={effectivePlaceholder}
                     aria-label={ariaLabel}
                     required={required}
                     aria-required={required || undefined}
