@@ -188,16 +188,18 @@ describe('SchedulesPage', () => {
         expect(await screen.findByRole('button', { name: /^active$/i })).toBeInTheDocument()
     })
 
-    it('takes the end date and next occurrence from the server after deactivating', async () => {
-        // The server ends a deactivated schedule today. Keeping the stale local
-        // copy would show an old next occurrence, and the edit form (filled from
-        // this state) would send the empty end date back on save.
+    it('takes next occurrence and deactivated date from the server after deactivating', async () => {
+        // The server records deactivated_on and stops returning a next
+        // occurrence; a locally flipped copy would still show the old one.
         mockFetch(
             [makeAccount()],
             [makeSchedule({ id: 'sch-001', active: true, end_date: null, next_occurrence: '2026-05-01' })],
         )
         vi.mocked(axios.patch).mockResolvedValueOnce({
-            data: makeSchedule({ id: 'sch-001', active: false, end_date: '2026-04-20', next_occurrence: null }),
+            data: makeSchedule({
+                id: 'sch-001', active: false, end_date: null,
+                deactivated_on: '2026-04-20', next_occurrence: null,
+            }),
         })
 
         render(<MemoryRouter><SchedulesPage /></MemoryRouter>)
@@ -205,7 +207,8 @@ describe('SchedulesPage', () => {
         expect(await screen.findByText('2026-05-01')).toBeInTheDocument()
         await userEvent.click(screen.getByRole('button', { name: /^active$/i }))
 
-        expect(await screen.findByRole('button', { name: /^inactive$/i })).toBeInTheDocument()
+        const badge = await screen.findByRole('button', { name: /^inactive$/i })
+        expect(badge).toHaveAttribute('title', 'Inactive since 2026-04-20')
         expect(screen.queryByText('2026-05-01')).not.toBeInTheDocument()
     })
 

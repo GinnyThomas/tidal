@@ -44,7 +44,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ## All Phases Complete — 843 Tests
 
-**335 backend (+11 Postgres-only, skipped locally) · 508 frontend · 843 total**
+**352 backend (+11 Postgres-only, skipped locally) · 509 frontend · 861 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -68,7 +68,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `categories` — hierarchy · is_system · is_hidden · is_income · **group**
 - `transactions` — 4 types · nullable category · promotion_id · is_split · dedup_hash · external_id
 - `transaction_splits` — category · promotion · amount · note (sum must equal parent, enforced in router)
-- `schedules` — recurrence · group · next_occurrence · active · **schedule_type** · from/to accounts
+- `schedules` — recurrence · group · next_occurrence · active · deactivated_on · **schedule_type** · from/to accounts
 - `reallocations` — immutable · reason required
 - `budgets` — default_amount · year · group · notes · unique(user,cat,year)
 - `budget_overrides` — month · amount · batch upsert endpoint
@@ -267,9 +267,12 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
 - 0-based month arithmetic to avoid off-by-one errors
 - "Add now" button pre-populates AddTransactionForm, scrolls to form
 - `category_is_income` included in ScheduleResponse for correct income/expense type
-- Plan includes inactive schedules (past months are history), bounded by `end_date`. So going
-  active → inactive (toggle, PUT or create) sets an empty/future `end_date` to today
-  (`_end_on_deactivate()`); a past one is kept. Reactivating leaves `end_date` alone
+- Plan includes inactive schedules (past months are history), bounded by
+  `effective_end_date()` (`services/plan.py`) = min(`end_date`, `deactivated_on`) when inactive.
+  `_set_active()` sets `deactivated_on` = today on active → inactive (toggle, PUT or create)
+  and clears it on reactivation. `end_date` is the user's data and is never touched, so
+  pause → resume loses nothing. `deactivated_on` is read-only (not in Create/Update);
+  inactive schedules return `next_occurrence: null`. Server date (UTC)
 
 ---
 
@@ -376,4 +379,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: November 2026 — 843 tests · Live at tidal-vert.vercel.app*
+*Last updated: November 2026 — 861 tests · Live at tidal-vert.vercel.app*

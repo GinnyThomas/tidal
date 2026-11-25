@@ -49,6 +49,8 @@ type Schedule = {
     next_occurrence: string | null
     auto_generate: boolean
     active: boolean
+    // When it was marked inactive (null while active). Read-only: set by the server
+    deactivated_on?: string | null
     group: string | null
     payee: string | null
     note: string | null
@@ -164,8 +166,8 @@ function SchedulesPage() {
                 { headers: { Authorization: `Bearer ${token}` } }
             )
             // Replace the row with the server's copy (without a full re-fetch):
-            // deactivating also ends the schedule today, so end_date and
-            // next_occurrence change too, and the edit form reads this state.
+            // toggling also changes deactivated_on and next_occurrence, which
+            // only the server computes.
             setSchedules(prev =>
                 prev.map(s => s.id === schedule.id ? res.data : s)
             )
@@ -258,6 +260,7 @@ function SchedulesPage() {
                 {/* Button enables keyboard access and the click-to-toggle behaviour */}
                 <button
                     onClick={(e) => { e.stopPropagation(); handleActiveToggle(s) }}
+                    title={!s.active && s.deactivated_on ? `Inactive since ${s.deactivated_on}` : undefined}
                     className={`badge cursor-pointer hover:opacity-80 transition-opacity ${
                         s.active ? ACTIVE_BADGE.active : ACTIVE_BADGE.inactive
                     }`}

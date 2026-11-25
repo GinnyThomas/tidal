@@ -132,21 +132,24 @@ def _get_category_or_404(
     return category
 
 
-def _end_on_deactivate(schedule: Schedule, today: date) -> None:
+def _set_active(schedule: Schedule, active: bool, today: date) -> None:
     """
-    Ends a schedule that has just been marked inactive: an empty or future
-    end_date becomes today; a past end_date is kept.
+    Sets the active flag and records when an active → inactive change happened.
 
-    Why: the plan includes inactive schedules on purpose (their past months
-    are real history), bounded only by end_date. Without an end date an
-    inactive schedule kept planning every future month.
+    Why deactivated_on: the plan includes inactive schedules on purpose (their
+    past months are real history), so it needs to know when one stopped; it
+    bounds the schedule at min(end_date, deactivated_on). A separate column,
+    not end_date, because end_date is the user's own data (when a loan or
+    contract ends) and pause → resume must not lose it.
 
-    Call it only on the active → inactive change, so later edits to an
-    inactive schedule's end date are left as the user set them. Reactivating
-    doesn't clear the end date either: the user edits it if they want it gone.
+    Only an actual change moves the date: editing an already-inactive schedule
+    keeps it, reactivating clears it.
     """
-    if schedule.end_date is None or schedule.end_date > today:
-        schedule.end_date = today
+    if schedule.active and not active:
+        schedule.deactivated_on = today
+    elif active:
+        schedule.deactivated_on = None
+    schedule.active = active
 
 
 def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
@@ -177,10 +180,12 @@ def _build_sched_response(sched: Schedule, category: Category | None) -> dict:
         "end_date": sched.end_date,
         "auto_generate": sched.auto_generate,
         "active": sched.active,
+        "deactivated_on": sched.deactivated_on,
         "group": sched.group,
         "note": sched.note,
         "created_at": sched.created_at,
-        "next_occurrence": get_next_occurrence(sched),
+        # An inactive schedule never fires, whatever its dates say
+        "next_occurrence": get_next_occurrence(sched) if sched.active else None,
         "category_name": category.name if category else None,
         "category_icon": category.icon if category else None,
         "category_is_income": category.is_income if category else False,
@@ -255,7 +260,7 @@ def create_schedule(
         note=schedule_in.note,
     )
     if not schedule.active:
-        _end_on_deactivate(schedule, date.today())
+        schedule.deactivated_on = date.today()
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
@@ -406,16 +411,15 @@ def update_schedule(
     if "to_account_id" in update_data and update_data["to_account_id"] is not None:
         _get_account_or_404(update_data["to_account_id"], current_user.id, db)
 
-    was_active = schedule.active
-
     # Enum fields need .value to store the plain string in the database
     for field, value in update_data.items():
         if field in ("frequency", "schedule_type") and value is not None and hasattr(value, 'value'):
             value = value.value
+        if field == "active":
+            if value is not None:
+                _set_active(schedule, value, date.today())
+            continue
         setattr(schedule, field, value)
-
-    if was_active and not schedule.active:
-        _end_on_deactivate(schedule, date.today())
 
     db.commit()
     db.refresh(schedule)
@@ -436,9 +440,9 @@ def toggle_active(
     """
     Flips the active flag on a schedule.
 
-    If the schedule is currently active, it becomes inactive and is ended
-    today (see _end_on_deactivate). If it is inactive, it becomes active
-    again with its end date unchanged.
+    If the schedule is currently active, it becomes inactive (paused) and
+    deactivated_on records today. If it is inactive, it becomes active again
+    and deactivated_on is cleared. end_date is never touched (see _set_active).
 
     Why a dedicated endpoint instead of PUT?
     Toggle is a common, well-understood UI action ("pause / resume").
@@ -449,9 +453,7 @@ def toggle_active(
     more specific path first and doesn't try to parse "toggle-active" as a UUID.
     """
     schedule = _get_schedule_or_404(schedule_id, current_user.id, db)
-    schedule.active = not schedule.active
-    if not schedule.active:
-        _end_on_deactivate(schedule, date.today())
+    _set_active(schedule, not schedule.active, date.today())
     db.commit()
     db.refresh(schedule)
     category = db.query(Category).filter(Category.id == schedule.category_id).first() if schedule.category_id else None
