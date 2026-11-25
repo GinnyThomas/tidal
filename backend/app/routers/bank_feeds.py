@@ -26,13 +26,14 @@
 # banks in the provider's own app, and "refresh" mirrors them into
 # bank_connections / bank_account_links — keeping existing account links.
 #
-# Sync writes through services/importer.py, the same code path as CSV import,
-# so the two never double-import the same transaction.
+# Sync runs services/bank_feed_sync.py (shared with the daily job), which
+# writes through services/importer.py, the same code path as CSV import, so
+# the two never double-import the same transaction.
 
 import logging
 import secrets
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
@@ -55,6 +56,7 @@ from app.schemas.bank_feed import (
 )
 from app.schemas.csv_mapping import TransactionImportResponse
 from app.services.auth import get_current_user
+from app.services.bank_feed_sync import SyncFailed, SyncSkipped, is_expired, sync_account
 from app.services.bank_feeds import get_bank_feed_provider, get_bank_feed_providers
 from app.services.bank_feeds.provider import (
     BankFeedError,
@@ -62,7 +64,6 @@ from app.services.bank_feeds.provider import (
     ConsentFlowProvider,
     PreConnectedProvider,
 )
-from app.services.importer import ImportRow, import_rows
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,6 @@ router = APIRouter(
 
 # Banks allow 90–180 days; never ask for more than the longer of the two.
 _MAX_CONSENT_DAYS = 180
-# How far back the first sync of an account reaches.
-_FIRST_SYNC_DAYS = 90
-# Later syncs re-read this much of the previous window: banks can book a
-# transaction days after it happened. Dedup drops the ones we already have.
-_SYNC_OVERLAP_DAYS = 7
 
 
 # =============================================================================
@@ -109,24 +105,13 @@ def _provider_error(exc: BankFeedError) -> HTTPException:
     )
 
 
-def _as_utc(value: datetime) -> datetime:
-    # SQLite (tests) returns naive datetimes; PostgreSQL returns aware ones.
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-def _is_expired(connection: BankConnection) -> bool:
-    # None = the provider doesn't report an expiry (only pre-connected
-    # providers; a completed consent-flow connection always has one).
-    return connection.valid_until is not None and _as_utc(connection.valid_until) <= datetime.now(timezone.utc)
-
-
 def _connection_response(connection: BankConnection) -> dict:
     return {
         "id": connection.id,
         "provider": connection.provider,
         "institution_name": connection.institution_name,
         "institution_country": connection.institution_country,
-        "status": "expired" if _is_expired(connection) else "active",
+        "status": "expired" if is_expired(connection) else "active",
         "valid_until": connection.valid_until,
         "accounts": sorted(connection.links, key=lambda link: link.name or ""),
     }
@@ -445,39 +430,19 @@ def sync_link(
 ) -> dict:
     """Imports booked transactions from the bank into the linked Tidal account."""
     link = _get_link_or_404(link_id, current_user.id, db)
-    if link.account_id is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link this bank account to a Tidal account first.")
-    if _is_expired(link.connection):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bank consent has expired. Reconnect the bank.")
-    account = _get_account_or_404(link.account_id, current_user.id, db)
-    # The provider that created the connection is the only one that knows its ids.
-    provider = providers.get(link.connection.provider)
-    if provider is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="This bank feed provider is not available on this server.",
-        )
-
-    if link.last_synced_at is None:
-        date_from = date.today() - timedelta(days=_FIRST_SYNC_DAYS)
-    else:
-        date_from = _as_utc(link.last_synced_at).date() - timedelta(days=_SYNC_OVERLAP_DAYS)
-
     try:
-        feed = provider.fetch_transactions(link.provider_account_uid, date_from)
-    except BankFeedError as exc:
-        raise _provider_error(exc)
+        return sync_account(db, link, providers)
+    except SyncSkipped as exc:
+        raise HTTPException(status_code=_SKIP_STATUS[exc.reason], detail=str(exc))
+    except SyncFailed as exc:
+        raise _provider_error(exc.error)
 
-    rows = [
-        ImportRow(date=tx.date, amount=tx.amount, payee=tx.payee, notes=tx.notes, external_id=tx.external_id)
-        for tx in feed
-    ]
-    result = import_rows(db, current_user.id, account, rows)
 
-    link.last_synced_at = datetime.now(timezone.utc)
-    db.commit()
-    logger.info(
-        "Bank sync for link %s: %d fetched, %d created, %d duplicates",
-        link.id, len(feed), result["created"], result["skipped_duplicates"],
-    )
-    return result
+# Why a sync was skipped → the HTTP status the route answers with.
+_SKIP_STATUS = {
+    "unlinked": status.HTTP_409_CONFLICT,
+    "expired": status.HTTP_409_CONFLICT,
+    "locked": status.HTTP_409_CONFLICT,
+    "account_missing": status.HTTP_404_NOT_FOUND,
+    "provider_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
+}

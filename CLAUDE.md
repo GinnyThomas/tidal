@@ -42,9 +42,9 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 
 ---
 
-## All Phases Complete — 843 Tests
+## All Phases Complete — 903 Tests
 
-**352 backend (+11 Postgres-only, skipped locally) · 509 frontend · 861 total**
+**390 backend (+12 Postgres-only, skipped locally) · 513 frontend · 903 total**
 
 - ✅ Phase 0-7: Walking skeleton through Reallocation
 - ✅ Phase 8: Styling, mobile, demo account, annual view, drill-downs
@@ -56,8 +56,8 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - ✅ CSV import (bank templates, dedup, category assignment, convert to transfer)
 - ✅ Year-end rollover (copy budgets to next year, carry closing → opening balance)
 - ✅ Password reset (forgot-password email via Resend, single-use hashed tokens)
-- 🚧 Bank feeds, step 1 of 3 (Open Banking: connect, link, manual sync) — Enable Banking (EEA)
-               and BankSync (UK, via Salt Edge)
+- 🚧 Bank feeds, step 1 of 3 (Open Banking: connect, link, manual + daily sync) — Enable
+               Banking (EEA) and BankSync (UK, via Salt Edge)
 
 ---
 
@@ -79,6 +79,7 @@ Former MSc Family Nurse Practitioner. Completed Makers Academy bootcamp.
 - `bank_connections` — one Open Banking consent · provider · institution · state (single-use CSRF) · session_id
   (BankSync: its bank id) · valid_until (NULL = provider doesn't say)
 - `bank_account_links` — bank account in a consent → optional Tidal account · iban_last4 only · last_synced_at
+  (last success) · last_sync_attempt_at · last_sync_error (shown on the page, NULL after a success)
 
 ---
 
@@ -167,10 +168,35 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   (e.g. expired key) → 502 telling you to replace the key. Refresh costs 1 + one request
   per bank, so 10+ banks can never refresh. A sync with > 50 pages fails (502) rather
   than import part and move `last_synced_at` on
+- Sync logic: `services/bank_feed_sync.py::sync_account()`, shared by "Sync now" and the
+  daily job. Raises `SyncSkipped(reason)` (unlinked / expired / provider_unavailable /
+  account_missing / locked — provider not called) or `SyncFailed` (provider error, recorded
+  in `last_sync_error` as fixed text from the status code, never the provider's message:
+  it can quote transactions). Route maps them to 409/404/503 and 429/502
+- Locks the link row (`FOR UPDATE NOWAIT`) until commit, so "Sync now" during the daily run
+  can't double-import (import dedup works on a snapshot). Contention = Postgres `55P03` →
+  409 "already running" / job skips it. Real lock tested in `test_bank_feed_sync_postgres.py`.
+  Held across the provider call on purpose (a locked account costs no BankSync request), so a
+  slow provider pins one pooled connection meanwhile. An import failure is recorded on the link
+  ("couldn't save"), `last_synced_at` untouched
+- `providers_for_user(user)` (plain function) holds the `BANKSYNC_OWNER_EMAIL` gate;
+  `get_bank_feed_providers()` is just its `Depends` wrapper. Never bypass it
 - Sync goes through `services/importer.py` — the SAME code path as CSV import, so
   `external_id` (bank `entry_reference`) + `dedup_hash` stop double imports
 - Sync window: first 90 days; then from last sync minus 7 days (late bookings)
 - Booked transactions only, imported as `cleared` and uncategorised
+- **Daily sync job** `app/jobs/sync_bank_feeds.py` (`python -m app.jobs.sync_bank_feeds`), run
+  by a separate Railway cron service (same repo, root `backend`, schedule `0 6 * * *` UTC).
+  No HTTP endpoint. Syncs every linked account on an active connection of every non-deleted
+  user, one at a time; turns on `BankSyncProvider.pace_requests(7)`, which spaces EVERY
+  request 7s apart, pages included (10/min; web requests are never paced), one retry after a
+  429 (`Retry-After`, else 60s). Never refreshes (doesn't add/remove banks or accounts). Exit 1 if any account failed
+  (incl. provider not configured), so Railway marks the run red. Logs link ids + counts only.
+  Its logger is named `app.jobs…` explicitly: under `python -m`, `__name__` is `__main__`
+  and `configure_logging()` wouldn't print it
+- Cron service variables reference the web service's (`${{tidal.DATABASE_URL}}` etc.):
+  `DATABASE_URL`, `SECRET_KEY`, `BANKSYNC_API_KEY`, `BANKSYNC_OWNER_EMAIL`,
+  `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY`
 - Consent expiry → status "expired" (computed) → sync 409, UI asks to reconnect
 - Env: `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY` (PEM, `\n` ok).
   Unset → consent endpoints 503. Register redirect URL
@@ -178,7 +204,7 @@ Notable `/transactions` sub-routes: `POST /transfer` · `POST /import` · `POST 
   `BANKSYNC_API_KEY` (scope `banks:read` only; keys can expire) + `BANKSYNC_OWNER_EMAIL`.
   No provider available to the user → page says "not set up"
 - Next: auto-pair transfers (both legs of a Monzo pot move share one `reference`),
-  step 2 (review step before import), step 3 (scheduled sync,
+  step 2 (review step before import), step 3 (
   pending → booked reconciliation, re-link by `identification_hash` on reconnect,
   clean up abandoned pending connections, payee auto-categorisation)
 
@@ -348,6 +374,8 @@ planned = schedule amounts + budget amounts per category per month:
   (needs a careful exception in `escapeCsvCell()` formula-injection protection)
 - Currency consolidation (exchange_rate exists, no conversion logic)
 - Bank feeds: steps 2–3 still to do (see Bank Feeds above)
+- No unique index on `transactions(account_id, external_id)`: bank sync relies on the row
+  lock + Python dedup. An index is stronger but existing rows may break it (investigate first)
 - Google OAuth
 - Password reset: no domain verified with Resend yet, so emails only reach the Resend
   account owner; no rate limiting on `/forgot-password`
@@ -370,6 +398,9 @@ cd frontend && npm run dev
 cd backend && python -m pytest tests/ -v
 cd frontend && npm run test:run
 
+# Daily bank feed sync, by hand (uses DATABASE_URL — careful which database)
+cd backend && python -m app.jobs.sync_bank_feeds
+
 # Production migrations (session pooler — see Important Reminders)
 DATABASE_URL='postgresql://postgres.msframaqmymeunoqmtjr:PASSWORD@aws-0-eu-west-1.pooler.supabase.com:5432/postgres' alembic upgrade head
 
@@ -379,4 +410,4 @@ cd backend && ./scripts/refresh_demo.sh
 
 ---
 
-*Last updated: November 2026 — 861 tests · Live at tidal-vert.vercel.app*
+*Last updated: November 2026 — 903 tests · Live at tidal-vert.vercel.app*
