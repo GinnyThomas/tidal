@@ -7,6 +7,8 @@
 #   get_bank_feed_providers()  → every provider THIS user may use, by name.
 #                                Sync looks up the one that created a
 #                                connection; refresh picks one by name.
+#   providers_for_user(user)   → the same, as a plain function, for the daily
+#                                sync job (app/jobs/sync_bank_feeds.py).
 #
 # BankSync's API key reads one person's banks, so it is offered only to the
 # user whose email matches BANKSYNC_OWNER_EMAIL. Everyone else (the public
@@ -61,9 +63,18 @@ def get_bank_feed_provider() -> ConsentFlowProvider:
     return provider
 
 
-def get_bank_feed_providers(current_user: User = Depends(get_current_user)) -> dict[str, BankFeedProvider]:
-    """Every provider the current user may use, keyed by provider name."""
+def providers_for_user(user: User) -> dict[str, BankFeedProvider]:
+    """Every provider this user may use, keyed by provider name.
+
+    A plain function so the daily sync job (no request, no logged-in user)
+    applies exactly the same BANKSYNC_OWNER_EMAIL gate as the routes.
+    """
     providers: list[BankFeedProvider] = [
-        p for p in (_enable_banking_provider(), _banksync_provider_for(current_user)) if p is not None
+        p for p in (_enable_banking_provider(), _banksync_provider_for(user)) if p is not None
     ]
     return {p.name: p for p in providers}
+
+
+def get_bank_feed_providers(current_user: User = Depends(get_current_user)) -> dict[str, BankFeedProvider]:
+    """FastAPI dependency: every provider the current user may use."""
+    return providers_for_user(current_user)

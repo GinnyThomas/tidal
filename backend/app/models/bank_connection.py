@@ -107,7 +107,13 @@ class BankAccountLink(Base):
     currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     iban_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
 
+    # The last SUCCESSFUL sync; the next sync's window starts from it.
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The last attempt, successful or not (manual "Sync now" or the daily job).
+    last_sync_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Why the last attempt failed, in words safe to show and log; NULL after a
+    # success. Shown under the account on the Bank Feeds page.
+    last_sync_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     connection: Mapped[BankConnection] = relationship("BankConnection", back_populates="links")
 

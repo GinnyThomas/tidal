@@ -23,6 +23,8 @@ const makeConnection = (overrides = {}) => ({
         iban_last4: '5555',
         account_id: null,
         last_synced_at: null,
+        last_sync_attempt_at: null,
+        last_sync_error: null,
     }],
     ...overrides,
 })
@@ -198,6 +200,58 @@ describe('BankFeedsPage', () => {
         expect(await screen.findByText(/provider returned an error/i)).toBeInTheDocument()
     })
 
+    it('shows why the last sync failed under the account', async () => {
+        // e.g. the daily sync ran overnight and the BankSync key had expired.
+        const failed = makeConnection({
+            accounts: [{
+                ...makeConnection().accounts[0],
+                account_id: 'acc-gbp',
+                last_sync_attempt_at: '2026-11-25T06:00:00Z',
+                last_sync_error: "The bank feed provider rejected Tidal's API key.",
+            }],
+        })
+        mockGets({ connections: [failed] })
+        renderPage()
+        expect(await screen.findByText(/last sync failed: the bank feed provider rejected tidal's api key/i))
+            .toBeInTheDocument()
+    })
+
+    it('clears the last sync error after a successful sync', async () => {
+        const failed = makeConnection({
+            accounts: [{
+                ...makeConnection().accounts[0],
+                account_id: 'acc-gbp',
+                last_sync_error: 'The bank feed provider returned an error (HTTP 500).',
+            }],
+        })
+        mockGets({ connections: [failed] })
+        vi.mocked(axios.post).mockResolvedValueOnce({
+            data: { created: 1, skipped_duplicates: 0, skipped_rows: [] },
+        })
+        renderPage()
+        await userEvent.click(await screen.findByRole('button', { name: /sync now/i }))
+
+        expect(await screen.findByText(/1 new, 0 already imported/i)).toBeInTheDocument()
+        expect(screen.queryByText(/last sync failed/i)).not.toBeInTheDocument()
+    })
+
+    it('shows only the new error when a manual sync fails again', async () => {
+        const failed = makeConnection({
+            accounts: [{
+                ...makeConnection().accounts[0],
+                account_id: 'acc-gbp',
+                last_sync_error: 'The bank feed provider returned an error (HTTP 500).',
+            }],
+        })
+        mockGets({ connections: [failed] })
+        vi.mocked(axios.post).mockRejectedValueOnce({ response: { status: 502, data: { detail: 'The bank feed provider returned an error. Please try again.' } } })
+        renderPage()
+        await userEvent.click(await screen.findByRole('button', { name: /sync now/i }))
+
+        expect(await screen.findByText(/please try again/i)).toBeInTheDocument()
+        expect(screen.queryByText(/last sync failed/i)).not.toBeInTheDocument()
+    })
+
     it('disables Sync now when the consent has expired', async () => {
         const expired = makeConnection({
             status: 'expired',
@@ -270,6 +324,12 @@ describe('BankFeedsPage', () => {
             expect(await screen.findByRole('button', { name: /refresh from banksync/i })).toBeInTheDocument()
             expect(screen.queryByRole('heading', { name: /connect a bank/i })).not.toBeInTheDocument()
             expect(screen.queryByText(/not set up on this server/i)).not.toBeInTheDocument()
+        })
+
+        it('says linked accounts sync automatically every morning', async () => {
+            mockGets({ connections: [], providers: [BANKSYNC] })
+            renderPage()
+            expect(await screen.findByText(/synced automatically every morning/i)).toBeInTheDocument()
         })
 
         it('shows both when both providers are available', async () => {

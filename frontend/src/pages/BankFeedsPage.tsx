@@ -33,6 +33,9 @@ type BankAccountLink = {
     iban_last4: string | null
     account_id: string | null
     last_synced_at: string | null
+    last_sync_attempt_at: string | null
+    // Why the last sync (manual or the daily job) failed; null after a success.
+    last_sync_error: string | null
 }
 
 type BankConnection = {
@@ -225,7 +228,11 @@ function BankFeedsPage() {
             setMessage(link.id, `${result.created} new, ${result.skipped_duplicates} already imported`, false)
             setConnections(prev => prev.map(c => ({
                 ...c,
-                accounts: c.accounts.map(a => a.id === link.id ? { ...a, last_synced_at: new Date().toISOString() } : a),
+                accounts: c.accounts.map(a => {
+                    if (a.id !== link.id) return a
+                    const now = new Date().toISOString()
+                    return { ...a, last_synced_at: now, last_sync_attempt_at: now, last_sync_error: null }
+                }),
             })))
         } catch (err) {
             setMessage(link.id, errorDetail(err, 'Sync failed. Please try again.'), true)
@@ -281,6 +288,9 @@ function BankFeedsPage() {
                             {refreshingName === provider.name ? 'Refreshing…' : `Refresh from ${provider.display_name}`}
                         </button>
                         {refreshError && <p className="text-coral-400 text-sm mt-3">{refreshError}</p>}
+                        <p className="text-slate-500 text-xs mt-3">
+                            Linked accounts are synced automatically every morning.
+                        </p>
                     </div>
                 ))}
 
@@ -365,9 +375,15 @@ function BankFeedsPage() {
                                                             {link.iban_last4 && `•••• ${link.iban_last4}`} {link.currency}
                                                             {link.last_synced_at && ` · last synced ${fmtDate(link.last_synced_at)}`}
                                                         </p>
-                                                        {message && (
+                                                        {message ? (
                                                             <p className={`text-xs mt-1 ${message.isError ? 'text-coral-400' : 'text-teal-400'}`}>
                                                                 {message.text}
+                                                            </p>
+                                                        ) : link.last_sync_error && (
+                                                            // A failure from an earlier sync, e.g. the daily job;
+                                                            // a sync started here replaces it with its own message.
+                                                            <p className="text-xs mt-1 text-coral-400">
+                                                                Last sync failed: {link.last_sync_error}
                                                             </p>
                                                         )}
                                                     </div>

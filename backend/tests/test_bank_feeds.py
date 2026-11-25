@@ -3,9 +3,10 @@
 # Tests for /api/v1/bank-feeds — connecting a bank, linking its accounts to
 # Tidal accounts, and syncing transactions.
 #
-# The real providers are swapped for fakes via FastAPI's dependency_overrides,
-# the same way conftest swaps get_db: FakeProvider stands in for a consent-flow
-# provider (Enable Banking), FakePreConnectedProvider for BankSync. The
+# The real providers are swapped for fakes (tests/bank_feed_fakes.py) via
+# FastAPI's dependency_overrides, the same way conftest swaps get_db:
+# FakeProvider stands in for a consent-flow provider (Enable Banking),
+# FakePreConnectedProvider for BankSync. The
 # clients themselves are tested in test_enable_banking.py and test_banksync.py.
 
 import uuid
@@ -20,104 +21,8 @@ from app.database import get_db
 from app.main import app
 from app.models.bank_connection import BankConnection
 from app.services.bank_feeds import get_bank_feed_provider, get_bank_feed_providers
-from app.services.bank_feeds.provider import (
-    AuthStart,
-    BankFeedError,
-    FeedTransaction,
-    Institution,
-    LinkedSession,
-    ProviderAccount,
-    RemoteConnection,
-)
-
-
-# =============================================================================
-# Fake provider
-# =============================================================================
-
-
-class FakeProvider:
-    name = "fake"
-    display_name = "Fake Consent"
-    flow = "consent"
-
-    def __init__(self) -> None:
-        self.institutions = [Institution(name="Monzo", country="GB", logo=None, max_consent_days=90)]
-        self.auth_calls: list[dict] = []
-        self.session_valid_until = datetime.now(timezone.utc) + timedelta(days=90)
-        self.accounts = [ProviderAccount(
-            uid="uid-1", identification_hash="hash-1", name="Current Account",
-            currency="GBP", iban_last4="5555",
-        )]
-        self.transactions: list[FeedTransaction] = []
-        self.fetch_calls: list[tuple[str, date]] = []
-        self.error: BankFeedError | None = None
-
-    def list_institutions(self, country: str) -> list[Institution]:
-        if self.error:
-            raise self.error
-        return [i for i in self.institutions if i.country == country]
-
-    def start_auth(self, institution, country, redirect_url, state, valid_until) -> AuthStart:
-        self.auth_calls.append({
-            "institution": institution, "country": country,
-            "redirect_url": redirect_url, "state": state, "valid_until": valid_until,
-        })
-        return AuthStart(url=f"https://bank.example/consent?state={state}")
-
-    def create_session(self, code: str) -> LinkedSession:
-        if self.error:
-            raise self.error
-        return LinkedSession(session_id=f"sess-{code}", valid_until=self.session_valid_until, accounts=self.accounts)
-
-    def fetch_transactions(self, account_uid: str, date_from: date) -> list[FeedTransaction]:
-        self.fetch_calls.append((account_uid, date_from))
-        if self.error:
-            raise self.error
-        return self.transactions
-
-
-class FakePreConnectedProvider:
-    name = "fake_pre"
-    display_name = "Fake Pre-connected"
-    flow = "pre_connected"
-
-    def __init__(self) -> None:
-        self.connections = [_remote()]
-        self.transactions: list[FeedTransaction] = []
-        self.fetch_calls: list[tuple[str, date]] = []
-        self.error: BankFeedError | None = None
-
-    def list_connections(self) -> list[RemoteConnection]:
-        if self.error:
-            raise self.error
-        return self.connections
-
-    def fetch_transactions(self, account_uid: str, date_from: date) -> list[FeedTransaction]:
-        self.fetch_calls.append((account_uid, date_from))
-        if self.error:
-            raise self.error
-        return self.transactions
-
-
-def _remote(
-    connection_id: str = "bank-1",
-    accounts: list[ProviderAccount] | None = None,
-    valid_until: datetime | None = None,
-    needs_reauth: bool = False,
-    name: str = "Monzo",
-) -> RemoteConnection:
-    return RemoteConnection(
-        connection_id=connection_id,
-        institution_name=name,
-        country="GB",
-        valid_until=valid_until if valid_until is not None else datetime.now(timezone.utc) + timedelta(days=180),
-        needs_reauth=needs_reauth,
-        accounts=accounts if accounts is not None else [
-            ProviderAccount(uid="bank-1:acc-1", identification_hash=None, name="Personal Account",
-                            currency="GBP", iban_last4="3177"),
-        ],
-    )
+from app.services.bank_feeds.provider import BankFeedError, ProviderAccount, RemoteConnection
+from tests.bank_feed_fakes import FakePreConnectedProvider, FakeProvider, _feed_tx, _remote
 
 
 @pytest.fixture
@@ -202,12 +107,6 @@ def _connect_and_link(test_client, token: str, provider: FakeProvider) -> tuple[
 
 def _sync(test_client, token: str, link_id: str):
     return test_client.post(f"/api/v1/bank-feeds/links/{link_id}/sync", headers=_auth(token))
-
-
-def _feed_tx(external_id: str = "e1", amount: str = "-12.34", payee: str = "Tesco") -> FeedTransaction:
-    return FeedTransaction(
-        date=date(2026, 9, 5), amount=Decimal(amount), payee=payee, notes=None, external_id=external_id,
-    )
 
 
 # =============================================================================
@@ -942,3 +841,60 @@ def test_refresh_with_rejected_api_key_says_so(test_client, pre_provider) -> Non
     assert response.status_code == 502
     assert "rejected" in response.json()["detail"]
     assert "API key" in response.json()["detail"]
+
+
+# =============================================================================
+# Sync attempts: concurrency and recorded errors
+# =============================================================================
+
+
+def test_sync_while_another_sync_runs_returns_409(test_client, provider, monkeypatch) -> None:
+    # SQLite can't block on a row lock: stand in for PostgreSQL's NOWAIT
+    # "could not obtain lock" (55P03). The real lock is tested in
+    # test_bank_feed_sync_postgres.py.
+    from sqlalchemy.exc import OperationalError
+
+    from app.services import bank_feed_sync
+
+    class LockNotAvailable(Exception):
+        pgcode = "55P03"
+
+    def locked(*_args, **_kwargs):
+        raise OperationalError("SELECT … FOR UPDATE NOWAIT", {}, LockNotAvailable())
+
+    token = _register_and_login(test_client)
+    link_id, _ = _connect_and_link(test_client, token, provider)
+    monkeypatch.setattr(bank_feed_sync, "_lock_link", locked)
+
+    response = _sync(test_client, token, link_id)
+
+    assert response.status_code == 409
+    assert "already running" in response.json()["detail"]
+    assert provider.fetch_calls == []
+
+
+def test_failed_sync_shows_its_error_on_the_account(test_client, provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _connect_and_link(test_client, token, provider)
+    provider.error = BankFeedError("Invalid or expired API key", status_code=401)
+
+    _sync(test_client, token, link_id)
+
+    [connection] = test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()
+    account = connection["accounts"][0]
+    assert "API key" in account["last_sync_error"]
+    assert account["last_sync_attempt_at"] is not None
+    assert account["last_synced_at"] is None
+
+
+def test_successful_sync_clears_the_shown_error(test_client, provider) -> None:
+    token = _register_and_login(test_client)
+    link_id, _ = _connect_and_link(test_client, token, provider)
+    provider.error = BankFeedError("down", status_code=500)
+    _sync(test_client, token, link_id)
+    provider.error = None
+
+    assert _sync(test_client, token, link_id).status_code == 200
+
+    [connection] = test_client.get("/api/v1/bank-feeds/connections", headers=_auth(token)).json()
+    assert connection["accounts"][0]["last_sync_error"] is None

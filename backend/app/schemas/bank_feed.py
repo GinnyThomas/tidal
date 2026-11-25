@@ -56,6 +56,9 @@ class BankAccountLinkResponse(BaseModel):
     # Linked Tidal account, or None.
     account_id: Optional[uuid.UUID]
     last_synced_at: Optional[datetime]
+    last_sync_attempt_at: Optional[datetime]
+    # Why the last sync failed; None after a success.
+    last_sync_error: Optional[str]
 
 
 class BankConnectionResponse(BaseModel):
