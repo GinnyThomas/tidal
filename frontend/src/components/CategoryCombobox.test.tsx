@@ -202,6 +202,160 @@ describe('CategoryCombobox', () => {
         expect(options.length).toBe(5)
     })
 
+    // "No category" is the absence of a value, so the input stays empty and the
+    // label is a placeholder — clicking in never drops the caret inside real text.
+    it('no category selected — input is empty with "No category" placeholder', () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value={null}
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        expect(input).toHaveValue('')
+        expect(input).toHaveAttribute('placeholder', '— No category —')
+    })
+
+    it('required with no value — placeholder asks to select a category', () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value={null}
+                onChange={onChange}
+                required={true}
+            />
+        )
+
+        expect(screen.getByRole('combobox')).toHaveAttribute('placeholder', 'Select category…')
+    })
+
+    it('typing with no category selected searches straight away', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value={null}
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        await userEvent.click(input)
+        await userEvent.keyboard('trav')
+
+        expect(input).toHaveValue('trav')
+        expect(screen.getByRole('option', { name: /travel/i })).toBeInTheDocument()
+    })
+
+    it('clicking into a selected category selects all its text', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value="cat-dog"
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox') as HTMLInputElement
+        await userEvent.click(input)
+
+        expect(input.selectionStart).toBe(0)
+        expect(input.selectionEnd).toBe('Animals → Dog food'.length)
+    })
+
+    it('typing after clicking into a selected category replaces it', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value="cat-dog"
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        await userEvent.click(input)
+        await userEvent.keyboard('trav')
+
+        expect(input).toHaveValue('trav')
+    })
+
+    it('clicking into the input opens the full option list', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value="cat-travel"
+                onChange={onChange}
+            />
+        )
+
+        await userEvent.click(screen.getByRole('combobox'))
+
+        // Full list (not filtered by the selected label), text still selected
+        expect(screen.getAllByRole('option')).toHaveLength(6) // 5 categories + No category
+        const input = screen.getByRole('combobox') as HTMLInputElement
+        expect(input.selectionEnd! - input.selectionStart!).toBe('Travel'.length)
+    })
+
+    it('clicking again while the list is open keeps it open', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value="cat-travel"
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        await userEvent.click(input)
+        await userEvent.click(input)
+
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    // Only a click opens the list: tabbing through a form shouldn't drop a list
+    // over the fields below, and Enter must still submit the form
+    it('tabbing onto the input does not open the list', async () => {
+        render(
+            <>
+                <input aria-label="amount" />
+                <CategoryCombobox
+                    categories={categories}
+                    value="cat-travel"
+                    onChange={onChange}
+                />
+            </>
+        )
+
+        await userEvent.click(screen.getByLabelText('amount'))
+        await userEvent.tab()
+
+        expect(screen.getByRole('combobox')).toHaveFocus()
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('Enter after tabbing onto the input submits the form', async () => {
+        const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+        render(
+            <form onSubmit={onSubmit}>
+                <input aria-label="amount" />
+                <CategoryCombobox
+                    categories={categories}
+                    value="cat-travel"
+                    onChange={onChange}
+                />
+                <button type="submit">Save</button>
+            </form>
+        )
+
+        await userEvent.click(screen.getByLabelText('amount'))
+        await userEvent.tab()
+        await userEvent.keyboard('{Enter}')
+
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+        expect(onChange).not.toHaveBeenCalled()
+    })
+
     it('disabled prop prevents interaction', () => {
         render(
             <CategoryCombobox
