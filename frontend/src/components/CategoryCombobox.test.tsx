@@ -297,6 +297,65 @@ describe('CategoryCombobox', () => {
         expect(input.selectionEnd! - input.selectionStart!).toBe('Travel'.length)
     })
 
+    it('clicking again while the list is open keeps it open', async () => {
+        render(
+            <CategoryCombobox
+                categories={categories}
+                value="cat-travel"
+                onChange={onChange}
+            />
+        )
+
+        const input = screen.getByRole('combobox')
+        await userEvent.click(input)
+        await userEvent.click(input)
+
+        expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    // Only a click opens the list: tabbing through a form shouldn't drop a list
+    // over the fields below, and Enter must still submit the form
+    it('tabbing onto the input does not open the list', async () => {
+        render(
+            <>
+                <input aria-label="amount" />
+                <CategoryCombobox
+                    categories={categories}
+                    value="cat-travel"
+                    onChange={onChange}
+                />
+            </>
+        )
+
+        await userEvent.click(screen.getByLabelText('amount'))
+        await userEvent.tab()
+
+        expect(screen.getByRole('combobox')).toHaveFocus()
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    })
+
+    it('Enter after tabbing onto the input submits the form', async () => {
+        const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+        render(
+            <form onSubmit={onSubmit}>
+                <input aria-label="amount" />
+                <CategoryCombobox
+                    categories={categories}
+                    value="cat-travel"
+                    onChange={onChange}
+                />
+                <button type="submit">Save</button>
+            </form>
+        )
+
+        await userEvent.click(screen.getByLabelText('amount'))
+        await userEvent.tab()
+        await userEvent.keyboard('{Enter}')
+
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+        expect(onChange).not.toHaveBeenCalled()
+    })
+
     it('disabled prop prevents interaction', () => {
         render(
             <CategoryCombobox
